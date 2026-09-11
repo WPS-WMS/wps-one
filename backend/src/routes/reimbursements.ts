@@ -5,10 +5,10 @@ import { prisma } from "../lib/prisma.js";
 import { authMiddleware } from "../lib/auth.js";
 import { requireAnyFeature, requireFeature } from "../lib/authorizeFeature.js";
 import { hasGlobalViewAccess, isFeatureAllowed } from "../lib/permissions.js";
-import { mkdir, unlink, writeFile } from "fs/promises";
-import { createReadStream, existsSync } from "fs";
-import { extname, join, normalize, sep } from "path";
-import { getUploadsRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
+import { mkdir, unlink, writeFile, readFile } from "fs/promises";
+import { existsSync } from "fs";
+import { extname, join, normalize } from "path";
+import { getUploadsRoot, isPathInsideRoot, resolveUploadsPublicPath } from "../lib/uploadsRoot.js";
 import { errorSummary } from "../lib/devLog.js";
 import { isProductionDeploy } from "../lib/deployEnv.js";
 import { notifyProjectResponsibleOfReembolso } from "../lib/reimbursementEmailNotifications.js";
@@ -1314,13 +1314,8 @@ reimbursementsRouter.get("/attachments/:id/file", async (req, res) => {
     return;
   }
 
-  const abs = resolveUploadsPublicPath(attachment.fileUrl);
-  const root = normalize(join(getUploadsRoot(), "reimbursements")) + sep;
-  if (!abs || !(normalize(abs) + sep).startsWith(root)) {
-    res.status(403).json({ error: "Caminho de arquivo inválido" });
-    return;
-  }
-  if (!existsSync(abs)) {
+  const abs = resolveReimbursementAttachmentAbs(attachment.fileUrl);
+  if (!abs) {
     res.status(404).json({ error: "Arquivo não encontrado no servidor" });
     return;
   }
@@ -1828,6 +1823,34 @@ function attachmentFileExtension(filename: string, fileType: string): string {
   return "";
 }
 
+/** Resolve caminho local do anexo de reembolso (com fallbacks de raiz). */
+function resolveReimbursementAttachmentAbs(fileUrl: string): string | null {
+  const candidates: string[] = [];
+  const primary = resolveUploadsPublicPath(fileUrl);
+  if (primary) candidates.push(primary);
+
+  const raw = String(fileUrl || "").trim().replace(/\\/g, "/");
+  const base = raw.split("/").filter(Boolean).pop() || "";
+  if (base && !base.includes("..")) {
+    candidates.push(join(uploadsDir, base));
+    const cwdRoot = join(process.cwd(), "uploads", "reimbursements");
+    if (normalize(cwdRoot) !== normalize(uploadsDir)) {
+      candidates.push(join(cwdRoot, base));
+    }
+  }
+
+  const roots = [uploadsDir, join(process.cwd(), "uploads", "reimbursements")];
+  for (const cand of candidates) {
+    try {
+      if (!existsSync(cand)) continue;
+      if (roots.some((root) => isPathInsideRoot(cand, root))) return cand;
+    } catch {
+      // tenta próximo candidato
+    }
+  }
+  return null;
+}
+
 async function resolveReimbursementReportAccess(user: {
   id: string;
   tenantId: string;
@@ -1835,6 +1858,7 @@ async function resolveReimbursementReportAccess(user: {
 }): Promise<{ canSeeAll: boolean }> {
   const role = String(user.role ?? "").toUpperCase();
   const canSeeAll =
+    role === "SUPER_ADMIN" ||
     role === "GESTOR_PROJETOS" ||
     role === "FINANCEIRO" ||
     (await hasGlobalViewAccess({
@@ -1923,21 +1947,21 @@ reimbursementsRouter.get("/report/attachments-zip", async (req, res) => {
     take: 5000,
   });
 
-  const uploadsRoot = normalize(join(getUploadsRoot(), "reimbursements")) + sep;
   const usedNames = new Set<string>();
   const entries: Array<{ abs: string; zipName: string }> = [];
+  let dbAttachmentCount = 0;
 
   for (const row of list) {
     if (!row.attachments.length) continue;
+    dbAttachmentCount += row.attachments.length;
     const consultor = sanitizeZipNamePart(row.user.name);
     const tipo = sanitizeZipNamePart(row.type.name);
     const data = expenseDateStamp(row.expenseDate, row.createdAt);
     const base = `${consultor}_${tipo}_${data}`;
 
     for (const att of row.attachments) {
-      const abs = resolveUploadsPublicPath(att.fileUrl);
-      if (!abs || !(normalize(abs) + sep).startsWith(uploadsRoot)) continue;
-      if (!existsSync(abs)) continue;
+      const abs = resolveReimbursementAttachmentAbs(att.fileUrl);
+      if (!abs) continue;
       const ext = attachmentFileExtension(att.filename, att.fileType);
       let n = 0;
       let zipName = "";
@@ -1951,7 +1975,12 @@ reimbursementsRouter.get("/report/attachments-zip", async (req, res) => {
   }
 
   if (entries.length === 0) {
-    res.status(404).json({ error: "Nenhum anexo encontrado para os filtros selecionados." });
+    res.status(404).json({
+      error:
+        dbAttachmentCount > 0
+          ? `Há ${dbAttachmentCount} anexo(s) no relatório, mas os arquivos não foram encontrados no servidor (verifique o volume UPLOADS_ROOT).`
+          : "Nenhum anexo encontrado para os filtros selecionados.",
+    });
     return;
   }
 
@@ -1974,7 +2003,12 @@ reimbursementsRouter.get("/report/attachments-zip", async (req, res) => {
   archive.pipe(res);
 
   for (const entry of entries) {
-    archive.append(createReadStream(entry.abs), { name: entry.zipName });
+    try {
+      const buf = await readFile(entry.abs);
+      archive.append(buf, { name: entry.zipName });
+    } catch (err) {
+      console.error("[reimbursements] attachments-zip read", entry.abs, errorSummary(err));
+    }
   }
 
   await archive.finalize();

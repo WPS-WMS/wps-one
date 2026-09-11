@@ -1,4 +1,4 @@
-import { isAbsolute, join, normalize, resolve } from "path";
+import { isAbsolute, join, normalize, relative, resolve } from "path";
 
 /**
  * Raiz dos arquivos servidos em `/uploads/*` (portal, projetos, tickets, avatares).
@@ -16,14 +16,33 @@ export function getUploadsRoot(): string {
 }
 
 /**
+ * Extrai o caminho público `/uploads/...` de URLs absolutas ou relativas.
+ */
+export function normalizeUploadsPublicUrl(publicUrl: string): string | null {
+  let u = String(publicUrl || "").trim().replace(/\\/g, "/");
+  if (!u) return null;
+  const idx = u.indexOf("/uploads/");
+  if (idx >= 0) u = u.slice(idx);
+  else if (u.startsWith("uploads/")) u = `/${u}`;
+  if (!u.startsWith("/uploads/")) return null;
+  return u;
+}
+
+/**
  * Converte URL pública `/uploads/...` em caminho absoluto no disco, ou `null` se inválida.
  */
 export function resolveUploadsPublicPath(publicUrl: string): string | null {
-  const u = String(publicUrl || "").trim().replace(/\\/g, "/");
-  if (!u.startsWith("/uploads/")) return null;
+  const u = normalizeUploadsPublicUrl(publicUrl);
+  if (!u) return null;
   const tail = u.slice("/uploads/".length).replace(/^\/+/, "");
   if (!tail || tail.includes("..")) return null;
   const segments = tail.split("/").filter(Boolean);
   if (segments.length === 0 || segments.some((s) => s === "..")) return null;
   return normalize(join(getUploadsRoot(), ...segments));
+}
+
+/** True se `absPath` está dentro de `rootDir` (sem path traversal). */
+export function isPathInsideRoot(absPath: string, rootDir: string): boolean {
+  const rel = relative(normalize(rootDir), normalize(absPath));
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
 }

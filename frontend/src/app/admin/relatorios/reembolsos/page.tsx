@@ -17,6 +17,7 @@ import {
 } from "@/components/reports/ReportsPrimitives";
 import { ChevronDown, Download, FileArchive, FileText, Filter, Receipt, X } from "lucide-react";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { buildStoreZip } from "@/lib/buildStoreZip";
 
 /** Datas: igual à Lista de Tarefas (filtros avançados). */
 const LISTA_DATE_CLASS =
@@ -85,6 +86,44 @@ function fmtDateOnly(iso: string | null | undefined) {
   const d = new Date(String(iso));
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("pt-BR");
+}
+
+function sanitizeZipNamePart(raw: string): string {
+  const cleaned = String(raw ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+  return cleaned || "arquivo";
+}
+
+function expenseDateStamp(expenseDate: string | null | undefined, createdAt: string): string {
+  const raw = expenseDate || createdAt;
+  const ymd = String(raw).slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+    const [y, m, d] = ymd.split("-");
+    return `${d}${m}${y}`;
+  }
+  const d = new Date(String(raw));
+  if (Number.isNaN(d.getTime())) return "00000000";
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const year = String(d.getUTCFullYear());
+  return `${day}${month}${year}`;
+}
+
+function attachmentFileExtension(filename: string, fileType?: string): string {
+  const fromName = (() => {
+    const i = filename.lastIndexOf(".");
+    return i >= 0 ? filename.slice(i).toLowerCase() : "";
+  })();
+  if (fromName && fromName.length <= 8) return fromName;
+  if (fileType && /jpe?g/i.test(fileType)) return ".jpg";
+  if (fileType && /png/i.test(fileType)) return ".png";
+  if (fileType && /pdf/i.test(fileType)) return ".pdf";
+  if (fileType && /webp/i.test(fileType)) return ".webp";
+  return "";
 }
 
 export default function RelatorioReembolsosPage() {
@@ -317,15 +356,48 @@ export default function RelatorioReembolsosPage() {
     setZipDownloading(true);
     setError(null);
     try {
-      const params = reportQueryParams();
-      const res = await apiFetchBlob(`/api/reimbursements/report/attachments-zip?${params.toString()}`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
+      const usedNames = new Set<string>();
+      const files: Array<{ name: string; data: Uint8Array }> = [];
+      let failed = 0;
+
+      for (const row of rows) {
+        const atts = Array.isArray(row.attachments) ? row.attachments : [];
+        if (atts.length === 0) continue;
+        const consultor = sanitizeZipNamePart(row.user.name);
+        const tipo = sanitizeZipNamePart(row.type.name);
+        const dataStamp = expenseDateStamp(row.expenseDate, row.createdAt);
+        const base = `${consultor}_${tipo}_${dataStamp}`;
+
+        for (const att of atts) {
+          const res = await apiFetchBlob(
+            `/api/reimbursements/attachments/${encodeURIComponent(att.id)}/file`,
+          );
+          if (!res.ok) {
+            failed += 1;
+            continue;
+          }
+          const buffer = new Uint8Array(await res.arrayBuffer());
+          const ext = attachmentFileExtension(att.filename, att.fileType);
+          let n = 0;
+          let zipName = "";
+          do {
+            n += 1;
+            zipName = n === 1 ? `${base}${ext}` : `${base}_${n}${ext}`;
+          } while (usedNames.has(zipName.toLowerCase()));
+          usedNames.add(zipName.toLowerCase());
+          files.push({ name: zipName, data: buffer });
+        }
+      }
+
+      if (files.length === 0) {
         throw new Error(
-          typeof body?.error === "string" ? body.error : "Não foi possível gerar o ZIP de anexos.",
+          failed > 0
+            ? "Os anexos estão no relatório, mas não foi possível baixar os arquivos do servidor."
+            : "Nenhum anexo encontrado para os filtros selecionados.",
         );
       }
-      const blob = await res.blob();
+
+      const blob = buildStoreZip(files);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -335,6 +407,12 @@ export default function RelatorioReembolsosPage() {
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
+
+      if (failed > 0) {
+        setError(
+          `ZIP gerado com ${files.length} anexo(s). ${failed} arquivo(s) não puderam ser baixados.`,
+        );
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao baixar anexos.");
     } finally {
