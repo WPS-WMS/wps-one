@@ -15,6 +15,10 @@ model Tenant {
   slug      String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  /// Assinatura WPS One: STANDARD | PREMIUM (null = não configurado).
+  subscriptionPlan           String?
+  subscriptionStartedAt      DateTime?
+  subscriptionNextPaymentAt  DateTime?
   users     User[]
   clients   Client[]
   activities Activity[]

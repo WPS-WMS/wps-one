@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, usePathname } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { Link } from "@/components/Link";
 import { apiFetch } from "@/lib/api";
 
@@ -14,22 +14,24 @@ type Detail = {
   usage: {
     usersTotal: number;
     usersActive: number;
-    clients: number;
+    billableUsersActive: number;
     projects: number;
-    tickets: number;
-    timeEntries: number;
-    reimbursements: number;
-    payables: number;
-    receivables: number;
     storageBytes: number;
     storageFormatted: string;
     lastActivityAt: string | null;
   };
   subscription: {
     plan: string | null;
+    planLabel: string;
     status: string;
     label: string;
     note?: string;
+    priceCentsPerUser: number | null;
+    pricePerUserFormatted: string | null;
+    monthlyAmountCents: number;
+    monthlyAmountFormatted: string;
+    startedAt: string | null;
+    nextPaymentAt: string | null;
   };
   recentUsers: Array<{
     id: string;
@@ -45,13 +47,16 @@ function fmtDate(iso: string | null | undefined) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("pt-BR", {
+  return d.toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   });
+}
+
+function toDateInput(iso: string | null | undefined) {
+  if (!iso) return "";
+  return String(iso).slice(0, 10);
 }
 
 export default function PlatformTenantDetailPage() {
@@ -64,9 +69,17 @@ export default function PlatformTenantDetailPage() {
     const fromPath = parts[parts.length - 1] ?? "";
     return fromPath && fromPath !== "_" ? fromPath : "";
   }, [params?.id, pathname]);
+
   const [detail, setDetail] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveOk, setSaveOk] = useState(false);
+
+  const [plan, setPlan] = useState<string>("");
+  const [startedAt, setStartedAt] = useState("");
+  const [nextPaymentAt, setNextPaymentAt] = useState("");
 
   useEffect(() => {
     if (!id) {
@@ -85,13 +98,52 @@ export default function PlatformTenantDetailPage() {
         setLoading(false);
         return;
       }
-      setDetail(body as Detail);
+      const row = body as Detail;
+      setDetail(row);
+      setPlan(row.subscription.plan ?? "");
+      setStartedAt(toDateInput(row.subscription.startedAt));
+      setNextPaymentAt(toDateInput(row.subscription.nextPaymentAt));
       setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
   }, [id]);
+
+  async function saveSubscription() {
+    if (!id) return;
+    setSaving(true);
+    setSaveError(null);
+    setSaveOk(false);
+    const r = await apiFetch(`/api/platform/tenants/${encodeURIComponent(id)}/subscription`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan: plan || null,
+        startedAt: startedAt || null,
+        nextPaymentAt: nextPaymentAt || null,
+      }),
+    });
+    const body = await r.json().catch(() => null);
+    setSaving(false);
+    if (!r.ok) {
+      setSaveError(typeof body?.error === "string" ? body.error : "Erro ao salvar.");
+      return;
+    }
+    setDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            usage: body.usage ?? prev.usage,
+            subscription: body.subscription,
+          }
+        : prev,
+    );
+    setPlan(body.subscription?.plan ?? "");
+    setStartedAt(toDateInput(body.subscription?.startedAt));
+    setNextPaymentAt(toDateInput(body.subscription?.nextPaymentAt));
+    setSaveOk(true);
+  }
 
   if (loading) {
     return <p className="text-sm text-[color:var(--muted-foreground)]">Carregando…</p>;
@@ -108,15 +160,19 @@ export default function PlatformTenantDetailPage() {
   }
 
   const metrics = [
-    { label: "Usuários ativos", value: `${detail.usage.usersActive}/${detail.usage.usersTotal}` },
-    { label: "Clientes", value: detail.usage.clients },
+    {
+      label: "Usuários cobráveis",
+      value: `${detail.usage.billableUsersActive}/${detail.usage.usersTotal}`,
+    },
+    { label: "Mensalidade", value: detail.subscription.monthlyAmountFormatted },
+    {
+      label: "Preço / usuário",
+      value: detail.subscription.pricePerUserFormatted ?? "—",
+    },
     { label: "Projetos", value: detail.usage.projects },
-    { label: "Tickets", value: detail.usage.tickets },
-    { label: "Apontamentos", value: detail.usage.timeEntries },
-    { label: "Reembolsos", value: detail.usage.reimbursements },
-    { label: "Contas a pagar", value: detail.usage.payables },
-    { label: "Contas a receber", value: detail.usage.receivables },
     { label: "Storage", value: detail.usage.storageFormatted },
+    { label: "Início assinatura", value: fmtDate(detail.subscription.startedAt) },
+    { label: "Próxima parcela", value: fmtDate(detail.subscription.nextPaymentAt) },
   ];
 
   return (
@@ -160,21 +216,80 @@ export default function PlatformTenantDetailPage() {
         style={{ borderColor: "var(--border)" }}
       >
         <h3 className="text-sm font-semibold">Assinatura</h3>
-        <p className="mt-2 text-sm text-[color:var(--muted-foreground)]">
-          {detail.subscription.note || "Planos e preços ainda não configurados."}
+        <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
+          Cobrança apenas por usuário ativo. Standard R$&nbsp;49 · Premium R$&nbsp;99.
         </p>
-        <dl className="mt-4 grid gap-3 sm:grid-cols-3 text-sm">
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div>
-            <dt className="text-xs text-[color:var(--muted-foreground)]">Plano</dt>
-            <dd className="mt-1 font-medium">{detail.subscription.plan || "—"}</dd>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Plano</label>
+            <select
+              className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+              style={{ borderColor: "var(--border)" }}
+              value={plan}
+              onChange={(e) => setPlan(e.target.value)}
+            >
+              <option value="">Não configurado</option>
+              <option value="STANDARD">Standard — R$ 49,00 / usuário</option>
+              <option value="PREMIUM">Premium — R$ 99,00 / usuário</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+              Início da assinatura
+            </label>
+            <input
+              type="date"
+              className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+              style={{ borderColor: "var(--border)" }}
+              value={startedAt}
+              onChange={(e) => setStartedAt(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+              Próxima parcela mensal
+            </label>
+            <input
+              type="date"
+              className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+              style={{ borderColor: "var(--border)" }}
+              value={nextPaymentAt}
+              onChange={(e) => setNextPaymentAt(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void saveSubscription()}
+            className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Salvar assinatura
+          </button>
+          {saveOk ? (
+            <span className="text-xs text-emerald-700">Assinatura atualizada.</span>
+          ) : null}
+          {saveError ? <span className="text-xs text-red-600">{saveError}</span> : null}
+        </div>
+
+        <dl className="mt-5 grid gap-3 border-t pt-4 text-sm sm:grid-cols-3" style={{ borderColor: "var(--border)" }}>
+          <div>
+            <dt className="text-xs text-[color:var(--muted-foreground)]">Mensalidade calculada</dt>
+            <dd className="mt-1 text-lg font-semibold tabular-nums">
+              {detail.subscription.monthlyAmountFormatted}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-[color:var(--muted-foreground)]">Usuários cobráveis</dt>
+            <dd className="mt-1 font-medium tabular-nums">{detail.usage.billableUsersActive}</dd>
           </div>
           <div>
             <dt className="text-xs text-[color:var(--muted-foreground)]">Status</dt>
-            <dd className="mt-1 font-medium">{detail.subscription.status}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-[color:var(--muted-foreground)]">Storage</dt>
-            <dd className="mt-1 font-medium tabular-nums">{detail.usage.storageFormatted}</dd>
+            <dd className="mt-1 font-medium">{detail.subscription.status === "active" ? "Ativa" : "Não configurada"}</dd>
           </div>
         </dl>
       </section>
@@ -185,6 +300,9 @@ export default function PlatformTenantDetailPage() {
       >
         <div className="border-b px-5 py-4" style={{ borderColor: "var(--border)" }}>
           <h3 className="text-sm font-semibold">Usuários recentes</h3>
+          <p className="text-xs text-[color:var(--muted-foreground)]">
+            Apenas usuários do tenant (admin da plataforma não entra na cobrança).
+          </p>
         </div>
         <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
           {detail.recentUsers.length === 0 ? (

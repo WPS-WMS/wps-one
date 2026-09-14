@@ -11,28 +11,32 @@ type TenantRow = {
   slug: string;
   createdAt: string;
   usage: {
+    billableUsersActive: number;
     usersActive: number;
     usersTotal: number;
-    clients: number;
     projects: number;
-    tickets: number;
-    reimbursements: number;
     storageFormatted: string;
     lastActivityAt: string | null;
   };
-  subscription: { label: string; status: string };
+  subscription: {
+    plan: string | null;
+    label: string;
+    status: string;
+    monthlyAmountFormatted: string;
+    pricePerUserFormatted: string | null;
+    startedAt: string | null;
+    nextPaymentAt: string | null;
+  };
 };
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("pt-BR", {
+  return d.toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   });
 }
 
@@ -77,9 +81,9 @@ export default function PlatformTenantsPage() {
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--primary)]">
             Plataforma
           </p>
-          <h2 className="text-xl font-semibold tracking-tight">Clientes cadastrados</h2>
+          <h2 className="text-xl font-semibold tracking-tight">Clientes assinantes</h2>
           <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-            Utilização por tenant · assinatura em breve
+            Utilização cobrada por usuário ativo · Standard R$&nbsp;49 · Premium R$&nbsp;99
           </p>
         </div>
         <div className="relative w-full sm:max-w-xs">
@@ -107,19 +111,19 @@ export default function PlatformTenantsPage() {
         style={{ borderColor: "var(--border)" }}
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[880px] text-sm">
+          <table className="w-full min-w-[920px] text-sm">
             <thead>
               <tr
                 className="text-left text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]"
                 style={{ background: "color-mix(in srgb, var(--wps-purple-600) 4%, var(--surface))" }}
               >
                 <th className="px-4 py-3">Cliente</th>
-                <th className="px-4 py-3">Usuários</th>
-                <th className="px-4 py-3">Projetos</th>
-                <th className="px-4 py-3">Tickets</th>
+                <th className="px-4 py-3">Plano</th>
+                <th className="px-4 py-3">Usuários ativos</th>
+                <th className="px-4 py-3">Mensalidade</th>
+                <th className="px-4 py-3">Início</th>
+                <th className="px-4 py-3">Próx. parcela</th>
                 <th className="px-4 py-3">Storage</th>
-                <th className="px-4 py-3">Última atividade</th>
-                <th className="px-4 py-3">Assinatura</th>
               </tr>
             </thead>
             <tbody>
@@ -150,20 +154,33 @@ export default function PlatformTenantsPage() {
                         <p className="text-xs text-[color:var(--muted-foreground)]">{row.slug}</p>
                       </Link>
                     </td>
-                    <td className="px-4 py-3 tabular-nums">
-                      {row.usage.usersActive}
-                      <span className="text-[color:var(--muted-foreground)]">/{row.usage.usersTotal}</span>
-                    </td>
-                    <td className="px-4 py-3 tabular-nums">{row.usage.projects}</td>
-                    <td className="px-4 py-3 tabular-nums">{row.usage.tickets}</td>
-                    <td className="px-4 py-3 tabular-nums">{row.usage.storageFormatted}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs">
-                      {fmtDate(row.usage.lastActivityAt)}
-                    </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex rounded-full bg-[color:var(--primary)]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--primary)]">
                         {row.subscription.label}
                       </span>
+                      {row.subscription.pricePerUserFormatted ? (
+                        <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                          {row.subscription.pricePerUserFormatted}/usuário
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums">
+                      {row.usage.billableUsersActive}
+                      <span className="text-[color:var(--muted-foreground)]">
+                        /{row.usage.usersTotal}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-medium tabular-nums">
+                      {row.subscription.monthlyAmountFormatted}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs">
+                      {fmtDate(row.subscription.startedAt)}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs">
+                      {fmtDate(row.subscription.nextPaymentAt)}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-xs">
+                      {row.usage.storageFormatted}
                     </td>
                   </tr>
                 ))

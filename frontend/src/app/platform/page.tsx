@@ -1,30 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Building2, Database, FolderKanban, HardDrive, Users } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Building2, CalendarDays, CreditCard, Loader2, Plus, Users, X } from "lucide-react";
 import { Link } from "@/components/Link";
 import { apiFetch } from "@/lib/api";
+import { formatarCnpj, formatarTelefone } from "@/lib/brFormatters";
 
 type Totals = {
   tenants: number;
-  usersActive: number;
-  projects: number;
-  storageBytes: number;
-  storageFormatted: string;
+  subscribedTenants: number;
+  billableUsersActive: number;
+  monthlyBillingCents: number;
+  monthlyBillingFormatted: string;
 };
 
 type TenantRow = {
   id: string;
   name: string;
   slug: string;
-  createdAt: string;
   usage: {
-    usersActive: number;
-    projects: number;
-    storageFormatted: string;
+    billableUsersActive: number;
     lastActivityAt: string | null;
   };
-  subscription: { label: string };
+  subscription: {
+    plan: string | null;
+    label: string;
+    monthlyAmountCents: number;
+    monthlyAmountFormatted: string;
+    startedAt: string | null;
+    nextPaymentAt: string | null;
+    pricePerUserFormatted: string | null;
+  };
 };
 
 function fmtDate(iso: string | null | undefined) {
@@ -44,48 +50,104 @@ export default function PlatformHomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      const r = await apiFetch("/api/platform/tenants");
-      const body = await r.json().catch(() => null);
-      if (cancelled) return;
-      if (!r.ok) {
-        setError(typeof body?.error === "string" ? body.error : "Erro ao carregar.");
-        setLoading(false);
-        return;
-      }
-      setTotals(body?.totals ?? null);
-      setItems(Array.isArray(body?.items) ? body.items.slice(0, 5) : []);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [createdCreds, setCreatedCreds] = useState<{
+    companyName: string;
+    email: string;
+    temporaryPassword: string;
+    tenantId: string;
+  } | null>(null);
+  const [form, setForm] = useState({
+    companyName: "",
+    cnpj: "",
+    phone: "",
+    email: "",
+  });
+
+  const loadTenants = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const r = await apiFetch("/api/platform/tenants");
+    const body = await r.json().catch(() => null);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao carregar.");
       setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
+      return;
+    }
+    setTotals(body?.totals ?? null);
+    const list = Array.isArray(body?.items) ? (body.items as TenantRow[]) : [];
+    setItems(
+      [...list]
+        .sort(
+          (a, b) =>
+            (b.subscription.monthlyAmountCents || 0) - (a.subscription.monthlyAmountCents || 0) ||
+            b.usage.billableUsersActive - a.usage.billableUsersActive,
+        )
+        .slice(0, 8),
+    );
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    void loadTenants();
+  }, [loadTenants]);
+
+  function openModal() {
+    setForm({ companyName: "", cnpj: "", phone: "", email: "" });
+    setFormError(null);
+    setCreatedCreds(null);
+    setModalOpen(true);
+  }
+
+  async function submitCompany(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setFormError(null);
+    const r = await apiFetch("/api/platform/tenants", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        companyName: form.companyName.trim(),
+        cnpj: form.cnpj,
+        phone: form.phone,
+        email: form.email.trim(),
+      }),
+    });
+    const body = await r.json().catch(() => null);
+    setSaving(false);
+    if (!r.ok) {
+      setFormError(typeof body?.error === "string" ? body.error : "Erro ao cadastrar.");
+      return;
+    }
+    setCreatedCreds({
+      companyName: String(body?.name ?? form.companyName),
+      email: String(body?.admin?.email ?? form.email),
+      temporaryPassword: String(body?.temporaryPassword ?? ""),
+      tenantId: String(body?.id ?? ""),
+    });
+    await loadTenants();
+  }
 
   const cards = [
     {
-      label: "Clientes (tenants)",
-      value: totals?.tenants ?? "—",
+      label: "Faturamento mensal",
+      value: totals?.monthlyBillingFormatted ?? "—",
+      icon: CreditCard,
+      hint: "Soma das assinaturas ativas",
+    },
+    {
+      label: "Clientes assinantes",
+      value: totals ? `${totals.subscribedTenants}/${totals.tenants}` : "—",
       icon: Building2,
+      hint: "Com plano configurado",
     },
     {
-      label: "Usuários ativos",
-      value: totals?.usersActive ?? "—",
+      label: "Usuários cobráveis",
+      value: totals?.billableUsersActive ?? "—",
       icon: Users,
-    },
-    {
-      label: "Projetos",
-      value: totals?.projects ?? "—",
-      icon: FolderKanban,
-    },
-    {
-      label: "Storage (anexos)",
-      value: totals?.storageFormatted ?? "—",
-      icon: HardDrive,
+      hint: "Ativos (exclui admin da plataforma)",
     },
   ];
 
@@ -102,20 +164,25 @@ export default function PlatformHomePage() {
           }}
           aria-hidden
         />
-        <div
-          className="pointer-events-none absolute -right-16 -top-20 h-44 w-44 rounded-full opacity-[0.12]"
-          style={{ background: "radial-gradient(circle, var(--wps-purple-600), transparent 70%)" }}
-          aria-hidden
-        />
-        <div className="relative px-5 py-6 md:px-7">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--primary)]">
-            Operações
-          </p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight">Controle de utilização</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[color:var(--muted-foreground)]">
-            Visão cross-tenant dos clientes WPS One. Planos e preços entram depois; por enquanto
-            acompanhe cadastro e uso.
-          </p>
+        <div className="relative flex flex-col gap-4 px-5 py-6 md:flex-row md:items-end md:justify-between md:px-7">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--primary)]">
+              Assinaturas
+            </p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight">Controle comercial WPS One</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[color:var(--muted-foreground)]">
+              Acompanhe clientes assinantes, usuários ativos cobráveis e faturamento mensal.
+              Planos: Standard R$&nbsp;49 e Premium R$&nbsp;99 por usuário ativo.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={openModal}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[color:var(--primary)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
+          >
+            <Plus className="h-4 w-4" />
+            Cadastrar empresa
+          </button>
         </div>
       </section>
 
@@ -128,7 +195,7 @@ export default function PlatformHomePage() {
         </div>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-3">
         {cards.map((card) => {
           const Icon = card.icon;
           return (
@@ -149,6 +216,7 @@ export default function PlatformHomePage() {
               <p className="mt-3 text-2xl font-semibold tabular-nums tracking-tight">
                 {loading ? "…" : card.value}
               </p>
+              <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">{card.hint}</p>
             </div>
           );
         })}
@@ -158,38 +226,58 @@ export default function PlatformHomePage() {
         className="overflow-hidden rounded-2xl border bg-[color:var(--surface)]"
         style={{ borderColor: "var(--border)" }}
       >
-        <div className="flex items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: "var(--border)" }}>
-          <div className="flex items-center gap-2">
-            <Database className="h-4 w-4 text-[color:var(--muted-foreground)]" />
-            <h3 className="text-sm font-semibold">Clientes recentes</h3>
+        <div
+          className="flex items-center justify-between gap-3 border-b px-5 py-4"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <div>
+            <h3 className="text-sm font-semibold">Valor por cliente</h3>
+            <p className="text-xs text-[color:var(--muted-foreground)]">
+              Mensalidade = usuários ativos × preço do plano
+            </p>
           </div>
-          <Link href="/platform/tenants" className="text-xs font-semibold text-[color:var(--primary)] hover:underline">
+          <Link
+            href="/platform/tenants"
+            className="text-xs font-semibold text-[color:var(--primary)] hover:underline"
+          >
             Ver todos
           </Link>
         </div>
         {loading ? (
           <p className="px-5 py-8 text-sm text-[color:var(--muted-foreground)]">Carregando…</p>
         ) : items.length === 0 ? (
-          <p className="px-5 py-8 text-sm text-[color:var(--muted-foreground)]">Nenhum tenant cadastrado.</p>
+          <p className="px-5 py-8 text-sm text-[color:var(--muted-foreground)]">
+            Nenhum cliente cadastrado.
+          </p>
         ) : (
           <ul className="divide-y" style={{ borderColor: "var(--border)" }}>
             {items.map((row) => (
               <li key={row.id}>
                 <Link
                   href={`/platform/tenants/${row.id}`}
-                  className="flex items-center justify-between gap-3 px-5 py-3.5 transition hover:bg-black/[0.03]"
+                  className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 transition hover:bg-black/[0.03]"
                 >
                   <div className="min-w-0">
                     <p className="truncate font-medium">{row.name}</p>
                     <p className="truncate text-xs text-[color:var(--muted-foreground)]">
-                      {row.slug} · criado {fmtDate(row.createdAt)}
+                      {row.subscription.label}
+                      {row.subscription.pricePerUserFormatted
+                        ? ` · ${row.subscription.pricePerUserFormatted}/usuário`
+                        : ""}
+                      {" · "}
+                      {row.usage.billableUsersActive}{" "}
+                      {row.usage.billableUsersActive === 1 ? "usuário ativo" : "usuários ativos"}
                     </p>
                   </div>
-                  <div className="shrink-0 text-right text-xs text-[color:var(--muted-foreground)]">
-                    <p>
-                      {row.usage.usersActive} usuários · {row.usage.projects} projetos
+                  <div className="shrink-0 text-right text-xs">
+                    <p className="text-sm font-semibold tabular-nums text-[color:var(--foreground)]">
+                      {row.subscription.monthlyAmountFormatted}
                     </p>
-                    <p>{row.usage.storageFormatted}</p>
+                    <p className="mt-0.5 inline-flex items-center gap-1 text-[color:var(--muted-foreground)]">
+                      <CalendarDays className="h-3 w-3" />
+                      Início {fmtDate(row.subscription.startedAt)} · Próx.{" "}
+                      {fmtDate(row.subscription.nextPaymentAt)}
+                    </p>
                   </div>
                 </Link>
               </li>
@@ -197,6 +285,177 @@ export default function PlatformHomePage() {
           </ul>
         )}
       </section>
+
+      {modalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !saving) setModalOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-2xl border bg-[color:var(--surface)] shadow-xl"
+            style={{ borderColor: "var(--border)" }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cadastrar-empresa-title"
+          >
+            <div
+              className="flex items-start justify-between gap-3 border-b px-5 py-4"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <div>
+                <h3 id="cadastrar-empresa-title" className="text-base font-semibold">
+                  Cadastrar empresa
+                </h3>
+                <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
+                  Cria o tenant e o usuário SUPER_ADMIN com o e-mail informado.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => setModalOpen(false)}
+                className="rounded-md p-1 text-[color:var(--muted-foreground)] hover:bg-black/5"
+                aria-label="Fechar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {createdCreds ? (
+              <div className="space-y-4 px-5 py-4">
+                <p className="text-sm text-emerald-700">
+                  Empresa <strong>{createdCreds.companyName}</strong> criada com sucesso.
+                </p>
+                <div
+                  className="rounded-xl border px-4 py-3 text-sm"
+                  style={{ borderColor: "var(--border)", background: "rgba(92,0,225,0.04)" }}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Acesso do SUPER_ADMIN
+                  </p>
+                  <p className="mt-2">
+                    <span className="text-[color:var(--muted-foreground)]">E-mail:</span>{" "}
+                    <span className="font-medium">{createdCreds.email}</span>
+                  </p>
+                  <p className="mt-1">
+                    <span className="text-[color:var(--muted-foreground)]">Senha temporária:</span>{" "}
+                    <code className="rounded bg-black/5 px-1.5 py-0.5 font-mono text-xs">
+                      {createdCreds.temporaryPassword}
+                    </code>
+                  </p>
+                  <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                    No primeiro login o usuário deverá trocar a senha. Compartilhe esses dados com o
+                    cliente.
+                  </p>
+                </div>
+                <div className="flex flex-wrap justify-end gap-2">
+                  {createdCreds.tenantId ? (
+                    <Link
+                      href={`/platform/tenants/${createdCreds.tenantId}`}
+                      className="inline-flex h-9 items-center rounded-lg border px-3.5 text-sm"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      Ver empresa
+                    </Link>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setModalOpen(false)}
+                    className="inline-flex h-9 items-center rounded-lg bg-[color:var(--primary)] px-3.5 text-sm font-medium text-white"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={(e) => void submitCompany(e)} className="space-y-3 px-5 py-4">
+                <div>
+                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                    Nome da empresa
+                  </label>
+                  <input
+                    required
+                    className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                    style={{ borderColor: "var(--border)" }}
+                    value={form.companyName}
+                    onChange={(e) => setForm((f) => ({ ...f, companyName: e.target.value }))}
+                    placeholder="Ex.: Acme Consultoria"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">CNPJ</label>
+                  <input
+                    required
+                    className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                    style={{ borderColor: "var(--border)" }}
+                    value={form.cnpj}
+                    onChange={(e) => setForm((f) => ({ ...f, cnpj: formatarCnpj(e.target.value) }))}
+                    placeholder="00.000.000/0000-00"
+                    inputMode="numeric"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                    Telefone
+                  </label>
+                  <input
+                    required
+                    className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                    style={{ borderColor: "var(--border)" }}
+                    value={form.phone}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, phone: formatarTelefone(e.target.value) }))
+                    }
+                    placeholder="(11) 99999-9999"
+                    inputMode="tel"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                    E-mail (SUPER_ADMIN)
+                  </label>
+                  <input
+                    required
+                    type="email"
+                    className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                    style={{ borderColor: "var(--border)" }}
+                    value={form.email}
+                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                    placeholder="admin@empresa.com"
+                  />
+                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                    Este e-mail será o administrador do tenant e poderá cadastrar os demais usuários.
+                  </p>
+                </div>
+
+                {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => setModalOpen(false)}
+                    className="inline-flex h-9 items-center rounded-lg border px-3.5 text-sm"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="inline-flex h-9 items-center gap-2 rounded-lg bg-[color:var(--primary)] px-3.5 text-sm font-medium text-white disabled:opacity-60"
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Criar empresa
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
