@@ -47,7 +47,7 @@ export const financeListTableWrapClass =
   "relative isolate min-w-0 max-h-[min(70vh,calc(100dvh-13rem))] overflow-auto overscroll-contain scroll-smooth rounded-xl border [transform:translateZ(0)] [scrollbar-gutter:stable]";
 
 export const financeListTheadClass =
-  "border-b text-[10px] font-medium uppercase tracking-[0.06em] text-[color:var(--muted-foreground)] [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-[color:var(--surface)]";
+  "border-b text-[10px] font-medium uppercase tracking-[0.06em] text-[color:var(--muted-foreground)] [&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:[background:color-mix(in_srgb,var(--wps-purple-600)_4%,var(--surface))] [&_th]:shadow-[inset_0_-1px_0_0_var(--border)]";
 
 export const financeListTheadStyle = {
   borderColor: "var(--border)",

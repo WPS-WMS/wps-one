@@ -2150,7 +2150,7 @@ export function ReceivablesPageContent() {
             </div>
           </div>
         <div className={financeListTableWrapClass} style={{ borderColor: "var(--border)" }}>
-          <table className="w-full table-fixed border-collapse overflow-hidden text-[11px] leading-tight sm:text-xs">
+          <table className="w-full table-fixed border-collapse text-[11px] leading-tight sm:text-xs">
             <colgroup>
               <col className="w-[2.25rem]" />
               <col className="w-[12%]" />

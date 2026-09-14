@@ -17,6 +17,9 @@ import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import {
   FinanceCollapsibleFilters,
   FinancePageHeader,
+  financeListTableWrapClass,
+  financeListTheadClass,
+  financeListTheadStyle,
   financePrimaryBtnClass,
   financePrimaryBtnStyle,
 } from "@/components/finance/FinancePageHeader";
@@ -359,54 +362,44 @@ export function FinanceProjectsPageContent() {
           )}
         </div>
       ) : (
-        <div
-          className="overflow-hidden rounded-xl border bg-[color:var(--surface)]"
-          style={{ borderColor: "var(--border)" }}
-        >
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
+        <div className={financeListTableWrapClass} style={{ borderColor: "var(--border)" }}>
+          <table className="min-w-full border-collapse text-sm">
+            <thead className={financeListTheadClass} style={financeListTheadStyle}>
+              <tr>
+                <th className="px-3.5 py-2.5 text-left">Projeto</th>
+                <th className="px-3.5 py-2.5 text-left">Cliente</th>
+                <th className="px-3.5 py-2.5 text-center">Receitas</th>
+                <th className="px-3.5 py-2.5 text-right">Receita contratada</th>
+                <th className="px-3.5 py-2.5 text-right">Receita prevista</th>
+                <th className="px-3.5 py-2.5 text-right">Receita realizada</th>
+                <th className="px-3.5 py-2.5 text-right">Custo total</th>
+                <th className="px-3.5 py-2.5 text-right">Lucro bruto</th>
+                <th className="px-3.5 py-2.5 text-right">Margem</th>
+                <th className="px-3.5 py-2.5 text-center">Parcelas</th>
+                <th className="px-3.5 py-2.5 text-center">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((row) => (
                 <tr
-                  className="border-b text-left text-[10px] font-medium uppercase tracking-[0.06em] text-[color:var(--muted-foreground)]"
-                  style={{
-                    borderColor: "var(--border)",
-                    background: "color-mix(in srgb, var(--wps-purple-600) 4%, var(--surface))",
-                  }}
+                  key={row.projectId}
+                  className="border-b last:border-b-0 transition-colors hover:bg-[color:var(--primary)]/[0.03]"
+                  style={{ borderColor: "var(--border)" }}
                 >
-                  <th className="px-3.5 py-2.5">Projeto</th>
-                  <th className="px-3.5 py-2.5">Cliente</th>
-                  <th className="px-3.5 py-2.5 text-center">Receitas</th>
-                  <th className="px-3.5 py-2.5 text-right">Receita contratada</th>
-                  <th className="px-3.5 py-2.5 text-right">Receita prevista</th>
-                  <th className="px-3.5 py-2.5 text-right">Receita realizada</th>
-                  <th className="px-3.5 py-2.5 text-right">Custo total</th>
-                  <th className="px-3.5 py-2.5 text-right">Lucro bruto</th>
-                  <th className="px-3.5 py-2.5 text-right">Margem</th>
-                  <th className="px-3.5 py-2.5 text-center">Parcelas</th>
-                  <th className="px-3.5 py-2.5 text-center">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((row) => (
-                  <tr
-                    key={row.projectId}
-                    className="border-b last:border-b-0 transition-colors hover:bg-[color:var(--primary)]/[0.03]"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    <td className="px-3.5 py-2.5">
-                      <div className="font-medium leading-snug text-[color:var(--foreground)]">
-                        {projectDisplayName(row)}
-                      </div>
-                    </td>
-                    <td className="px-3.5 py-2.5 leading-snug text-[color:var(--muted-foreground)]">
-                      {row.clientName}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-center">
-                      {row.quantidadeReceitas === 0 ? (
-                        <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-900">
-                          Sem receitas
-                        </span>
-                      ) : (
+                  <td className="px-3.5 py-2.5">
+                    <div className="font-medium leading-snug text-[color:var(--foreground)]">
+                      {projectDisplayName(row)}
+                    </div>
+                  </td>
+                  <td className="px-3.5 py-2.5 leading-snug text-[color:var(--muted-foreground)]">
+                    {row.clientName}
+                  </td>
+                  <td className="px-3.5 py-2.5 text-center">
+                    {row.quantidadeReceitas === 0 ? (
+                      <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-900">
+                        Sem receitas
+                      </span>
+                    ) : (
                         <span className="inline-flex min-w-[1.5rem] items-center justify-center rounded-full bg-[color:var(--primary)]/10 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-[color:var(--primary)]">
                           {row.quantidadeReceitas}
                         </span>
@@ -477,7 +470,6 @@ export function FinanceProjectsPageContent() {
                 </tr>
               </tfoot>
             </table>
-          </div>
         </div>
       )}
 
