@@ -302,8 +302,19 @@ export function mapVariableEntriesToDraft(
   });
 }
 
+export function isEmptyVariableRevenueEntry(entry: VariableRevenueEntryDraft): boolean {
+  const skillTotal = sumCostLines(entry.skillLines);
+  if (skillTotal > 0) return false;
+  const storedAmount = Number(entry.amount);
+  if (Number.isFinite(storedAmount) && storedAmount > 0) return false;
+  const hours =
+    entry.hours !== "" && Number.isFinite(Number(entry.hours)) ? Number(entry.hours) : 0;
+  if (hours > 0) return false;
+  return !entry.skillLines.some((line) => Number(line.hours) > 0);
+}
+
 export function variableEntriesToPayload(entries: VariableRevenueEntryDraft[]) {
-  return entries.map((entry, index) => {
+  return entries.filter((entry) => !isEmptyVariableRevenueEntry(entry)).map((entry, index) => {
     const skillLines = entry.skillLines
       .filter((line) => line.skill.trim() || line.hourlyRate || line.hours)
       .map((line, lineIndex) => ({

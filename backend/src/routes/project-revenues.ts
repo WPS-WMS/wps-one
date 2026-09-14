@@ -774,10 +774,7 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
           compositionParsed.data.variableEntries ?? [],
         )
       : [];
-  if (revenueType === "VARIAVEL" && variableEntries.length === 0) {
-    res.status(400).json({ error: "Adicione ao menos uma medição à receita variável." });
-    return;
-  }
+  // Receita variável pode ser criada só com taxas/contrato; medições entram depois.
   const existingCount = await prisma.projectRevenue.count({
     where: { tenantId: user.tenantId, projectId },
   });
