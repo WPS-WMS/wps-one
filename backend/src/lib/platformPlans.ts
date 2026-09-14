@@ -15,8 +15,31 @@ export const PLATFORM_PLANS = {
 
 export type PlatformPlanId = keyof typeof PLATFORM_PLANS;
 
+export const SUBSCRIPTION_PAYMENT_METHODS = {
+  PIX: { id: "PIX" as const, label: "Pix" },
+  BOLETO: { id: "BOLETO" as const, label: "Boleto" },
+  CARTAO_CREDITO: { id: "CARTAO_CREDITO" as const, label: "Cartão de crédito" },
+} as const;
+
+export type SubscriptionPaymentMethodId = keyof typeof SUBSCRIPTION_PAYMENT_METHODS;
+
 export function isPlatformPlanId(value: unknown): value is PlatformPlanId {
   return value === "STANDARD" || value === "PREMIUM";
+}
+
+export function isSubscriptionPaymentMethodId(
+  value: unknown,
+): value is SubscriptionPaymentMethodId {
+  return value === "PIX" || value === "BOLETO" || value === "CARTAO_CREDITO";
+}
+
+export function subscriptionPaymentMethodLabel(
+  method: string | null | undefined,
+): string | null {
+  if (method === "PIX") return SUBSCRIPTION_PAYMENT_METHODS.PIX.label;
+  if (method === "BOLETO") return SUBSCRIPTION_PAYMENT_METHODS.BOLETO.label;
+  if (method === "CARTAO_CREDITO") return SUBSCRIPTION_PAYMENT_METHODS.CARTAO_CREDITO.label;
+  return null;
 }
 
 export function platformPlanLabel(plan: string | null | undefined): string {
@@ -95,6 +118,7 @@ export function buildSubscriptionPayload(params: {
   plan: string | null | undefined;
   startedAt: Date | null | undefined;
   nextPaymentAt: Date | null | undefined;
+  paymentMethod?: string | null | undefined;
   billableUsersActive: number;
 }) {
   const plan = isPlatformPlanId(params.plan) ? params.plan : null;
@@ -108,6 +132,9 @@ export function buildSubscriptionPayload(params: {
     startedAt,
     nextPaymentAt: params.nextPaymentAt,
   });
+  const paymentMethod = isSubscriptionPaymentMethodId(params.paymentMethod)
+    ? params.paymentMethod
+    : null;
 
   return {
     plan,
@@ -120,6 +147,8 @@ export function buildSubscriptionPayload(params: {
     monthlyAmountFormatted: formatBrlFromCents(monthlyCents),
     startedAt: startedAt ? startedAt.toISOString() : null,
     nextPaymentAt: nextPaymentAt ? nextPaymentAt.toISOString() : null,
+    paymentMethod,
+    paymentMethodLabel: subscriptionPaymentMethodLabel(paymentMethod),
     note: plan
       ? `Cobrança por usuário ativo · ${platformPlanLabel(plan)}`
       : "Defina o plano (Standard R$ 49 ou Premium R$ 99 por usuário ativo).",

@@ -8,7 +8,9 @@ import {
   buildSubscriptionPayload,
   computeNextSubscriptionPaymentAt,
   isPlatformPlanId,
+  isSubscriptionPaymentMethodId,
   PLATFORM_PLANS,
+  SUBSCRIPTION_PAYMENT_METHODS,
 } from "../lib/platformPlans.js";
 import { getTenantUsageSnapshot } from "../lib/platformTenantUsage.js";
 
@@ -23,15 +25,6 @@ const signupLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Muitas tentativas de cadastro. Tente novamente em alguns minutos." },
 });
-
-function parseOptionalDate(raw: unknown): Date | null | undefined {
-  if (raw === undefined) return undefined;
-  if (raw === null || raw === "") return null;
-  const s = String(raw).trim();
-  const d = new Date(s.length === 10 ? `${s}T12:00:00.000Z` : s);
-  if (Number.isNaN(d.getTime())) return undefined;
-  return d;
-}
 
 /**
  * Cadastro de novo tenant (organização) com usuário admin inicial.
@@ -159,6 +152,7 @@ tenantsRouter.get("/me/subscription", authMiddleware, async (req, res) => {
         subscriptionPlan: true,
         subscriptionStartedAt: true,
         subscriptionNextPaymentAt: true,
+        subscriptionPaymentMethod: true,
       },
     });
     if (!tenant) {
@@ -170,6 +164,7 @@ tenantsRouter.get("/me/subscription", authMiddleware, async (req, res) => {
       plan: tenant.subscriptionPlan,
       startedAt: tenant.subscriptionStartedAt,
       nextPaymentAt: tenant.subscriptionNextPaymentAt,
+      paymentMethod: tenant.subscriptionPaymentMethod,
       billableUsersActive: usage.billableUsersActive,
     });
     res.json({
@@ -188,6 +183,10 @@ tenantsRouter.get("/me/subscription", authMiddleware, async (req, res) => {
           style: "currency",
           currency: "BRL",
         }),
+      })),
+      paymentMethods: Object.values(SUBSCRIPTION_PAYMENT_METHODS).map((m) => ({
+        id: m.id,
+        label: m.label,
       })),
     });
   } catch (err) {
@@ -217,15 +216,17 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
     }
   }
 
-  const startedAt = parseOptionalDate(body.startedAt);
-  if (body.startedAt !== undefined && startedAt === undefined) {
-    res.status(400).json({ error: "Data de início inválida." });
-    return;
-  }
-  const nextPaymentAt = parseOptionalDate(body.nextPaymentAt);
-  if (body.nextPaymentAt !== undefined && nextPaymentAt === undefined) {
-    res.status(400).json({ error: "Data da próxima parcela inválida." });
-    return;
+  const methodRaw = body.paymentMethod;
+  let paymentMethod: string | null | undefined = undefined;
+  if (methodRaw !== undefined) {
+    if (methodRaw === null || methodRaw === "") {
+      paymentMethod = null;
+    } else if (isSubscriptionPaymentMethodId(methodRaw)) {
+      paymentMethod = methodRaw;
+    } else {
+      res.status(400).json({ error: "Forma de pagamento inválida." });
+      return;
+    }
   }
 
   try {
@@ -238,6 +239,7 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
         subscriptionPlan: true,
         subscriptionStartedAt: true,
         subscriptionNextPaymentAt: true,
+        subscriptionPaymentMethod: true,
       },
     });
     if (!existing) {
@@ -246,9 +248,10 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
     }
 
     const nextPlan = plan !== undefined ? plan : existing.subscriptionPlan;
-    let nextStarted = startedAt !== undefined ? startedAt : existing.subscriptionStartedAt;
-    let nextPayment =
-      nextPaymentAt !== undefined ? nextPaymentAt : existing.subscriptionNextPaymentAt;
+    let nextStarted = existing.subscriptionStartedAt;
+    let nextPayment = existing.subscriptionNextPaymentAt;
+    let nextMethod =
+      paymentMethod !== undefined ? paymentMethod : existing.subscriptionPaymentMethod;
 
     if (nextPlan && !nextStarted) {
       nextStarted = new Date();
@@ -259,6 +262,7 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
     if (!nextPlan) {
       nextStarted = null;
       nextPayment = null;
+      nextMethod = null;
     }
 
     const updated = await prisma.tenant.update({
@@ -267,6 +271,7 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
         subscriptionPlan: nextPlan,
         subscriptionStartedAt: nextStarted,
         subscriptionNextPaymentAt: nextPayment,
+        subscriptionPaymentMethod: nextMethod,
       },
       select: {
         id: true,
@@ -275,6 +280,7 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
         subscriptionPlan: true,
         subscriptionStartedAt: true,
         subscriptionNextPaymentAt: true,
+        subscriptionPaymentMethod: true,
       },
     });
 
@@ -283,6 +289,7 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
       plan: updated.subscriptionPlan,
       startedAt: updated.subscriptionStartedAt,
       nextPaymentAt: updated.subscriptionNextPaymentAt,
+      paymentMethod: updated.subscriptionPaymentMethod,
       billableUsersActive: usage.billableUsersActive,
     });
 

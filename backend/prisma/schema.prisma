@@ -19,6 +19,8 @@ model Tenant {
   subscriptionPlan           String?
   subscriptionStartedAt      DateTime?
   subscriptionNextPaymentAt  DateTime?
+  /// PIX | BOLETO | CARTAO_CREDITO
+  subscriptionPaymentMethod  String?
   users     User[]
   clients   Client[]
   activities Activity[]

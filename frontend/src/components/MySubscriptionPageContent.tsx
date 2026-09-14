@@ -14,6 +14,11 @@ type PlanOption = {
   pricePerUserFormatted: string;
 };
 
+type PaymentMethodOption = {
+  id: string;
+  label: string;
+};
+
 type SubscriptionPayload = {
   plan: string | null;
   planLabel: string;
@@ -24,6 +29,8 @@ type SubscriptionPayload = {
   monthlyAmountFormatted: string;
   startedAt: string | null;
   nextPaymentAt: string | null;
+  paymentMethod: string | null;
+  paymentMethodLabel: string | null;
 };
 
 type ResponseBody = {
@@ -35,7 +42,14 @@ type ResponseBody = {
   };
   subscription: SubscriptionPayload;
   plans?: PlanOption[];
+  paymentMethods?: PaymentMethodOption[];
 };
+
+const DEFAULT_PAYMENT_METHODS: PaymentMethodOption[] = [
+  { id: "PIX", label: "Pix" },
+  { id: "BOLETO", label: "Boleto" },
+  { id: "CARTAO_CREDITO", label: "Cartão de crédito" },
+];
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -46,11 +60,6 @@ function fmtDate(iso: string | null | undefined) {
     month: "long",
     year: "numeric",
   });
-}
-
-function toDateInput(iso: string | null | undefined) {
-  if (!iso) return "";
-  return String(iso).slice(0, 10);
 }
 
 function basePathFromPathname(pathname: string): "/admin" | "/gestor" | "/consultor" {
@@ -70,8 +79,7 @@ export function MySubscriptionPageContent() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [plan, setPlan] = useState("");
-  const [startedAt, setStartedAt] = useState("");
-  const [nextPaymentAt, setNextPaymentAt] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
 
   const allowed = permissionsReady && can("configuracoes.assinatura");
 
@@ -96,8 +104,7 @@ export function MySubscriptionPageContent() {
       const row = body as ResponseBody;
       setData(row);
       setPlan(row.subscription.plan ?? "");
-      setStartedAt(toDateInput(row.subscription.startedAt));
-      setNextPaymentAt(toDateInput(row.subscription.nextPaymentAt));
+      setPaymentMethod(row.subscription.paymentMethod ?? "");
       setLoading(false);
     })();
     return () => {
@@ -114,8 +121,7 @@ export function MySubscriptionPageContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         plan: plan || null,
-        startedAt: startedAt || null,
-        nextPaymentAt: nextPaymentAt || null,
+        paymentMethod: plan ? paymentMethod || null : null,
       }),
     });
     const body = await r.json().catch(() => null);
@@ -136,8 +142,7 @@ export function MySubscriptionPageContent() {
         : row,
     );
     setPlan(row.subscription.plan ?? "");
-    setStartedAt(toDateInput(row.subscription.startedAt));
-    setNextPaymentAt(toDateInput(row.subscription.nextPaymentAt));
+    setPaymentMethod(row.subscription.paymentMethod ?? "");
     setSaveMsg("Assinatura atualizada.");
   }
 
@@ -166,6 +171,7 @@ export function MySubscriptionPageContent() {
     { id: "STANDARD", label: "Standard", priceCentsPerUser: 4900, pricePerUserFormatted: "R$ 49,00" },
     { id: "PREMIUM", label: "Premium", priceCentsPerUser: 9900, pricePerUserFormatted: "R$ 99,00" },
   ];
+  const paymentMethods = data?.paymentMethods ?? DEFAULT_PAYMENT_METHODS;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-6">
@@ -228,14 +234,18 @@ export function MySubscriptionPageContent() {
           Standard R$&nbsp;49 e Premium R$&nbsp;99 por usuário ativo. Inativos não entram na cobrança.
         </p>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
+        <div className="mt-4 space-y-4">
+          <div>
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Tipo de plano</label>
             <select
               className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
               style={{ borderColor: "var(--border)" }}
               value={plan}
-              onChange={(e) => setPlan(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setPlan(next);
+                if (!next) setPaymentMethod("");
+              }}
             >
               <option value="">Não configurado</option>
               {plans.map((p) => (
@@ -245,39 +255,48 @@ export function MySubscriptionPageContent() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-              Início da assinatura
-            </label>
-            <input
-              type="date"
-              className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
-              style={{ borderColor: "var(--border)" }}
-              value={startedAt}
-              onChange={(e) => setStartedAt(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
-              Próxima parcela mensal
-            </label>
-            <input
-              type="date"
-              className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
-              style={{ borderColor: "var(--border)" }}
-              value={nextPaymentAt}
-              onChange={(e) => setNextPaymentAt(e.target.value)}
-            />
-          </div>
+
+          {plan ? (
+            <div>
+              <p className="mb-2 text-xs text-[color:var(--muted-foreground)]">Forma de pagamento</p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {paymentMethods.map((method) => {
+                  const selected = paymentMethod === method.id;
+                  return (
+                    <label
+                      key={method.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-colors"
+                      style={{
+                        borderColor: selected ? "var(--primary)" : "var(--border)",
+                        background: selected ? "color-mix(in srgb, var(--primary) 8%, transparent)" : "transparent",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        className="accent-[color:var(--primary)]"
+                        checked={selected}
+                        onChange={() => setPaymentMethod(method.id)}
+                      />
+                      <span className="font-medium">{method.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-[11px] text-[color:var(--muted-foreground)]">
+                O checkout com a forma escolhida será disponibilizado em breve.
+              </p>
+            </div>
+          ) : null}
         </div>
 
         <dl className="mt-5 grid gap-3 border-t pt-4 text-sm sm:grid-cols-2" style={{ borderColor: "var(--border)" }}>
           <div>
-            <dt className="text-xs text-[color:var(--muted-foreground)]">Início</dt>
+            <dt className="text-xs text-[color:var(--muted-foreground)]">Data de aquisição</dt>
             <dd className="mt-1 font-medium">{fmtDate(data?.subscription.startedAt)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-[color:var(--muted-foreground)]">Próximo pagamento</dt>
+            <dt className="text-xs text-[color:var(--muted-foreground)]">Próxima parcela</dt>
             <dd className="mt-1 font-medium">{fmtDate(data?.subscription.nextPaymentAt)}</dd>
           </div>
           <div>
@@ -292,6 +311,12 @@ export function MySubscriptionPageContent() {
               {data?.subscription.status === "active" ? "Ativa" : "Não configurada"}
             </dd>
           </div>
+          {data?.subscription.paymentMethodLabel ? (
+            <div className="sm:col-span-2">
+              <dt className="text-xs text-[color:var(--muted-foreground)]">Pagamento salvo</dt>
+              <dd className="mt-1 font-medium">{data.subscription.paymentMethodLabel}</dd>
+            </div>
+          ) : null}
         </dl>
 
         <div className="mt-5 flex flex-wrap items-center gap-3">

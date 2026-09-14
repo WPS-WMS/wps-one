@@ -8,6 +8,7 @@ import {
   buildSubscriptionPayload,
   computeNextSubscriptionPaymentAt,
   isPlatformPlanId,
+  isSubscriptionPaymentMethodId,
   PLATFORM_PLANS,
 } from "../lib/platformPlans.js";
 import { ensureFinanceDefaults } from "../lib/financeConfigHelpers.js";
@@ -248,6 +249,7 @@ platformRouter.get("/tenants", requirePlatformAdmin, async (_req, res) => {
         subscriptionPlan: true,
         subscriptionStartedAt: true,
         subscriptionNextPaymentAt: true,
+        subscriptionPaymentMethod: true,
       },
     });
 
@@ -258,6 +260,7 @@ platformRouter.get("/tenants", requirePlatformAdmin, async (_req, res) => {
           plan: t.subscriptionPlan,
           startedAt: t.subscriptionStartedAt,
           nextPaymentAt: t.subscriptionNextPaymentAt,
+          paymentMethod: t.subscriptionPaymentMethod,
           billableUsersActive: usage.billableUsersActive,
         });
         return {
@@ -335,6 +338,7 @@ platformRouter.get("/tenants/:id", requirePlatformAdmin, async (req, res) => {
         subscriptionPlan: true,
         subscriptionStartedAt: true,
         subscriptionNextPaymentAt: true,
+        subscriptionPaymentMethod: true,
       },
     });
     if (!tenant) {
@@ -347,6 +351,7 @@ platformRouter.get("/tenants/:id", requirePlatformAdmin, async (req, res) => {
       plan: tenant.subscriptionPlan,
       startedAt: tenant.subscriptionStartedAt,
       nextPaymentAt: tenant.subscriptionNextPaymentAt,
+      paymentMethod: tenant.subscriptionPaymentMethod,
       billableUsersActive: usage.billableUsersActive,
     });
 
@@ -422,6 +427,19 @@ platformRouter.patch("/tenants/:id/subscription", requirePlatformAdmin, async (r
     return;
   }
 
+  const methodRaw = body.paymentMethod;
+  let paymentMethod: string | null | undefined = undefined;
+  if (methodRaw !== undefined) {
+    if (methodRaw === null || methodRaw === "") {
+      paymentMethod = null;
+    } else if (isSubscriptionPaymentMethodId(methodRaw)) {
+      paymentMethod = methodRaw;
+    } else {
+      res.status(400).json({ error: "Forma de pagamento inválida." });
+      return;
+    }
+  }
+
   try {
     const existing = await prisma.tenant.findUnique({
       where: { id },
@@ -430,6 +448,7 @@ platformRouter.patch("/tenants/:id/subscription", requirePlatformAdmin, async (r
         subscriptionPlan: true,
         subscriptionStartedAt: true,
         subscriptionNextPaymentAt: true,
+        subscriptionPaymentMethod: true,
       },
     });
     if (!existing) {
@@ -442,6 +461,8 @@ platformRouter.patch("/tenants/:id/subscription", requirePlatformAdmin, async (r
       startedAt !== undefined ? startedAt : existing.subscriptionStartedAt;
     let nextPayment =
       nextPaymentAt !== undefined ? nextPaymentAt : existing.subscriptionNextPaymentAt;
+    let nextMethod =
+      paymentMethod !== undefined ? paymentMethod : existing.subscriptionPaymentMethod;
 
     if (nextPlan && !nextStarted) {
       nextStarted = new Date();
@@ -452,6 +473,7 @@ platformRouter.patch("/tenants/:id/subscription", requirePlatformAdmin, async (r
     if (!nextPlan) {
       nextStarted = null;
       nextPayment = null;
+      nextMethod = null;
     }
 
     const updated = await prisma.tenant.update({
@@ -460,6 +482,7 @@ platformRouter.patch("/tenants/:id/subscription", requirePlatformAdmin, async (r
         subscriptionPlan: nextPlan,
         subscriptionStartedAt: nextStarted,
         subscriptionNextPaymentAt: nextPayment,
+        subscriptionPaymentMethod: nextMethod,
       },
       select: {
         id: true,
@@ -468,6 +491,7 @@ platformRouter.patch("/tenants/:id/subscription", requirePlatformAdmin, async (r
         subscriptionPlan: true,
         subscriptionStartedAt: true,
         subscriptionNextPaymentAt: true,
+        subscriptionPaymentMethod: true,
       },
     });
 
@@ -476,6 +500,7 @@ platformRouter.patch("/tenants/:id/subscription", requirePlatformAdmin, async (r
       plan: updated.subscriptionPlan,
       startedAt: updated.subscriptionStartedAt,
       nextPaymentAt: updated.subscriptionNextPaymentAt,
+      paymentMethod: updated.subscriptionPaymentMethod,
       billableUsersActive: usage.billableUsersActive,
     });
 
