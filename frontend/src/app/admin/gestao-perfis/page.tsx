@@ -98,6 +98,7 @@ const FEATURES: Feature[] = [
   { id: "configuracoes.feriados", label: "Configurações \u003e Geral \u003e Feriados", section: "Configurações — Geral" },
   { id: "configuracoes.sharepoint", label: "Configurações \u003e Geral \u003e Integrações", section: "Configurações — Geral" },
   { id: "configuracoes.atividades", label: "Configurações \u003e Geral \u003e Atividades", section: "Configurações — Geral" },
+  { id: "configuracoes.assinatura", label: "Configurações \u003e Minha Assinatura", section: "Configurações" },
   { id: "configuracoes.cadastro", label: "Configurações \u003e Cadastro", section: "Configurações — Cadastro" },
   { id: "configuracoes.usuarios", label: "Configurações \u003e Cadastro \u003e Usuários", section: "Configurações — Cadastro" },
   { id: "configuracoes.clientes", label: "Configurações \u003e Cadastro \u003e Clientes", section: "Configurações — Cadastro" },
@@ -269,6 +270,10 @@ function buildDefaultPermissions(): Permissions {
       case "configuracoes.sharepoint":
       case "configuracoes.feriados":
         initial[f.id] = { ...d(), ADMINISTRATIVO: "allow" };
+        break;
+      case "configuracoes.assinatura":
+        // Somente SUPER_ADMIN (fora da matriz editável).
+        initial[f.id] = d();
         break;
       case "configuracoes.reembolso":
         initial[f.id] = { ...d(), FINANCEIRO: "allow" };

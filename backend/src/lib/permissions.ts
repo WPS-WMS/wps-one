@@ -64,6 +64,8 @@ export const FEATURES = [
   "configuracoes.sharepoint",
   "configuracoes.reembolso",
   "configuracoes.feriados",
+  /** Assinatura WPS One do tenant (somente SUPER_ADMIN). */
+  "configuracoes.assinatura",
   "financeiro",
   "financeiro.fornecedores",
   "financeiro.clientesFinanceiros",
@@ -284,6 +286,10 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "configuracoes.feriados":
         initial[feature] = row("allow", { ADMINISTRATIVO: "allow" });
         break;
+      case "configuracoes.assinatura":
+        // Somente SUPER_ADMIN gerencia a assinatura do tenant.
+        initial[feature] = row("allow");
+        break;
       case "configuracoes.reembolso":
         initial[feature] = row("allow", { FINANCEIRO: "allow" });
         break;
@@ -385,6 +391,7 @@ export const CONFIG_SCREEN_FEATURE_IDS = [
   "configuracoes.sharepoint",
   "configuracoes.reembolso",
   "configuracoes.feriados",
+  "configuracoes.assinatura",
   "configuracoes.financeiro.categorias",
   "configuracoes.financeiro.centrosCusto",
   "configuracoes.financeiro.planoContas",

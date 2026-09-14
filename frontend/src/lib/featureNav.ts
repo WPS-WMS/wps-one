@@ -113,7 +113,7 @@ export function canSeeConfiguracoesMenu(can: (featureId: string) => boolean): bo
   return buildConfiguracoesNavChildren("/admin", can).length > 0;
 }
 
-/** Submenu de Configurações: Geral, Cadastro e Financeiro (hub da seção ou alguma tela dela). */
+/** Submenu de Configurações: Geral, Cadastro, Financeiro e Minha Assinatura. */
 export function buildConfiguracoesNavChildren(
   basePath: string,
   can: (featureId: string) => boolean,
@@ -159,6 +159,14 @@ export function buildConfiguracoesNavChildren(
       href: `${basePath}/configuracoes/${hub.section}`,
       label: hub.label,
       matchPrefixes: hub.matchPrefixes,
+    });
+  }
+
+  if (can("configuracoes.assinatura")) {
+    items.push({
+      href: `${basePath}/configuracoes/assinatura`,
+      label: "Minha Assinatura",
+      matchPrefixes: [`${basePath}/configuracoes/assinatura`],
     });
   }
 
