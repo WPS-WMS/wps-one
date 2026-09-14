@@ -1,4 +1,4 @@
-import type { ReceivableInstallment } from "@prisma/client";
+import type { Prisma, PrismaClient, ReceivableInstallment } from "@prisma/client";
 import { parseAmountToCents, parseEntryDate } from "./financialEntryHelpers.js";
 import {
   buildInstallmentPlan,
@@ -10,6 +10,41 @@ import { normalizeReceivablePaymentMethod } from "./financePaymentMethods.js";
 
 export { parseEntryDate, buildInstallmentPlan, normalizeAllocations, nextRecurrenceDueDate };
 export type { AllocationInput };
+
+type PrismaLike = PrismaClient | Prisma.TransactionClient;
+
+/**
+ * Número de contrato comercial do projeto (proposta/receita ou CR irmã).
+ * Usado em CR de juros/multa e outras receitas sem vínculo direto à receita.
+ */
+export async function findContractTitleForProject(
+  db: PrismaLike,
+  tenantId: string,
+  projectId: string,
+): Promise<string | null> {
+  const revenue = await db.projectRevenue.findFirst({
+    where: {
+      tenantId,
+      projectId,
+      contractProposal: { not: null },
+    },
+    orderBy: { updatedAt: "desc" },
+    select: { contractProposal: true },
+  });
+  const fromRevenue = revenue?.contractProposal?.trim();
+  if (fromRevenue) return fromRevenue;
+
+  const sibling = await db.receivable.findFirst({
+    where: {
+      tenantId,
+      projectId,
+      contractTitle: { not: null },
+    },
+    orderBy: { updatedAt: "desc" },
+    select: { contractTitle: true },
+  });
+  return sibling?.contractTitle?.trim() || null;
+}
 
 export type ReceivableStatus =
   | "PREVISTO"

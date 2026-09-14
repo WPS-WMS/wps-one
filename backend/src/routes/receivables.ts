@@ -15,6 +15,7 @@ import {
   buildInstallmentPlan,
   computeEffectiveInstallmentStatus,
   deriveReceivableStatus,
+  findContractTitleForProject,
   normalizeAllocations,
   parseEntryDate,
   parseInvoiceWriteBody,
@@ -96,6 +97,18 @@ const listInclude = {
         orderBy: { createdAt: "desc" as const },
         take: 1,
         select: { title: true },
+      },
+      revenues: {
+        where: { contractProposal: { not: null } },
+        orderBy: { updatedAt: "desc" as const },
+        take: 1,
+        select: { contractProposal: true },
+      },
+      receivables: {
+        where: { contractTitle: { not: null } },
+        orderBy: { updatedAt: "desc" as const },
+        take: 1,
+        select: { contractTitle: true },
       },
     },
   },
@@ -445,6 +458,13 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
           {
             projectRevenue: {
               contractProposal: { contains: contractQ, mode: "insensitive" },
+            },
+          },
+          {
+            project: {
+              revenues: {
+                some: { contractProposal: { contains: contractQ, mode: "insensitive" } },
+              },
             },
           },
           {
@@ -844,12 +864,17 @@ receivablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
     : dueDate;
   const installments = buildInstallmentPlan(parsed.data.totalAmountCents!, count, dueDate);
 
+  const projectId = parsed.data.projectId ?? null;
+  const contractTitle = projectId
+    ? await findContractTitleForProject(prisma, user.tenantId, projectId)
+    : null;
+
   const created = await prisma.$transaction(async (tx) => {
     return tx.receivable.create({
       data: {
         tenantId: user.tenantId,
         clientId: parsed.data.clientId!,
-        projectId: parsed.data.projectId ?? null,
+        projectId,
         financialAccountId: parsed.data.financialAccountId!,
         description: parsed.data.description!,
         totalAmountCents: parsed.data.totalAmountCents!,
@@ -857,6 +882,7 @@ receivablesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
         taxAmountCents: parsed.data.taxAmountCents ?? null,
         retentionAmountCents: parsed.data.retentionAmountCents ?? null,
         competenceDate: competence,
+        contractTitle,
         kind,
         status: "PREVISTO",
         paymentMethod: parsed.data.paymentMethod ?? null,

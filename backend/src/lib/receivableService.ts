@@ -731,6 +731,8 @@ type ReceivableListSource = {
         id: string;
         name: string;
         contracts?: { title: string }[];
+        revenues?: { contractProposal: string | null }[];
+        receivables?: { contractTitle: string | null }[];
       }
     | null;
   projectRevenue?: {
@@ -792,6 +794,16 @@ function resolveContractTitle(receivable: ReceivableListSource): string | null {
   if (direct) return direct;
   const fromRevenue = receivable.projectRevenue?.contractProposal?.trim();
   if (fromRevenue) return fromRevenue;
+  // CR de juros/multa (e outras manuais) muitas vezes não têm projectRevenueId —
+  // herda o contrato comercial da receita do projeto ou de outra CR do mesmo projeto.
+  const fromProjectRevenue = receivable.project?.revenues
+    ?.map((row) => row.contractProposal?.trim())
+    .find((value) => Boolean(value));
+  if (fromProjectRevenue) return fromProjectRevenue;
+  const fromSibling = receivable.project?.receivables
+    ?.map((row) => row.contractTitle?.trim())
+    .find((value) => Boolean(value));
+  if (fromSibling) return fromSibling;
   const fromProject = receivable.project?.contracts?.[0]?.title?.trim();
   if (fromProject) return fromProject;
   return contractTitleFromNotes(receivable.notes);

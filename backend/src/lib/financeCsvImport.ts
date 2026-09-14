@@ -5,6 +5,7 @@ import { detectCsvSeparator, parseCsvRows, stripBom } from "./projectCsvImport.j
 import { markPayableAsPaid } from "./payableService.js";
 import { issueInvoice, markReceivableAsReceived, receiveInstallment } from "./receivableService.js";
 import { classifyReceivableByAccountSubcategory } from "./receivableRevenueClassification.js";
+import { findContractTitleForProject } from "./receivableHelpers.js";
 import {
   normalizePayablePaymentMethod,
   PAYABLE_PAYMENT_METHODS,
@@ -1369,8 +1370,12 @@ async function persistSingleReceitaRow(params: {
   const { prisma, tenantId, userId, parsed, result } = params;
   const revenueTitle = parsed.description.slice(0, 200);
   let projectRevenueId: string | null = null;
+  let contractTitle = parsed.contractTitle;
+  if (!contractTitle) {
+    contractTitle = await findContractTitleForProject(prisma, tenantId, parsed.project.id);
+  }
   const notesParts = ["Importação por planilha (receitas) em Lançamentos."];
-  if (parsed.contractTitle) notesParts.push(`Contrato: ${parsed.contractTitle}`);
+  if (contractTitle) notesParts.push(`Contrato: ${contractTitle}`);
   notesParts.push(
     parsed.isBillingFaturamento
       ? "Classificação: Faturamento (conta financeira)."
@@ -1387,7 +1392,7 @@ async function persistSingleReceitaRow(params: {
       userId,
       projectId: parsed.project.id,
       title: revenueTitle,
-      contractTitle: parsed.contractTitle,
+      contractTitle,
       revenueType: parsed.revenueType,
       rows: [parsed],
       historyDetails: `Receita ${parsed.revenueType === "VARIAVEL" ? "variável" : "fixa"} criada pela importação de Contas a receber: ${revenueTitle.slice(0, 120)}`,
@@ -1407,7 +1412,7 @@ async function persistSingleReceitaRow(params: {
       description: parsed.description.slice(0, 500),
       totalAmountCents: parsed.amountCents,
       competenceDate: parsed.competenceDate,
-      contractTitle: parsed.contractTitle,
+      contractTitle,
       kind: parsed.isBillingFaturamento ? "PROJETO" : "MANUAL",
       status: "PREVISTO",
       sourceType: parsed.isBillingFaturamento ? "PROJECT_REVENUE" : "IMPORT",
