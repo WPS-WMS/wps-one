@@ -152,12 +152,12 @@ function PortalFeedbackModal(props: {
 
         <div className="space-y-4 px-6 py-5">
           {props.sent && (
-            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-white">
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800">
               Enviado com sucesso. Obrigado pelo feedback.
             </div>
           )}
           {props.error && (
-            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-white">
+            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700">
               {props.error}
             </div>
           )}
@@ -325,11 +325,12 @@ const ADMIN_PORTAL_SUBSECTIONS: readonly { slug: string; label: string }[] = [
 
 type PortalMainView = PortalMainViewName;
 
-/** Seções com modal simples de uma imagem (substituir arquivo). */
-const PORTAL_IMAGE_SECTION_SLUGS = new Set<string>([SLUG.employee]);
+/** Seções com modal simples de uma imagem (histórico com Voltar). */
+const PORTAL_IMAGE_SECTION_SLUGS = new Set<string>([SLUG.employee, SLUG.awards]);
 
 const PORTAL_IMAGE_DEFAULT_TITLE: Record<string, string> = {
-  [SLUG.employee]: "WPSer do mês",
+  [SLUG.employee]: "Imagem",
+  [SLUG.awards]: "Imagem",
 };
 
 type InspirationRank = 1 | 2 | 3;
@@ -607,7 +608,7 @@ function buildNewsMetadata(
 
 function isImageItem(item: PortalItem): boolean {
   const t = String(item.type || "").toLowerCase();
-  if (t === "image") return true;
+  if (t === "image" || t === "inspiration") return true;
   const c = item.content.trim();
   return (
     /^https?:\/\/.+\.(png|jpe?g|gif|webp)(\?|$)/i.test(c) ||
@@ -655,6 +656,29 @@ function PodiumMedal({ rank, size = "md" }: { rank: InspirationRank; size?: "sm"
 function isNewsImageFileType(f: File): boolean {
   const t = String(f.type || "").toLowerCase();
   return t === "image/png" || t === "image/jpeg" || t === "image/jpg" || t === "image/webp";
+}
+
+/** Botão de edição discreto: visível no mobile; no desktop só no hover/foco do card. */
+function PortalHoverManageButton({
+  onClick,
+  label = "Gerenciar",
+  icon = "image",
+}: {
+  onClick: () => void;
+  label?: string;
+  icon?: "image" | "plus";
+}) {
+  const Icon = icon === "plus" ? Plus : ImagePlus;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)]/95 px-2.5 py-1 text-[10px] font-semibold text-[color:var(--muted-foreground)] shadow-sm backdrop-blur transition hover:bg-[color:var(--surface-2)] hover:text-[color:var(--foreground)] opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+    >
+      <Icon className="h-3 w-3" />
+      {label}
+    </button>
+  );
 }
 
 export function PortalCollaborativeDashboard() {
@@ -744,11 +768,7 @@ export function PortalCollaborativeDashboard() {
   const [employeeFocalX, setEmployeeFocalX] = useState(50);
   const [employeeFocalY, setEmployeeFocalY] = useState(50);
   const [employeeGalleryIndex, setEmployeeGalleryIndex] = useState(0);
-  const [inspirationGalleryIndex, setInspirationGalleryIndex] = useState<Record<InspirationRank, number>>({
-    1: 0,
-    2: 0,
-    3: 0,
-  });
+  const [awardsGalleryIndex, setAwardsGalleryIndex] = useState(0);
   const [productUpdates, setProductUpdates] = useState<ProductUpdate[]>([]);
 
   const [evTitle, setEvTitle] = useState("");
@@ -767,23 +787,15 @@ export function PortalCollaborativeDashboard() {
   const employeeItems = itemsBySlug[SLUG.employee] ?? [];
   const awardItems = itemsBySlug[SLUG.awards] ?? [];
   const employeeGallery = useMemo(() => sortImagesNewestFirst(employeeItems), [employeeItems]);
-  const inspirationGalleryByRank = useMemo(() => inspirationItemsByRank(awardItems), [awardItems]);
+  const awardsGallery = useMemo(() => sortImagesNewestFirst(awardItems), [awardItems]);
 
   useEffect(() => {
     setEmployeeGalleryIndex((i) => Math.min(i, Math.max(0, employeeGallery.length - 1)));
   }, [employeeGallery.length]);
 
   useEffect(() => {
-    setInspirationGalleryIndex((prev) => ({
-      1: Math.min(prev[1], Math.max(0, inspirationGalleryByRank[1].length - 1)),
-      2: Math.min(prev[2], Math.max(0, inspirationGalleryByRank[2].length - 1)),
-      3: Math.min(prev[3], Math.max(0, inspirationGalleryByRank[3].length - 1)),
-    }));
-  }, [
-    inspirationGalleryByRank[1].length,
-    inspirationGalleryByRank[2].length,
-    inspirationGalleryByRank[3].length,
-  ]);
+    setAwardsGalleryIndex((i) => Math.min(i, Math.max(0, awardsGallery.length - 1)));
+  }, [awardsGallery.length]);
 
   /** Imagem atual no modal simples (WPSer do mês). */
   const currentManageImageItem = useMemo(() => {
@@ -1129,7 +1141,8 @@ export function PortalCollaborativeDashboard() {
       if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar imagem.");
 
       await refreshAll();
-      setEmployeeGalleryIndex(0);
+      if (slug === SLUG.employee) setEmployeeGalleryIndex(0);
+      if (slug === SLUG.awards) setAwardsGalleryIndex(0);
       if (portalImageFileInputRef.current) portalImageFileInputRef.current.value = "";
     } catch (e: unknown) {
       setItemError(e instanceof Error ? e.message : "Erro ao enviar.");
@@ -1443,7 +1456,6 @@ function PortalItemImage({
       const errBody = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar imagem.");
       await refreshAll();
-      setInspirationGalleryIndex((prev) => ({ ...prev, [rank]: 0 }));
       if (inspirationFileInputRef.current) inspirationFileInputRef.current.value = "";
     } catch (e: unknown) {
       setItemError(e instanceof Error ? e.message : "Erro ao enviar foto.");
@@ -1603,7 +1615,7 @@ function PortalItemImage({
               type="button"
               onClick={() => void logout()}
               title={sidebarCollapsed ? "Sair" : undefined}
-              className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-red-200 transition hover:bg-red-500/10 hover:text-red-100 ${
+              className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-500/10 hover:text-red-700 ${
                 sidebarCollapsed ? "justify-center" : ""
               }`}
             >
@@ -1790,11 +1802,9 @@ function PortalItemImage({
         )}
 
         {portalView === "empresa" && (
-        <div className="space-y-8">
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="space-y-8">
-            {/* Notícias — carrossel de imagens */}
-            <section className="overflow-hidden rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-2xl shadow-black/40 backdrop-blur">
+        <div className="space-y-6">
+            {/* Notícias — âncora visual da home */}
+            <section className="group relative overflow-hidden rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl">
               <div className="flex items-center justify-between gap-2 border-b border-[color:var(--border)] px-4 py-3 sm:px-5">
                 <div className="flex items-center gap-2">
                   <PartyPopper className="h-4 w-4 text-fuchsia-700" />
@@ -1822,25 +1832,20 @@ function PortalItemImage({
                   </label>
                 )}
                 {canEdit && (
-                  <button
-                    type="button"
+                  <PortalHoverManageButton
                     onClick={() => {
                       clearNewsDraft();
                       setManageSlug(SLUG.news);
                       setItemError(null);
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--surface-2)] px-3 py-1.5 text-[11px] font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)]"
-                  >
-                    <ImagePlus className="h-3.5 w-3.5" />
-                    Gerenciar
-                  </button>
+                  />
                 )}
                 </div>
               </div>
-              <div className="relative w-full bg-[color:var(--surface-2)] min-h-[320px] sm:min-h-[420px]">
+              <div className="relative w-full bg-[color:var(--surface-2)] min-h-[360px] sm:min-h-[480px]">
                 {newsCount > 0 && activeNews ? (
                   <div className="relative w-full">
-                    <div className="relative aspect-[16/9] min-h-[320px] w-full overflow-hidden bg-[color:var(--surface-2)] sm:min-h-[440px] lg:min-h-[520px]">
+                    <div className="relative aspect-[16/9] min-h-[360px] w-full overflow-hidden bg-[color:var(--surface-2)] sm:min-h-[480px] lg:min-h-[560px]">
                       {(() => {
                         const cover = parseNewsCoverUrl(activeNews.metadata);
                         const pos = newsObjectPosition(activeNews.metadata);
@@ -1980,11 +1985,11 @@ function PortalItemImage({
                                   }}
                                   className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-xs transition ${
                                     active
-                                      ? "bg-fuchsia-500/20 text-white ring-1 ring-fuchsia-400/40"
+                                      ? "bg-fuchsia-500/15 text-[color:var(--foreground)] ring-1 ring-fuchsia-400/50"
                                       : "bg-[color:var(--surface)] text-[color:var(--muted-foreground)] hover:bg-[color:var(--surface-2)]"
                                   }`}
                                 >
-                                  <span className="min-w-0 truncate font-medium">
+                                  <span className="min-w-0 truncate font-medium text-[color:var(--foreground)]">
                                     {newsDisplayCaption(item) || `Notícia ${idx + 1}`}
                                   </span>
                                   <span className="shrink-0 text-[10px] text-[color:var(--muted-foreground)]">{when}</span>
@@ -1997,110 +2002,20 @@ function PortalItemImage({
                     )}
                   </div>
                 ) : (
-                  <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-2 px-6 text-center text-[color:var(--muted-foreground)] sm:min-h-[420px]">
-                    <ImagePlus className="h-10 w-10 opacity-50" />
-                    <p className="text-sm">Nenhuma imagem de notícia ainda.</p>
-                    {canEdit && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          clearNewsDraft();
-                          setManageSlug(SLUG.news);
-                        }}
-                        className="text-xs font-semibold text-fuchsia-700 hover:underline"
-                      >
-                        Enviar primeira imagem
-                      </button>
-                    )}
+                  <div className="flex h-full min-h-[360px] flex-col items-center justify-center gap-2 px-6 text-center text-[color:var(--muted-foreground)] sm:min-h-[480px]">
+                    <p className="text-sm font-medium text-[color:var(--foreground)]">Em breve</p>
+                    <p className="max-w-sm text-xs leading-relaxed">
+                      Novidades e comunicados do time vão aparecer por aqui.
+                    </p>
                   </div>
                 )}
               </div>
             </section>
 
-            {/* Pódio de imagens — sem título de seção */}
-            <section className="relative overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-lg sm:p-4">
-              {canEdit && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setManageSlug(SLUG.awards);
-                    setItemError(null);
-                  }}
-                  className="absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-2.5 py-1 text-[10px] font-semibold text-[color:var(--muted-foreground)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--foreground)]"
-                >
-                  <ImagePlus className="h-3 w-3" />
-                  Gerenciar
-                </button>
-              )}
-              <div className={`flex flex-wrap items-start justify-center gap-5 sm:gap-8 px-1 pb-1 ${canEdit ? "pt-6" : ""}`}>
-                {([1, 2, 3] as const).map((rank) => {
-                  const gallery = inspirationGalleryByRank[rank];
-                  const idx = Math.min(inspirationGalleryIndex[rank], Math.max(0, gallery.length - 1));
-                  const item = gallery[idx] ?? null;
-                  const photo = item?.content?.trim() || "";
-                  return (
-                    <div key={rank} className="flex w-[128px] shrink-0 flex-col items-center sm:w-[138px]">
-                      <div className="relative mx-auto aspect-square w-[96px] max-w-full sm:w-[104px]">
-                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-100/80 to-orange-50 shadow-inner ring-1 ring-amber-300/40" />
-                        <div className="absolute inset-[2px] overflow-hidden rounded-full bg-[color:var(--surface)] ring-1 ring-[color:var(--border)]">
-                          {photo && item ? (
-                            <PortalItemImage itemId={item.id} srcRaw={photo} alt="" className="h-full w-full object-cover" />
-                          ) : (
-                            <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-[color:var(--surface-2)] px-2 text-center text-[9px] font-medium text-[color:var(--muted-foreground)]">
-                              <ImagePlus className="h-4 w-4 opacity-60" />
-                              Anexar
-                            </div>
-                          )}
-                        </div>
-                        <PodiumMedal rank={rank} size="sm" />
-                      </div>
-                      {gallery.length > 1 ? (
-                        <div className="mt-2 flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            aria-label="Voltar imagem anterior"
-                            disabled={idx >= gallery.length - 1}
-                            onClick={() =>
-                              setInspirationGalleryIndex((prev) => ({
-                                ...prev,
-                                [rank]: Math.min(gallery.length - 1, prev[rank] + 1),
-                              }))
-                            }
-                            className="rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] p-1 text-[color:var(--foreground)] disabled:opacity-35"
-                          >
-                            <ChevronLeft className="h-3.5 w-3.5" />
-                          </button>
-                          <span className="text-[9px] tabular-nums text-[color:var(--muted-foreground)]">
-                            {idx + 1}/{gallery.length}
-                          </span>
-                          <button
-                            type="button"
-                            aria-label="Próxima imagem"
-                            disabled={idx <= 0}
-                            onClick={() =>
-                              setInspirationGalleryIndex((prev) => ({
-                                ...prev,
-                                [rank]: Math.max(0, prev[rank] - 1),
-                              }))
-                            }
-                            className="rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] p-1 text-[color:var(--foreground)] disabled:opacity-35"
-                          >
-                            <ChevronRight className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="mt-2 h-6" />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          </div>
-
-          {/* Coluna direita: agenda, aniversariantes e WPSer do mês */}
-          <div className="flex w-full min-w-0 flex-col gap-6">
-            <section className="w-full rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-xl backdrop-blur sm:p-5">
+          {/* Secundário: agenda, aniversariantes e destaques visuais */}
+          <div className="grid gap-4 lg:grid-cols-12">
+          <div className="flex min-w-0 flex-col gap-4 lg:col-span-5">
+            <section className="group relative w-full rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm sm:p-5">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <CalendarDays className="h-4 w-4 text-sky-700" />
@@ -2139,14 +2054,11 @@ function PortalItemImage({
                     ))}
                   </select>
                   {canEdit && (
-                    <button
-                      type="button"
+                    <PortalHoverManageButton
+                      label="Evento"
+                      icon="plus"
                       onClick={() => setManageEventsOpen(true)}
-                      className="inline-flex items-center gap-1 rounded-full bg-sky-500/20 px-2.5 py-1 text-[11px] font-semibold text-sky-800 hover:bg-sky-500/30"
-                    >
-                      <Plus className="h-3 w-3" />
-                      Evento
-                    </button>
+                    />
                   )}
                 </div>
               </div>
@@ -2182,15 +2094,15 @@ function PortalItemImage({
               {displayedMonthEvents.length === 0 ? (
                 <p className="text-xs text-[color:var(--muted-foreground)]">
                   {isSelectedCurrentMonth && eventsForSelectedMonth.length > 0 && !calendarFilterEngaged
-                    ? "Nenhum evento futuro neste mês."
-                    : "Nenhum evento neste mês."}
+                    ? "Nada agendado daqui pra frente neste mês."
+                    : "Nenhum evento neste mês — em breve a agenda se enche."}
                 </p>
               ) : (
                 <ul className="space-y-3">
                   {displayedMonthEvents.map((ev) => (
                     <li
                       key={ev.id}
-                      className="flex gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] px-3 py-2.5"
+                      className="group/ev flex gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] px-3 py-2.5"
                     >
                       <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-sky-500/30 to-violet-600/30 text-center">
                         <span className="text-[10px] font-bold uppercase text-sky-800">
@@ -2210,7 +2122,7 @@ function PortalItemImage({
                         <button
                           type="button"
                           onClick={() => void handleDeleteEvent(ev.id)}
-                          className="self-start rounded-lg p-1 text-[color:var(--muted-foreground)] hover:bg-red-500/20 hover:text-red-300"
+                          className="self-start rounded-lg p-1 text-[color:var(--muted-foreground)] opacity-100 hover:bg-red-500/15 hover:text-red-600 md:opacity-0 md:group-hover/ev:opacity-100"
                           aria-label="Excluir evento"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -2222,17 +2134,17 @@ function PortalItemImage({
               )}
             </section>
 
-            <section className="w-full rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-xl sm:p-5">
+            <section className="w-full rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm sm:p-5">
               <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[color:var(--foreground)]">
                 <PartyPopper className="h-4 w-4 text-[color:var(--primary)]" />
                 Aniversariantes do mês
               </h2>
               {birthdays.length === 0 ? (
                 <p className="text-xs text-[color:var(--muted-foreground)]">
-                  Ninguém com data de nascimento cadastrada neste mês.
+                  Em breve os aniversariantes do mês aparecem aqui.
                 </p>
               ) : (
-                <ul className="space-y-2">
+                <ul className="max-h-64 space-y-2 overflow-y-auto">
                   {birthdays.map((b) => {
                     const d = b.birthDate ? new Date(b.birthDate) : null;
                     const day = d ? d.getUTCDate() : "—";
@@ -2268,22 +2180,21 @@ function PortalItemImage({
                 </ul>
               )}
             </section>
+          </div>
 
-            {/* Área de imagem (ex-WPSer) — sem título de seção */}
-            <section className="relative w-full overflow-hidden rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-xl sm:p-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:col-span-7">
+            <section className="group relative overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-sm">
               {canEdit && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setManageSlug(SLUG.employee);
-                    setItemError(null);
-                  }}
-                  className="absolute right-3 top-3 z-10 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--muted-foreground)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--foreground)]"
-                >
-                  Gerenciar
-                </button>
+                <div className="absolute right-3 top-3 z-10">
+                  <PortalHoverManageButton
+                    onClick={() => {
+                      setManageSlug(SLUG.employee);
+                      setItemError(null);
+                    }}
+                  />
+                </div>
               )}
-              <div className="relative w-full overflow-hidden rounded-2xl border border-dashed border-[color:var(--border)] bg-[color:var(--surface-2)]">
+              <div className="relative w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-2)]">
                 {employeeGallery.length > 0 ? (
                   (() => {
                     const idx = Math.min(employeeGalleryIndex, employeeGallery.length - 1);
@@ -2296,8 +2207,8 @@ function PortalItemImage({
                           itemId={it.id}
                           srcRaw={it.content}
                           alt=""
-                          className={`w-full max-w-full bg-[color:var(--surface-2)] max-h-[min(520px,60vh)] ${
-                            fit === "cover" ? "h-[min(520px,60vh)] object-cover" : "h-auto object-contain"
+                          className={`w-full max-w-full bg-[color:var(--surface-2)] max-h-[240px] ${
+                            fit === "cover" ? "h-[240px] object-cover" : "h-auto object-contain"
                           }`}
                           style={fit === "cover" ? { objectPosition: `${focal.x}% ${focal.y}%` } : undefined}
                         />
@@ -2332,17 +2243,80 @@ function PortalItemImage({
                     );
                   })()
                 ) : (
-                  <div className="flex min-h-[220px] w-full max-w-full flex-col items-center justify-center gap-2 text-center text-[color:var(--muted-foreground)]">
-                    <ImagePlus className="h-8 w-8 opacity-50" />
-                    <p className="text-xs px-4">Anexe uma imagem</p>
+                  <div className="flex min-h-[200px] w-full flex-col items-center justify-center gap-1.5 text-center text-[color:var(--muted-foreground)]">
+                    <p className="text-sm font-medium text-[color:var(--foreground)]">Em breve</p>
+                    <p className="px-4 text-xs">Um destaque visual do time.</p>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="group relative overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-sm">
+              {canEdit && (
+                <div className="absolute right-3 top-3 z-10">
+                  <PortalHoverManageButton
+                    onClick={() => {
+                      setManageSlug(SLUG.awards);
+                      setItemError(null);
+                    }}
+                  />
+                </div>
+              )}
+              <div className="relative w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-2)]">
+                {awardsGallery.length > 0 ? (
+                  (() => {
+                    const idx = Math.min(awardsGalleryIndex, awardsGallery.length - 1);
+                    const it = awardsGallery[idx]!;
+                    return (
+                      <>
+                        <PortalItemImage
+                          itemId={it.id}
+                          srcRaw={it.content}
+                          alt=""
+                          className="h-auto max-h-[240px] w-full max-w-full bg-[color:var(--surface-2)] object-contain"
+                        />
+                        {awardsGallery.length > 1 ? (
+                          <div className="flex items-center justify-between gap-2 border-t border-[color:var(--border)] px-3 py-2">
+                            <button
+                              type="button"
+                              disabled={idx >= awardsGallery.length - 1}
+                              onClick={() =>
+                                setAwardsGalleryIndex((i) => Math.min(awardsGallery.length - 1, i + 1))
+                              }
+                              className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-[11px] font-semibold text-[color:var(--foreground)] disabled:opacity-40"
+                            >
+                              <ChevronLeft className="h-3.5 w-3.5" />
+                              Voltar
+                            </button>
+                            <span className="text-[11px] tabular-nums text-[color:var(--muted-foreground)]">
+                              {idx + 1} de {awardsGallery.length}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={idx <= 0}
+                              onClick={() => setAwardsGalleryIndex((i) => Math.max(0, i - 1))}
+                              className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-[11px] font-semibold text-[color:var(--foreground)] disabled:opacity-40"
+                            >
+                              Avançar
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : null}
+                      </>
+                    );
+                  })()
+                ) : (
+                  <div className="flex min-h-[200px] w-full flex-col items-center justify-center gap-1.5 text-center text-[color:var(--muted-foreground)]">
+                    <p className="text-sm font-medium text-[color:var(--foreground)]">Em breve</p>
+                    <p className="px-4 text-xs">Outro destaque visual do time.</p>
                   </div>
                 )}
               </div>
             </section>
           </div>
-        </div>
+          </div>
 
-        <section className="overflow-hidden rounded-3xl border border-violet-400/25 bg-[color:var(--surface)] shadow-xl">
+        <section className="overflow-hidden rounded-3xl border border-violet-400/25 bg-[color:var(--surface)] shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-[color:var(--border)] px-4 py-3 sm:px-5">
             <div className="flex items-center gap-2">
               <Rocket className="h-4 w-4 text-violet-600" />
@@ -2489,15 +2463,12 @@ function PortalItemImage({
           }}
         >
           <div
-            className={`max-h-[90vh] w-full overflow-y-auto rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5 shadow-2xl ${
-              manageSlug === SLUG.awards ? "max-w-4xl" : "max-w-lg"
-            }`}
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5 shadow-2xl"
           >
             <div className="mb-4 flex items-center justify-between gap-2">
               <h3 className="text-lg font-bold text-[color:var(--foreground)]">
                 {manageSlug === SLUG.news && "Notícias"}
-                {manageSlug === SLUG.employee && "Anexar imagem"}
-                {manageSlug === SLUG.awards && "Anexar imagens do pódio"}
+                {(manageSlug === SLUG.employee || manageSlug === SLUG.awards) && "Anexar imagem"}
               </h3>
               <button
                 type="button"
@@ -2615,86 +2586,6 @@ function PortalItemImage({
                     </ul>
                   )}
                 </div>
-              </div>
-            )}
-
-            {manageSlug === SLUG.awards && (
-              <div className="mb-4 space-y-4">
-                <p className="text-[11px] text-[color:var(--muted-foreground)]">
-                  Anexe uma imagem por lugar do pódio. Cada novo anexo entra no histórico — use as setas no card para voltar às imagens anteriores.
-                </p>
-                <input
-                  ref={inspirationFileInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void handleInspirationPhotoPick(f);
-                  }}
-                />
-                <div className="grid gap-4 sm:grid-cols-3">
-                  {([1, 2, 3] as const).map((rank) => {
-                    const slot = inspirationSlots[rank];
-                    const label = rank === 1 ? "1º lugar" : rank === 2 ? "2º lugar" : "3º lugar";
-                    return (
-                      <div
-                        key={rank}
-                        className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-3 space-y-2.5"
-                      >
-                        <p className="text-center text-xs font-bold uppercase tracking-wide text-amber-200">{label}</p>
-                        <div className="relative mx-auto h-[118px] w-[118px] max-w-full">
-                          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/10 to-transparent" />
-                          <div className="absolute inset-[2px] overflow-hidden rounded-full bg-[color:var(--surface-2)] ring-1 ring-[color:var(--border)]">
-                            {slot.imageUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={publicFileUrl(slot.imageUrl)} alt="" className="h-full w-full object-cover" />
-                            ) : (
-                              <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-[10px] text-[color:var(--muted-foreground)]">
-                                <ImagePlus className="h-5 w-5 opacity-50" />
-                                Anexar
-                              </div>
-                            )}
-                          </div>
-                          <PodiumMedal rank={rank} />
-                        </div>
-                        <button
-                          type="button"
-                          disabled={savingItem}
-                          onClick={() => {
-                            setInspirationUploadRank(rank);
-                            inspirationFileInputRef.current?.click();
-                          }}
-                          className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] py-1.5 text-[11px] font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
-                        >
-                          {savingItem ? "Aguarde…" : slot.imageUrl ? "Trocar imagem" : "Anexar imagem"}
-                        </button>
-                        {slot.id && (
-                          <button
-                            type="button"
-                            disabled={savingItem}
-                            onClick={() => {
-                              const it = awardItems.find((x) => x.id === slot.id);
-                              if (it) setConfirmDeleteItem(it);
-                            }}
-                            className="w-full rounded-lg border border-red-500/30 bg-red-500/10 py-1.5 text-[11px] font-semibold text-red-200 hover:bg-red-500/20 disabled:opacity-50"
-                          >
-                            Remover imagem
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                {itemError && <p className="text-xs text-red-400">{itemError}</p>}
-                <button
-                  type="button"
-                  disabled={savingItem}
-                  onClick={() => void saveInspirationFromModal()}
-                  className="w-full rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 py-2.5 text-sm font-bold text-white disabled:opacity-50"
-                >
-                  {savingItem ? "Salvando…" : "Salvar alterações"}
-                </button>
               </div>
             )}
 
@@ -2824,7 +2715,7 @@ function PortalItemImage({
                         type="button"
                         disabled={savingItem}
                         onClick={() => setConfirmDeleteItem(currentManageImageItem)}
-                        className="inline-flex items-center gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+                        className="inline-flex items-center gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-500/20 disabled:opacity-50"
                       >
                         <Trash2 className="h-4 w-4" />
                         Excluir imagem
@@ -2873,7 +2764,7 @@ function PortalItemImage({
                   className="mx-auto block h-[min(88vh,1100px)] w-full min-h-[50vh] rounded-lg bg-white"
                 />
               ) : (
-                <p className="py-10 text-center text-red-200">Não foi possível carregar o PDF.</p>
+                <p className="py-10 text-center text-red-600">Não foi possível carregar o PDF.</p>
               )
             ) : (
               <PortalItemImage

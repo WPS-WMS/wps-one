@@ -298,11 +298,13 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
   );
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-white/5 shadow-xl backdrop-blur overflow-x-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
+    <section className="overflow-x-hidden rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-xl">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--border)] px-4 py-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
-          <FileText className="h-4 w-4 shrink-0 text-sky-300" />
-          <h2 className="truncate text-sm font-semibold uppercase tracking-wide text-slate-200">{title}</h2>
+          <FileText className="h-4 w-4 shrink-0 text-[color:var(--primary)]" />
+          <h2 className="truncate text-sm font-semibold uppercase tracking-wide text-[color:var(--foreground)]">
+            {title}
+          </h2>
         </div>
         {canEdit && sectionId && (
           <button
@@ -312,7 +314,7 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
               setEditPdfRowId(null);
               setModalOpen(true);
             }}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-sky-500/25 px-3 py-1.5 text-[11px] font-semibold text-sky-100 hover:bg-sky-500/35"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[color:var(--primary)] px-3 py-1.5 text-[11px] font-semibold text-white hover:opacity-95"
           >
             <Plus className="h-3.5 w-3.5" />
             Anexar arquivo
@@ -320,11 +322,16 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
         )}
       </div>
       <div className="px-4 py-4 sm:px-5">
-        {description && <p className="mb-3 text-xs text-slate-400">{description}</p>}
-        {!sectionId && (
-          <p className="text-sm text-amber-200/90">Esta seção ainda não existe neste ambiente. Peça ao administrador para executar &quot;Criar seções padrão&quot;.</p>
+        {description && (
+          <p className="mb-3 text-xs text-[color:var(--muted-foreground)]">{description}</p>
         )}
-        {error && <p className="mb-3 text-xs text-red-400">{error}</p>}
+        {!sectionId && (
+          <p className="text-sm text-amber-800">
+            Esta seção ainda não existe neste ambiente. Peça ao administrador para executar &quot;Criar
+            seções padrão&quot;.
+          </p>
+        )}
+        {error && <p className="mb-3 text-xs text-red-600">{error}</p>}
 
         <input
           ref={replaceInputRef}
@@ -341,7 +348,9 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
         />
 
         {pdfItems.length === 0 ? (
-          <p className="text-center text-sm text-slate-500">Nenhum documento publicado ainda.</p>
+          <p className="text-center text-sm text-[color:var(--muted-foreground)]">
+            Nenhum documento publicado ainda.
+          </p>
         ) : (
           <ul className="space-y-2">
             {pdfItems.map((it) => {
@@ -349,7 +358,7 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
               return (
                 <li
                   key={it.id}
-                  className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-black/25 px-3 py-3 sm:flex-row sm:items-start sm:gap-3"
+                  className="flex flex-col gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] px-3 py-3 sm:flex-row sm:items-start sm:gap-3"
                 >
                   <div className="flex min-w-0 flex-1 items-start gap-2">
                     <div className="min-w-0 flex-1">
@@ -358,14 +367,14 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
                           type="text"
                           value={titleDrafts[it.id] ?? it.title}
                           onChange={(e) => setTitleDrafts((p) => ({ ...p, [it.id]: e.target.value }))}
-                          className="w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-sm text-white placeholder:text-slate-500"
+                          className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--input-bg)] px-2 py-1.5 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)]"
                           placeholder="Nome do documento"
                         />
                       ) : (
                         <button
                           type="button"
                           onClick={() => void openPortalPdfItemInNewTab(it)}
-                          className="w-full text-left text-sm font-medium text-sky-200 underline-offset-2 hover:text-white hover:underline"
+                          className="w-full text-left text-sm font-medium text-[color:var(--foreground)] underline-offset-2 hover:text-[color:var(--primary)] hover:underline"
                         >
                           {it.title || "Documento"}
                         </button>
@@ -377,9 +386,7 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
                         title="Editar documento"
                         aria-expanded={false}
                         onClick={() => setEditPdfRowId(it.id)}
-                        className={`shrink-0 rounded-lg border p-2 transition-colors ${
-                          "border-white/15 bg-white/5 text-slate-200 hover:bg-white/10"
-                        }`}
+                        className="shrink-0 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] p-2 text-[color:var(--foreground)] transition-colors hover:bg-[color:var(--surface-2)]"
                       >
                         <Pencil className="h-4 w-4" aria-hidden />
                       </button>
@@ -395,7 +402,7 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
                           replaceInputRef.current?.click();
                         }}
                         title="Substituir arquivo"
-                        className="inline-flex items-center justify-center rounded-lg border border-white/15 bg-white/5 p-2 text-white hover:bg-white/10 disabled:opacity-50"
+                        className="inline-flex items-center justify-center rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] p-2 text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
                       >
                         <Upload className="h-4 w-4" aria-hidden />
                       </button>
@@ -404,7 +411,7 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
                         disabled={saving}
                         onClick={() => setConfirmDelete(it)}
                         title="Excluir"
-                        className="inline-flex items-center justify-center rounded-lg border border-red-500/40 bg-red-500/10 p-2 text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+                        className="inline-flex items-center justify-center rounded-lg border border-red-500/40 bg-red-500/10 p-2 text-red-600 hover:bg-red-500/20 disabled:opacity-50"
                       >
                         <Trash2 className="h-4 w-4" aria-hidden />
                       </button>
@@ -413,7 +420,7 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
                         disabled={saving}
                         onClick={() => void saveTitle(it)}
                         title="Salvar"
-                        className="inline-flex items-center justify-center rounded-lg border border-violet-400/60 bg-violet-500/25 p-2 text-violet-100 hover:bg-violet-500/35 disabled:opacity-50"
+                        className="inline-flex items-center justify-center rounded-lg border border-violet-500/40 bg-violet-500/15 p-2 text-violet-700 hover:bg-violet-500/25 disabled:opacity-50"
                       >
                         <Check className="h-4 w-4" aria-hidden />
                       </button>
@@ -422,7 +429,7 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
                         disabled={saving}
                         onClick={() => setEditPdfRowId(null)}
                         title="Fechar edição"
-                        className="inline-flex items-center justify-center rounded-lg border border-white/15 bg-white/5 p-2 text-slate-200 hover:bg-white/10 disabled:opacity-50"
+                        className="inline-flex items-center justify-center rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] p-2 text-[color:var(--muted-foreground)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
                       >
                         <X className="h-4 w-4" aria-hidden />
                       </button>
@@ -455,12 +462,15 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
             }}
           >
             <div
-              className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900 p-5 shadow-2xl"
+              className="w-full max-w-md rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5 shadow-2xl"
               role="dialog"
               aria-modal
               aria-labelledby="pdf-lib-modal-title"
             >
-              <h3 id="pdf-lib-modal-title" className="mb-3 text-lg font-bold text-white">
+              <h3
+                id="pdf-lib-modal-title"
+                className="mb-3 text-lg font-bold text-[color:var(--foreground)]"
+              >
                 Anexar arquivo
               </h3>
               <div className="space-y-3">
@@ -469,22 +479,22 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="Nome exibido na lista"
-                  className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-slate-500"
+                  className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)]"
                 />
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept=".pdf,.docx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   onChange={(e) => setNewFile(e.target.files?.[0] ?? null)}
-                  className="block w-full text-xs text-slate-300 file:mr-2 file:rounded-lg file:border-0 file:bg-violet-600 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
+                  className="block w-full text-xs text-[color:var(--muted-foreground)] file:mr-2 file:rounded-lg file:border-0 file:bg-[color:var(--primary)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white"
                 />
-                {error && <p className="text-xs text-red-400">{error}</p>}
+                {error && <p className="text-xs text-red-600">{error}</p>}
                 <div className="flex gap-2 pt-1">
                   <button
                     type="button"
                     disabled={saving}
                     onClick={() => void handleAddPdf()}
-                    className="flex-1 rounded-xl bg-gradient-to-r from-sky-600 to-violet-600 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+                    className="flex-1 rounded-xl bg-[color:var(--primary)] py-2.5 text-sm font-bold text-white disabled:opacity-50"
                   >
                     {saving ? "Salvando…" : "Salvar"}
                   </button>
@@ -498,7 +508,7 @@ export function PortalPdfLibrary({ title, description, sectionId, items, canEdit
                       setError(null);
                       if (fileInputRef.current) fileInputRef.current.value = "";
                     }}
-                    className="rounded-xl border border-white/15 px-4 py-2.5 text-sm text-slate-300 hover:bg-white/5"
+                    className="rounded-xl border border-[color:var(--border)] px-4 py-2.5 text-sm text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)]"
                   >
                     Cancelar
                   </button>
