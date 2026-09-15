@@ -659,10 +659,6 @@ function isNewsImageFileType(f: File): boolean {
   return t === "image/png" || t === "image/jpeg" || t === "image/jpg" || t === "image/webp";
 }
 
-function isNewsPdfFileType(f: File): boolean {
-  return String(f.type || "").toLowerCase() === "application/pdf";
-}
-
 export function PortalCollaborativeDashboard() {
   const { user, can, logout } = useAuth();
   const router = useRouter();
@@ -736,14 +732,8 @@ export function PortalCollaborativeDashboard() {
   const portalImageFileInputRef = useRef<HTMLInputElement>(null);
   const newsAddAnyFileInputRef = useRef<HTMLInputElement>(null);
   const overlayPointerDownRef = useRef(false);
-  const [newsNewFiles, setNewsNewFiles] = useState<File[]>([]);
-  const [newsSelectedThumbKey, setNewsSelectedThumbKey] = useState<string | null>(null);
-  const [newsSelectedPdfKey, setNewsSelectedPdfKey] = useState<string | null>(null);
-  const [newsFocalX, setNewsFocalX] = useState(50);
-  const [newsFocalY, setNewsFocalY] = useState(50);
-  const [newsReplaceThumbId, setNewsReplaceThumbId] = useState<string | null>(null);
-  const [newsReplacePdfId, setNewsReplacePdfId] = useState<string | null>(null);
-  const [newsTitleDrafts, setNewsTitleDrafts] = useState<Record<string, string>>({});
+  const [newsNewFile, setNewsNewFile] = useState<File | null>(null);
+  const [newsNewTitle, setNewsNewTitle] = useState("");
   const inspirationFileInputRef = useRef<HTMLInputElement>(null);
   const [inspirationUploadRank, setInspirationUploadRank] = useState<InspirationRank | null>(null);
   const [inspirationSlots, setInspirationSlots] = useState<Record<InspirationRank, InspirationSlotDraft>>(emptyInspirationSlots);
@@ -751,10 +741,6 @@ export function PortalCollaborativeDashboard() {
   const [newsLightboxItem, setNewsLightboxItem] = useState<PortalItem | null>(null);
   const [newsExpandedPdfBlobUrl, setNewsExpandedPdfBlobUrl] = useState<string | null>(null);
   const [newsExpandedPdfLoading, setNewsExpandedPdfLoading] = useState(false);
-
-  const [newsCoverFile, setNewsCoverFile] = useState<File | null>(null);
-  const newsCoverInputRef = useRef<HTMLInputElement>(null);
-  const [newsReplaceCoverId, setNewsReplaceCoverId] = useState<string | null>(null);
 
   const [employeeImageFit, setEmployeeImageFit] = useState<EmployeeImageFit>("contain");
   const [employeeFocalX, setEmployeeFocalX] = useState(50);
@@ -972,22 +958,6 @@ export function PortalCollaborativeDashboard() {
   }, [newsCarousel.length]);
 
   useEffect(() => {
-    if (manageSlug !== SLUG.news) return;
-    const imgs = newsItems.filter(isImageItem);
-    setNewsTitleDrafts((prev) => {
-      const next = { ...prev };
-      const ids = new Set(imgs.map((i) => i.id));
-      for (const id of Object.keys(next)) {
-        if (!ids.has(id)) delete next[id];
-      }
-      for (const it of imgs) {
-        if (next[it.id] === undefined) next[it.id] = String(it.title || "").trim();
-      }
-      return next;
-    });
-  }, [manageSlug, newsItems]);
-
-  useEffect(() => {
     if (!newsLightboxItem) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setNewsLightboxItem(null);
@@ -1170,414 +1140,55 @@ export function PortalCollaborativeDashboard() {
     }
   }
 
-  async function addNewsImage(file: File) {
+  function clearNewsDraft() {
+    setNewsReferenceMonth(currentReferenceMonth());
+    setNewsNewFile(null);
+    setNewsNewTitle("");
+    if (newsAddAnyFileInputRef.current) newsAddAnyFileInputRef.current.value = "";
+  }
+
+  async function publishNewsFromModal() {
     const sectionId = sectionIdBySlug[SLUG.news];
-    if (!sectionId) return;
+    if (!sectionId) {
+      setItemError("Seção de notícias não encontrada.");
+      return;
+    }
+    if (!newsNewFile) {
+      setItemError("Anexe uma imagem (PNG, JPG ou WebP).");
+      return;
+    }
+    const title = newsNewTitle.trim();
+    if (!title) {
+      setItemError("Informe o nome da notícia.");
+      return;
+    }
     setSavingItem(true);
     setItemError(null);
     try {
-      const content = await uploadPortalImage(file);
-      const n = newsItems.filter(isImageItem).length;
-      const title = `Notícia ${n + 1}`;
+      const thumbUrl = await uploadPortalMedia(newsNewFile);
+      const metadata = buildNewsMetadata(null, {
+        focalX: 50,
+        focalY: 50,
+        marker: "",
+        pdfUrl: null,
+        referenceMonth: newsReferenceMonth || currentReferenceMonth(),
+      });
       const res = await apiFetch("/api/portal/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sectionId,
           title,
-          content,
+          content: thumbUrl,
           type: "image",
-          metadata: { focalX: 50, focalY: 50, marker: "" },
+          metadata,
           isActive: true,
         }),
       });
       const errBody = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar imagem.");
-      await refreshAll();
-    if (newsAddAnyFileInputRef.current) newsAddAnyFileInputRef.current.value = "";
-    } catch (e: unknown) {
-      setItemError(e instanceof Error ? e.message : "Erro ao enviar.");
-    } finally {
-      setSavingItem(false);
-    }
-  }
-
-  const newsNewThumbs = useMemo(
-    () => newsNewFiles.filter((f) => isNewsImageFileType(f)),
-    [newsNewFiles],
-  );
-  const newsNewPdfs = useMemo(
-    () => newsNewFiles.filter((f) => isNewsPdfFileType(f)),
-    [newsNewFiles],
-  );
-
-  const fileKey = (f: File) => `${f.name}|${f.size}|${f.lastModified}`;
-  const selectedThumb = useMemo(() => {
-    if (newsNewThumbs.length === 0) return null;
-    const k = newsSelectedThumbKey;
-    return (k ? newsNewThumbs.find((f) => fileKey(f) === k) : null) ?? newsNewThumbs[0];
-  }, [newsNewThumbs, newsSelectedThumbKey]);
-  const selectedPdf = useMemo(() => {
-    if (newsNewPdfs.length === 0) return null;
-    const k = newsSelectedPdfKey;
-    return (k ? newsNewPdfs.find((f) => fileKey(f) === k) : null) ?? newsNewPdfs[0];
-  }, [newsNewPdfs, newsSelectedPdfKey]);
-
-  const effectiveThumb = selectedThumb ?? (selectedPdf ? { kind: "static" as const, src: WPS_ONE_ICON_SVG_SRC } : null);
-  const effectivePdf = selectedPdf;
-
-  const effectiveThumbPreviewUrl = useMemo(() => {
-    if (!effectiveThumb) return "";
-    if (typeof effectiveThumb === "object" && "kind" in effectiveThumb && effectiveThumb.kind === "static") {
-      return effectiveThumb.src;
-    }
-    try {
-      return URL.createObjectURL(effectiveThumb as File);
-    } catch {
-      return "";
-    }
-  }, [effectiveThumb]);
-
-  useEffect(() => {
-    if (!effectiveThumbPreviewUrl) return;
-    // Revoga apenas URLs blob criadas via createObjectURL
-    if (!effectiveThumbPreviewUrl.startsWith("blob:")) return;
-    return () => URL.revokeObjectURL(effectiveThumbPreviewUrl);
-  }, [effectiveThumbPreviewUrl]);
-
-  const newsCoverPreviewUrl = useMemo(() => {
-    if (!newsCoverFile) return "";
-    try {
-      return URL.createObjectURL(newsCoverFile);
-    } catch {
-      return "";
-    }
-  }, [newsCoverFile]);
-
-  useEffect(() => {
-    if (!newsCoverPreviewUrl.startsWith("blob:")) return;
-    return () => URL.revokeObjectURL(newsCoverPreviewUrl);
-  }, [newsCoverPreviewUrl]);
-
-  useEffect(() => {
-    if (!selectedThumb) return;
-    const k = fileKey(selectedThumb);
-    if (newsSelectedThumbKey !== k) setNewsSelectedThumbKey(k);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedThumb]);
-
-  useEffect(() => {
-    if (!selectedPdf) return;
-    const k = fileKey(selectedPdf);
-    if (newsSelectedPdfKey !== k) setNewsSelectedPdfKey(k);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPdf]);
-
-  async function createSingleNewsPost(params: {
-    title: string;
-    thumbUrl: string;
-    pdfUrl: string | null;
-    coverUrl?: string | null;
-  }) {
-    const sectionId = sectionIdBySlug[SLUG.news];
-    if (!sectionId) throw new Error("Seção de notícias não encontrada.");
-    const patch: {
-      focalX: number;
-      focalY: number;
-      marker: string;
-      pdfUrl: string | null;
-      coverUrl?: string | null;
-      referenceMonth: string;
-    } = {
-      focalX: newsFocalX,
-      focalY: newsFocalY,
-      marker: "",
-      pdfUrl: params.pdfUrl && String(params.pdfUrl).trim() ? String(params.pdfUrl).trim() : null,
-      referenceMonth: newsReferenceMonth,
-    };
-    if (params.coverUrl && String(params.coverUrl).trim()) {
-      patch.coverUrl = String(params.coverUrl).trim();
-    }
-    const metadata = buildNewsMetadata(null, patch);
-    const res = await apiFetch("/api/portal/items", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sectionId,
-        title: params.title.trim() || "Notícia",
-        content: params.thumbUrl,
-        type: "image",
-        metadata,
-        isActive: true,
-      }),
-    });
-    const errBody = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar notícia.");
-  }
-
-  function clearNewsDraft() {
-    setNewsReferenceMonth(currentReferenceMonth());
-    setNewsNewFiles([]);
-    setNewsSelectedThumbKey(null);
-    setNewsSelectedPdfKey(null);
-    setNewsCoverFile(null);
-    setNewsFocalX(50);
-    setNewsFocalY(50);
-    if (newsAddAnyFileInputRef.current) newsAddAnyFileInputRef.current.value = "";
-    if (newsCoverInputRef.current) newsCoverInputRef.current.value = "";
-  }
-
-  async function createNewsFromModal() {
-    const sectionId = sectionIdBySlug[SLUG.news];
-    if (!sectionId) return;
-    if (!effectiveThumb && !effectivePdf) {
-      setItemError("Anexe uma imagem (PNG, JPG ou WebP) ou um PDF.");
-      return;
-    }
-    setSavingItem(true);
-    setItemError(null);
-    try {
-      const normalizeTitle = (name: string) =>
-        String(name || "")
-          .replace(/\.[^.]+$/, "")
-          .replace(/[_-]+/g, " ")
-          .trim();
-
-      const [thumbUrl, pdfUrl, coverUrlUploaded] = await Promise.all([
-        effectiveThumb
-          ? typeof effectiveThumb === "object" && "kind" in effectiveThumb
-            ? Promise.resolve(effectiveThumb.src)
-            : uploadPortalMedia(effectiveThumb as File)
-          : Promise.resolve(""),
-        effectivePdf ? uploadPortalMedia(effectivePdf) : Promise.resolve(""),
-        newsCoverFile ? uploadPortalMedia(newsCoverFile) : Promise.resolve<string | null>(null),
-      ]);
-
-      const inferredTitle =
-        normalizeTitle(effectivePdf?.name || "") ||
-        normalizeTitle((effectiveThumb as File | null)?.name || "") ||
-        "Notícia";
-
-      const thumbFinal = thumbUrl || (pdfUrl ? WPS_ONE_ICON_SVG_SRC : "");
-      if (!thumbFinal) {
-        setItemError("Não foi possível determinar a mídia principal da notícia.");
-        return;
-      }
-
-      await createSingleNewsPost({
-        title: inferredTitle,
-        thumbUrl: thumbFinal,
-        pdfUrl: pdfUrl || null,
-        coverUrl: coverUrlUploaded,
-      });
+      if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar notícia.");
       await refreshAll();
       clearNewsDraft();
-    } catch (e: unknown) {
-      setItemError(e instanceof Error ? e.message : "Erro ao salvar.");
-    } finally {
-      setSavingItem(false);
-    }
-  }
-
-  async function publishEachSelectedFileAsNews() {
-    const sectionId = sectionIdBySlug[SLUG.news];
-    if (!sectionId) return;
-    const imgs = newsNewFiles.filter((f) => isNewsImageFileType(f));
-    const pdfs = newsNewFiles.filter((f) => isNewsPdfFileType(f));
-    if (imgs.length === 0 && pdfs.length === 0) {
-      setItemError("Anexe pelo menos uma imagem (PNG, JPG ou WebP) ou um PDF.");
-      return;
-    }
-    setSavingItem(true);
-    setItemError(null);
-    try {
-      const normalizeTitle = (name: string) =>
-        String(name || "")
-          .replace(/\.[^.]+$/, "")
-          .replace(/[_-]+/g, " ")
-          .trim();
-
-      let coverUploaded: string | null = null;
-      if (newsCoverFile) {
-        coverUploaded = await uploadPortalMedia(newsCoverFile);
-      }
-
-      const nPair = Math.min(imgs.length, pdfs.length);
-      let published = 0;
-      for (let i = 0; i < nPair; i++) {
-        const thumbUrl = await uploadPortalMedia(imgs[i]);
-        const pdfUrl = await uploadPortalMedia(pdfs[i]);
-        await createSingleNewsPost({
-          title: normalizeTitle(imgs[i].name) || normalizeTitle(pdfs[i].name) || `Notícia ${published + 1}`,
-          thumbUrl,
-          pdfUrl,
-          coverUrl: published === 0 ? coverUploaded : null,
-        });
-        published++;
-      }
-      for (let i = nPair; i < imgs.length; i++) {
-        const thumbUrl = await uploadPortalMedia(imgs[i]);
-        await createSingleNewsPost({
-          title: normalizeTitle(imgs[i].name) || `Notícia ${published + 1}`,
-          thumbUrl,
-          pdfUrl: null,
-          coverUrl: published === 0 ? coverUploaded : null,
-        });
-        published++;
-      }
-      for (let i = nPair; i < pdfs.length; i++) {
-        const pdfUrl = await uploadPortalMedia(pdfs[i]);
-        await createSingleNewsPost({
-          title: normalizeTitle(pdfs[i].name) || `Notícia ${published + 1}`,
-          thumbUrl: WPS_ONE_ICON_SVG_SRC,
-          pdfUrl,
-          coverUrl: published === 0 ? coverUploaded : null,
-        });
-        published++;
-      }
-
-      await refreshAll();
-      clearNewsDraft();
-    } catch (e: unknown) {
-      setItemError(e instanceof Error ? e.message : "Erro ao salvar.");
-    } finally {
-      setSavingItem(false);
-    }
-  }
-
-  async function replaceNewsThumb(itemId: string, file: File) {
-    setSavingItem(true);
-    setItemError(null);
-    try {
-      const thumbUrl = await uploadPortalMedia(file);
-      const res = await apiFetch(`/api/portal/items/${itemId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: thumbUrl, type: "image" }),
-      });
-      const errBody = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(errBody?.error || "Erro ao atualizar thumbnail.");
-      await refreshAll();
-      if (newsAddAnyFileInputRef.current) newsAddAnyFileInputRef.current.value = "";
-    } catch (e: unknown) {
-      setItemError(e instanceof Error ? e.message : "Erro ao atualizar.");
-    } finally {
-      setSavingItem(false);
-      setNewsReplaceThumbId(null);
-    }
-  }
-
-  async function replaceNewsPdf(item: PortalItem, file: File) {
-    setSavingItem(true);
-    setItemError(null);
-    try {
-      const pdfUrl = await uploadPortalMedia(file);
-      const metadata = buildNewsMetadata(item.metadata, { pdfUrl });
-      const res = await apiFetch(`/api/portal/items/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ metadata }),
-      });
-      const errBody = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(errBody?.error || "Erro ao atualizar PDF.");
-      await refreshAll();
-      if (newsAddAnyFileInputRef.current) newsAddAnyFileInputRef.current.value = "";
-    } catch (e: unknown) {
-      setItemError(e instanceof Error ? e.message : "Erro ao atualizar.");
-    } finally {
-      setSavingItem(false);
-      setNewsReplacePdfId(null);
-    }
-  }
-
-  async function replaceNewsCoverItem(item: PortalItem, file: File) {
-    setSavingItem(true);
-    setItemError(null);
-    try {
-      const coverUrl = await uploadPortalMedia(file);
-      const metadata = buildNewsMetadata(item.metadata, { coverUrl });
-      const res = await apiFetch(`/api/portal/items/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ metadata }),
-      });
-      const errBody = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(errBody?.error || "Erro ao atualizar capa.");
-      await refreshAll();
-      if (newsCoverInputRef.current) newsCoverInputRef.current.value = "";
-    } catch (e: unknown) {
-      setItemError(e instanceof Error ? e.message : "Erro ao atualizar.");
-    } finally {
-      setSavingItem(false);
-      setNewsReplaceCoverId(null);
-    }
-  }
-
-  /** Move a notícia para outro mês no portal (não mexe nos arquivos). */
-  async function updateNewsReferenceMonth(item: PortalItem, referenceMonth: string) {
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(referenceMonth)) return;
-    setSavingItem(true);
-    setItemError(null);
-    try {
-      const metadata = buildNewsMetadata(item.metadata, { referenceMonth });
-      const res = await apiFetch(`/api/portal/items/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ metadata }),
-      });
-      const errBody = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(errBody?.error || "Erro ao atualizar o mês da notícia.");
-      await refreshAll();
-    } catch (e: unknown) {
-      setItemError(e instanceof Error ? e.message : "Erro ao atualizar.");
-    } finally {
-      setSavingItem(false);
-    }
-  }
-
-  async function saveEmployeeImageDisplaySettings() {
-    const it = currentManageImageItem;
-    if (!it) return;
-    setSavingItem(true);
-    setItemError(null);
-    try {
-      const metadata = buildEmployeeImageMetadata(it.metadata, {
-        fit: employeeImageFit,
-        focalX: employeeFocalX,
-        focalY: employeeFocalY,
-      });
-      const res = await apiFetch(`/api/portal/items/${it.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ metadata }),
-      });
-      const errBody = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar ajuste da imagem.");
-      await refreshAll();
-    } catch (e: unknown) {
-      setItemError(e instanceof Error ? e.message : "Erro ao salvar ajuste.");
-    } finally {
-      setSavingItem(false);
-    }
-  }
-
-  async function saveNewsItemTitle(item: PortalItem) {
-    const title = (newsTitleDrafts[item.id] ?? "").trim();
-    if (!title) {
-      setItemError("Informe um nome/título para a notícia.");
-      return;
-    }
-    setSavingItem(true);
-    setItemError(null);
-    try {
-      const res = await apiFetch(`/api/portal/items/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      });
-      const errBody = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar.");
-      await refreshAll();
     } catch (e: unknown) {
       setItemError(e instanceof Error ? e.message : "Erro ao salvar.");
     } finally {
@@ -2861,9 +2472,6 @@ function PortalItemImage({
             if (shouldClose) {
               if (manageSlug === SLUG.news) {
                 clearNewsDraft();
-                setNewsReplaceThumbId(null);
-                setNewsReplacePdfId(null);
-                setNewsReplaceCoverId(null);
               }
               setManageSlug(null);
               setItemError(null);
@@ -2871,14 +2479,13 @@ function PortalItemImage({
               setInspirationUploadRank(null);
               if (portalImageFileInputRef.current) portalImageFileInputRef.current.value = "";
               if (newsAddAnyFileInputRef.current) newsAddAnyFileInputRef.current.value = "";
-              if (newsCoverInputRef.current) newsCoverInputRef.current.value = "";
               if (inspirationFileInputRef.current) inspirationFileInputRef.current.value = "";
             }
           }}
         >
           <div
             className={`max-h-[90vh] w-full overflow-y-auto rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5 shadow-2xl ${
-              manageSlug === SLUG.awards ? "max-w-4xl" : manageSlug === SLUG.news ? "max-w-2xl" : "max-w-lg"
+              manageSlug === SLUG.awards ? "max-w-4xl" : "max-w-lg"
             }`}
           >
             <div className="mb-4 flex items-center justify-between gap-2">
@@ -2892,9 +2499,6 @@ function PortalItemImage({
                 onClick={() => {
                   if (manageSlug === SLUG.news) {
                     clearNewsDraft();
-                    setNewsReplaceThumbId(null);
-                    setNewsReplacePdfId(null);
-                    setNewsReplaceCoverId(null);
                   }
                   setManageSlug(null);
                   setItemError(null);
@@ -2902,7 +2506,6 @@ function PortalItemImage({
                   setInspirationUploadRank(null);
                   if (portalImageFileInputRef.current) portalImageFileInputRef.current.value = "";
                   if (newsAddAnyFileInputRef.current) newsAddAnyFileInputRef.current.value = "";
-                  if (newsCoverInputRef.current) newsCoverInputRef.current.value = "";
                   if (inspirationFileInputRef.current) inspirationFileInputRef.current.value = "";
                 }}
                 className="rounded-full px-2 py-1 text-xs text-[color:var(--muted-foreground)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--foreground)]"
@@ -2912,386 +2515,101 @@ function PortalItemImage({
             </div>
 
             {manageSlug === SLUG.news && (
-              <div className="mb-4 space-y-4">
-                <p className="text-[11px] text-[color:var(--muted-foreground)]">
-                  Anexe <strong className="text-[color:var(--foreground)]">PNG, JPG, WebP</strong> e/ou <strong className="text-[color:var(--foreground)]">PDF</strong>.
-                  Opcionalmente defina uma <strong className="text-[color:var(--foreground)]">capa</strong> (imagem diferente da principal). No portal,
-                  use as setas se houver mais de uma notícia; ao clicar na capa, a imagem ou o PDF abre em tela cheia.
-                </p>
+              <div className="mb-4 space-y-5">
                 <input
-                  ref={newsCoverInputRef}
+                  ref={newsAddAnyFileInputRef}
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
                   className="hidden"
                   onChange={(e) => {
-                    const f = e.target.files?.[0];
+                    const f = e.target.files?.[0] ?? null;
                     e.currentTarget.value = "";
-                    if (!f || !isNewsImageFileType(f)) {
-                      setItemError("Selecione uma imagem PNG, JPG ou WebP para a capa.");
-                      return;
-                    }
-                    if (newsReplaceCoverId) {
-                      const it = newsImageItems.find((x) => x.id === newsReplaceCoverId);
-                      if (it) void replaceNewsCoverItem(it, f);
-                      setNewsReplaceCoverId(null);
+                    if (!f) return;
+                    if (!isNewsImageFileType(f)) {
+                      setItemError("Selecione uma imagem PNG, JPG ou WebP.");
                       return;
                     }
                     setItemError(null);
-                    setNewsCoverFile(f);
+                    setNewsNewFile(f);
+                    if (!newsNewTitle.trim()) {
+                      const inferred = f.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
+                      if (inferred) setNewsNewTitle(inferred);
+                    }
                   }}
                 />
-                <input
-                  ref={newsAddAnyFileInputRef}
-                  type="file"
-                  multiple
-                  accept="image/png,image/jpeg,image/webp,application/pdf"
-                  className="hidden"
-                  onChange={(e) => {
-                    const files = e.target.files ? Array.from(e.target.files) : [];
-                    if (files.length === 0) return;
-
-                    const firstImg = files.find((f) => isNewsImageFileType(f)) ?? null;
-                    const firstPdf = files.find((f) => isNewsPdfFileType(f)) ?? null;
-
-                    if (newsReplaceThumbId) {
-                      if (!firstImg) setItemError("Selecione uma imagem (PNG, JPG ou WebP) para trocar a prévia principal.");
-                      else void replaceNewsThumb(newsReplaceThumbId, firstImg);
-                      e.currentTarget.value = "";
-                      return;
-                    }
-
-                    if (newsReplacePdfId) {
-                      const it = newsImageItems.find((x) => x.id === newsReplacePdfId);
-                      if (!firstPdf) setItemError("Selecione um arquivo PDF.");
-                      else if (it) void replaceNewsPdf(it, firstPdf);
-                      e.currentTarget.value = "";
-                      return;
-                    }
-
-                    setItemError(null);
-                    setNewsNewFiles((prev) => {
-                      const seen = new Set(prev.map((f) => `${f.name}|${f.size}|${f.lastModified}`));
-                      const next = [...prev];
-                      for (const f of files) {
-                        if (!isNewsImageFileType(f) && !isNewsPdfFileType(f)) continue;
-                        const key = `${f.name}|${f.size}|${f.lastModified}`;
-                        if (!seen.has(key)) next.push(f);
-                      }
-                      return next;
-                    });
-                    e.currentTarget.value = "";
-                  }}
-                />
-                <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-3 sm:p-4 space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">Nova notícia</p>
-                  <p className="text-xs text-[color:var(--muted-foreground)]">
-                    <strong className="text-[color:var(--foreground)]">Capa no portal:</strong> proporção sugerida{" "}
-                    <strong className="text-[color:var(--foreground)]">16:9</strong> (ex.: 1280×720). A capa pode ser a mesma imagem principal,
-                    só o PDF (ícone até abrir) ou uma imagem separada.
+                <div className="space-y-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Nova notícia
                   </p>
-                  <label className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
-                    <span className="font-semibold text-[color:var(--foreground)]">Mês de referência</span>
+                  <label className="block text-[11px] text-[color:var(--muted-foreground)]">
+                    Nome
                     <input
-                      type="month"
-                      value={newsReferenceMonth}
-                      onChange={(e) => setNewsReferenceMonth(e.target.value)}
-                      className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-xs text-[color:var(--foreground)] outline-none focus:border-fuchsia-400/60"
+                      type="text"
+                      value={newsNewTitle}
+                      onChange={(e) => setNewsNewTitle(e.target.value)}
+                      placeholder="Ex.: Radar WPS — Setembro"
+                      className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)]"
                     />
-                    <span className="text-[11px] text-[color:var(--muted-foreground)]">
-                      Define em qual mês a notícia aparece no portal. As dos meses anteriores continuam
-                      disponíveis no seletor de período.
-                    </span>
                   </label>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       disabled={savingItem}
-                      onClick={() => {
-                        setNewsReplaceThumbId(null);
-                        setNewsReplacePdfId(null);
-                        setNewsReplaceCoverId(null);
-                        newsAddAnyFileInputRef.current?.click();
-                      }}
+                      onClick={() => newsAddAnyFileInputRef.current?.click()}
                       className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-xs font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
                     >
                       <ImagePlus className="h-4 w-4" />
-                      {newsNewFiles.length ? `Arquivos da notícia (${newsNewFiles.length})` : "Anexar imagem ou PDF"}
+                      {newsNewFile ? "Trocar imagem" : "Anexar imagem"}
                     </button>
-                    <button
-                      type="button"
-                      disabled={savingItem}
-                      onClick={() => {
-                        setNewsReplaceThumbId(null);
-                        setNewsReplacePdfId(null);
-                        setNewsReplaceCoverId(null);
-                        newsCoverInputRef.current?.click();
-                      }}
-                      className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-xs font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
-                    >
-                      <ImagePlus className="h-4 w-4" />
-                      {newsCoverFile ? "Trocar capa (opcional)" : "Capa opcional (imagem)"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={savingItem}
-                      onClick={() => void createNewsFromModal()}
-                      className="rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
-                    >
-                      {savingItem ? "Salvando…" : "Publicar 1 notícia"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={savingItem || newsNewFiles.length < 2}
-                      onClick={() => void publishEachSelectedFileAsNews()}
-                      className="rounded-xl border border-fuchsia-400/40 bg-fuchsia-500/10 px-4 py-2 text-xs font-bold text-fuchsia-100 hover:bg-fuchsia-500/20 disabled:opacity-40"
-                      title="Cada imagem ou PDF vira uma notícia; se houver o mesmo número de imagens e PDFs, são pareados na ordem."
-                    >
-                      {savingItem ? "Salvando…" : "Publicar cada arquivo"}
-                    </button>
-                  </div>
-                  {newsNewFiles.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-[color:var(--muted-foreground)]">
-                      <span>
-                        Selecionados: <strong className="text-[color:var(--foreground)]">{newsNewThumbs.length}</strong> imagem(ns) e{" "}
-                        <strong className="text-[color:var(--foreground)]">{newsNewPdfs.length}</strong> PDF(s)
+                    {newsNewFile ? (
+                      <span className="truncate text-[11px] text-[color:var(--muted-foreground)]" title={newsNewFile.name}>
+                        {newsNewFile.name}
                       </span>
-                      <button
-                        type="button"
-                        disabled={savingItem}
-                        onClick={() => {
-                          setNewsNewFiles([]);
-                          if (newsAddAnyFileInputRef.current) newsAddAnyFileInputRef.current.value = "";
-                          setNewsSelectedThumbKey(null);
-                          setNewsSelectedPdfKey(null);
-                          setNewsCoverFile(null);
-                          if (newsCoverInputRef.current) newsCoverInputRef.current.value = "";
-                          setNewsFocalX(50);
-                          setNewsFocalY(50);
-                        }}
-                        className="ml-auto text-[11px] font-semibold text-red-300 hover:text-red-200 disabled:opacity-50"
-                      >
-                        Limpar seleção
-                      </button>
-                    </div>
-                  )}
-                  {(newsNewFiles.length > 0 || effectiveThumb) && (
-                    <div className="space-y-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">Composição da notícia</p>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-2">
-                          <p className="text-[11px] text-[color:var(--muted-foreground)]">Escolha a imagem principal</p>
-                          {newsNewThumbs.length === 0 ? (
-                            <p className="text-xs text-[color:var(--muted-foreground)]">
-                              Sem imagem principal (se publicar só PDF, usamos ícone até abrir o PDF).
-                            </p>
-                          ) : (
-                            <div className="space-y-1">
-                              {newsNewThumbs.map((f) => {
-                                const key = fileKey(f);
-                                const selected = key === newsSelectedThumbKey;
-                                return (
-                                  <button
-                                    key={key}
-                                    type="button"
-                                    disabled={savingItem}
-                                    onClick={() => setNewsSelectedThumbKey(key)}
-                                    className={`w-full text-left rounded-lg border px-2 py-1.5 text-xs ${
-                                      selected
-                                        ? "border-fuchsia-400/60 bg-fuchsia-500/10 text-white"
-                                        : "border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)]"
-                                    }`}
-                                  >
-                                    {f.name}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                        <div className="space-y-2">
-                          <p className="text-[11px] text-[color:var(--muted-foreground)]">Escolha o PDF</p>
-                          {newsNewPdfs.length === 0 ? (
-                            <p className="text-xs text-[color:var(--muted-foreground)]">Sem PDF (se publicar só PNG, a notícia será a própria imagem).</p>
-                          ) : (
-                            <div className="space-y-1">
-                              {newsNewPdfs.map((f) => {
-                                const key = fileKey(f);
-                                const selected = key === newsSelectedPdfKey;
-                                return (
-                                  <button
-                                    key={key}
-                                    type="button"
-                                    disabled={savingItem}
-                                    onClick={() => setNewsSelectedPdfKey(key)}
-                                    className={`w-full text-left rounded-lg border px-2 py-1.5 text-xs ${
-                                      selected
-                                        ? "border-fuchsia-400/60 bg-fuchsia-500/10 text-white"
-                                        : "border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)]"
-                                    }`}
-                                  >
-                                    {f.name}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      {newsCoverPreviewUrl && (
-                        <div className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-2)] p-2">
-                          <p className="text-[11px] text-[color:var(--muted-foreground)] mb-2">Prévia da capa opcional</p>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={newsCoverPreviewUrl}
-                            alt=""
-                            className="mx-auto max-h-32 w-auto max-w-full rounded object-contain"
-                          />
-                        </div>
-                      )}
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="text-[11px] text-[color:var(--muted-foreground)]">
-                          Posição horizontal (X): <span className="text-[color:var(--foreground)]">{newsFocalX}%</span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            value={newsFocalX}
-                            onChange={(e) => setNewsFocalX(Number(e.target.value))}
-                            className="mt-1 w-full"
-                            disabled={savingItem}
-                          />
-                        </label>
-                        <label className="text-[11px] text-[color:var(--muted-foreground)]">
-                          Posição vertical (Y): <span className="text-[color:var(--foreground)]">{newsFocalY}%</span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={100}
-                            value={newsFocalY}
-                            onChange={(e) => setNewsFocalY(Number(e.target.value))}
-                            className="mt-1 w-full"
-                            disabled={savingItem}
-                          />
-                        </label>
-                      </div>
-                      {effectiveThumbPreviewUrl && (
-                        <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-2">
-                          <div className="text-[11px] text-[color:var(--muted-foreground)] mb-2">Prévia</div>
-                          <div className="relative h-40 w-full overflow-hidden rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-2)]">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={effectiveThumbPreviewUrl}
-                              alt=""
-                              className="h-full w-full object-cover"
-                              style={{ objectPosition: `${newsFocalX}% ${newsFocalY}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {itemError && <p className="text-xs text-red-400">{itemError}</p>}
+                    ) : null}
+                  </div>
+                  {itemError ? <p className="text-xs text-red-500">{itemError}</p> : null}
+                  <button
+                    type="button"
+                    disabled={savingItem}
+                    onClick={() => void publishNewsFromModal()}
+                    className="w-full rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+                  >
+                    {savingItem ? "Publicando…" : "Publicar"}
+                  </button>
                 </div>
-                <ul className="space-y-4">
-                  {newsImageItems.map((it) => {
-                    const title = newsTitleDrafts[it.id] ?? String(it.title || "").trim();
-                    return (
-                      <li
-                        key={it.id}
-                        className="overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-3 sm:p-4"
-                      >
-                        <label className="mb-2 block text-[10px] font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]">
-                          Nome da notícia
-                          <input
-                            type="text"
-                            value={title}
-                            onChange={(e) =>
-                              setNewsTitleDrafts((p) => ({ ...p, [it.id]: e.target.value }))
-                            }
-                            placeholder="Ex.: Radar WPS — Abril"
-                            className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--input-bg)] px-2 py-1.5 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)]"
-                          />
-                        </label>
 
-                        <label className="mb-2 block text-[10px] font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]">
-                          Mês no portal
-                          <input
-                            type="month"
-                            disabled={savingItem}
-                            value={newsPeriodKey(it)}
-                            onChange={(e) => void updateNewsReferenceMonth(it, e.target.value)}
-                            className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--input-bg)] px-2 py-1.5 text-sm text-[color:var(--foreground)] disabled:opacity-50"
-                          />
-                        </label>
-
-                        <div className="mb-2 grid gap-2 sm:grid-cols-3">
-                          <button
-                            type="button"
-                            disabled={savingItem}
-                            onClick={() => {
-                              setNewsReplaceCoverId(null);
-                              setNewsReplacePdfId(null);
-                              setNewsReplaceThumbId(it.id);
-                              newsAddAnyFileInputRef.current?.click();
-                            }}
-                            className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-xs font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
-                          >
-                            Imagem principal
-                          </button>
-                          <button
-                            type="button"
-                            disabled={savingItem}
-                            onClick={() => {
-                              setNewsReplaceThumbId(null);
-                              setNewsReplacePdfId(null);
-                              setNewsReplaceCoverId(it.id);
-                              newsCoverInputRef.current?.click();
-                            }}
-                            className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-xs font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
-                          >
-                            Capa (opcional)
-                          </button>
-                          <button
-                            type="button"
-                            disabled={savingItem}
-                            onClick={() => {
-                              setNewsReplaceThumbId(null);
-                              setNewsReplaceCoverId(null);
-                              setNewsReplacePdfId(it.id);
-                              newsAddAnyFileInputRef.current?.click();
-                            }}
-                            className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-xs font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
-                          >
-                            {parseNewsPdfUrl(it.metadata) ? "Trocar PDF" : "Anexar PDF"}
-                          </button>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            disabled={savingItem}
-                            onClick={() => void saveNewsItemTitle(it)}
-                            className="rounded-lg bg-fuchsia-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-fuchsia-500 disabled:opacity-50"
-                          >
-                            Salvar
-                          </button>
+                <div>
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Anexadas
+                  </p>
+                  {newsImageItems.length === 0 ? (
+                    <p className="text-center text-xs text-[color:var(--muted-foreground)]">
+                      Nenhuma imagem ainda.
+                    </p>
+                  ) : (
+                    <ul className="max-h-72 space-y-2 overflow-y-auto">
+                      {newsImageItems.map((it) => (
+                        <li
+                          key={it.id}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-2)] px-3 py-2.5"
+                        >
+                          <p className="min-w-0 truncate text-sm font-medium text-[color:var(--foreground)]">
+                            {String(it.title || "").trim() || "Sem nome"}
+                          </p>
                           <button
                             type="button"
                             disabled={savingItem}
                             onClick={() => setConfirmDeleteItem(it)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+                            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-500/20 disabled:opacity-50"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
-                            Excluir
+                            Apagar
                           </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-                {newsImageItems.length === 0 && (
-                  <p className="text-center text-xs text-[color:var(--muted-foreground)]">Nenhuma imagem ainda. Anexe a primeira acima.</p>
-                )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
             )}
 
