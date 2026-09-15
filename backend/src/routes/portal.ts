@@ -320,13 +320,14 @@ const DEFAULT_PORTAL_SECTIONS: Array<{ slug: string; title: string; order: numbe
   { slug: "newsletter", title: "Newsletter", order: 1 },
   { slug: "colaborador-do-mes", title: "WPSer do mês", order: 2 },
   { slug: "premios", title: "Pontos de Inspiração", order: 3 },
-  { slug: "manuais", title: "Manuais e documentos", order: 4 },
-  { slug: "politica-despesa", title: "Política de despesa", order: 5 },
-  { slug: "politica-lgpd", title: "Política LGPD", order: 6 },
-  { slug: "documentos-rh", title: "Documentos de RH", order: 7 },
-  { slug: "institucional", title: "Institucional", order: 8 },
-  { slug: "templates", title: "Templates oficiais", order: 9 },
-  { slug: "biblioteca", title: "Biblioteca", order: 10 },
+  { slug: "atualizacoes-wpsone", title: "Atualizações WPS One", order: 4 },
+  { slug: "manuais", title: "Manuais e documentos", order: 5 },
+  { slug: "politica-despesa", title: "Política de despesa", order: 6 },
+  { slug: "politica-lgpd", title: "Política LGPD", order: 7 },
+  { slug: "documentos-rh", title: "Documentos de RH", order: 8 },
+  { slug: "institucional", title: "Institucional", order: 9 },
+  { slug: "templates", title: "Templates oficiais", order: 10 },
+  { slug: "biblioteca", title: "Biblioteca", order: 11 },
 ];
 
 // POST /api/portal/bootstrap-sections — cria seções padrão do tenant (idempotente)

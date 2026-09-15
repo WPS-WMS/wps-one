@@ -22,6 +22,7 @@ import {
   Trash2,
   UserCircle2,
   X,
+  Rocket,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch, apiFetchBlob, publicFileUrl } from "@/lib/api";
@@ -112,7 +113,7 @@ function PortalFeedbackModal(props: {
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onPointerDown={(e) => {
         overlayPointerDownRef.current = e.target === e.currentTarget;
       }}
@@ -145,12 +146,12 @@ function PortalFeedbackModal(props: {
 
         <div className="space-y-4 px-6 py-5">
           {props.sent && (
-            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-[color:var(--foreground)]">
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-white">
               Enviado com sucesso. Obrigado pelo feedback.
             </div>
           )}
           {props.error && (
-            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-[color:var(--foreground)]">
+            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-white">
               {props.error}
             </div>
           )}
@@ -274,6 +275,7 @@ const SLUG = {
   newsletter: "newsletter",
   employee: "colaborador-do-mes",
   awards: "premios",
+  updates: "atualizacoes-wpsone",
   manuals: "manuais",
   politicaDespesa: "politica-despesa",
   politicaLgpd: "politica-lgpd",
@@ -289,6 +291,7 @@ const PORTAL_ITEM_SLUGS: readonly string[] = [
   SLUG.newsletter,
   SLUG.employee,
   SLUG.awards,
+  SLUG.updates,
   SLUG.manuals,
   SLUG.politicaDespesa,
   SLUG.politicaLgpd,
@@ -302,7 +305,7 @@ type PortalMainViewName = "empresa" | "admin" | "manuais" | "templates" | "bibli
 
 /** Seções necessárias por view: o portal só busca o que a aba aberta usa. */
 const PORTAL_VIEW_SLUGS: Record<PortalMainViewName, readonly string[]> = {
-  empresa: [SLUG.news, SLUG.newsletter, SLUG.employee, SLUG.awards],
+  empresa: [SLUG.news, SLUG.newsletter, SLUG.employee, SLUG.awards, SLUG.updates],
   manuais: [SLUG.manuals],
   templates: [SLUG.templates],
   biblioteca: [SLUG.biblioteca],
@@ -720,6 +723,8 @@ export function PortalCollaborativeDashboard() {
   const [employeeImageFit, setEmployeeImageFit] = useState<EmployeeImageFit>("contain");
   const [employeeFocalX, setEmployeeFocalX] = useState(50);
   const [employeeFocalY, setEmployeeFocalY] = useState(50);
+  const [updateTitleDraft, setUpdateTitleDraft] = useState("");
+  const [updateBodyDraft, setUpdateBodyDraft] = useState("");
 
   const [evTitle, setEvTitle] = useState("");
   const [evDate, setEvDate] = useState("");
@@ -736,6 +741,7 @@ export function PortalCollaborativeDashboard() {
   const newsItems = itemsBySlug[SLUG.news] ?? [];
   const employeeItems = itemsBySlug[SLUG.employee] ?? [];
   const awardItems = itemsBySlug[SLUG.awards] ?? [];
+  const updateItems = itemsBySlug[SLUG.updates] ?? [];
 
   /** Imagem atual no modal simples (WPSer do mês). */
   const currentManageImageItem = useMemo(() => {
@@ -769,13 +775,13 @@ export function PortalCollaborativeDashboard() {
       .map(([key, count]) => ({ key, count, label: newsPeriodLabel(key) }));
   }, [newsImageItems]);
 
-  // Abre no mês mais recente que tenha notícias; os anteriores ficam no seletor.
+  // Abre em "Todos os meses" para manter o histórico navegável no carrossel.
   useEffect(() => {
     if (newsPeriods.length === 0) return;
     setNewsPeriod((current) => {
       if (current === NEWS_ALL_PERIODS) return current;
       if (current && newsPeriods.some((p) => p.key === current)) return current;
-      return newsPeriods[0]!.key;
+      return newsPeriods.length > 1 ? NEWS_ALL_PERIODS : newsPeriods[0]!.key;
     });
   }, [newsPeriods]);
 
@@ -1665,26 +1671,22 @@ function PortalItemImage({
   }
 
   async function persistInspirationSlot(rank: InspirationRank, slot: InspirationSlotDraft, sectionId: string) {
-    const name = slot.name.trim();
-    const cargo = slot.cargo.trim();
-    const pointsStr = slot.points.trim();
-    const pointsNum = pointsStr === "" ? 0 : Math.max(0, Math.floor(Number(pointsStr) || 0));
     const imageUrl = slot.imageUrl.trim();
-    const empty = !name && !imageUrl && !cargo && pointsStr === "";
+    const empty = !imageUrl;
 
     if (empty) {
       if (slot.id) {
         const res = await apiFetch(`/api/portal/items/${slot.id}`, { method: "DELETE" });
         if (!res.ok && res.status !== 204) {
           const d = await res.json().catch(() => ({}));
-          throw new Error(d?.error || "Erro ao remover colaborador.");
+          throw new Error(d?.error || "Erro ao remover imagem.");
         }
       }
       return;
     }
 
-    const title = name || `Colaborador — ${rank}º lugar`;
-    const metadata = { rank, points: pointsNum, cargo };
+    const title = `Pódio — ${rank}º lugar`;
+    const metadata = { rank };
     const body = { title, content: imageUrl, type: "inspiration", metadata };
 
     if (slot.id) {
@@ -1694,7 +1696,7 @@ function PortalItemImage({
         body: JSON.stringify(body),
       });
       const errBody = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(errBody?.error || "Erro ao atualizar colaborador.");
+      if (!res.ok) throw new Error(errBody?.error || "Erro ao atualizar imagem.");
     } else {
       const res = await apiFetch("/api/portal/items", {
         method: "POST",
@@ -1702,7 +1704,7 @@ function PortalItemImage({
         body: JSON.stringify({ sectionId, ...body, isActive: true }),
       });
       const errBody = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar colaborador.");
+      if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar imagem.");
     }
   }
 
@@ -1750,6 +1752,45 @@ function PortalItemImage({
       if (inspirationFileInputRef.current) inspirationFileInputRef.current.value = "";
     } catch (e: unknown) {
       setItemError(e instanceof Error ? e.message : "Erro ao enviar foto.");
+    } finally {
+      setSavingItem(false);
+    }
+  }
+
+  async function saveWpsOneUpdate() {
+    const sectionId = sectionIdBySlug[SLUG.updates];
+    if (!sectionId) {
+      setItemError("Seção de atualizações não encontrada. Clique em criar seções padrão.");
+      return;
+    }
+    const title = updateTitleDraft.trim();
+    const content = updateBodyDraft.trim();
+    if (!title) {
+      setItemError("Informe o título da atualização.");
+      return;
+    }
+    setSavingItem(true);
+    setItemError(null);
+    try {
+      const res = await apiFetch("/api/portal/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sectionId,
+          title,
+          content,
+          type: "update",
+          isActive: true,
+          metadata: { publishedAt: new Date().toISOString() },
+        }),
+      });
+      const errBody = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(errBody?.error || "Erro ao publicar atualização.");
+      setUpdateTitleDraft("");
+      setUpdateBodyDraft("");
+      await refreshAll();
+    } catch (e: unknown) {
+      setItemError(e instanceof Error ? e.message : "Erro ao publicar.");
     } finally {
       setSavingItem(false);
     }
@@ -1829,7 +1870,7 @@ function PortalItemImage({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950/90 to-slate-900 text-slate-100">
+    <div className="min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)]">
       <div className="flex min-h-screen">
         {/* Menu lateral (estilo WPS One) — topo ao rodapé, sem bordas arredondadas */}
         <aside
@@ -1921,21 +1962,21 @@ function PortalItemImage({
             sidebarCollapsed ? "lg:pl-[96px]" : "lg:pl-[248px]"
           }`}
         >
-          <header className="mb-8 border-b border-white/10 bg-black/20 backdrop-blur-md -mx-4 -mt-8 px-4 py-5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          <header className="mb-8 border-b border-[color:var(--border)] bg-[color:var(--surface-2)] backdrop-blur-md -mx-4 -mt-8 px-4 py-5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
             <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 shadow-lg shadow-violet-500/30">
                   <LayoutGrid className="h-5 w-5 text-white" aria-hidden />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold tracking-tight text-white sm:text-2xl">Portal colaborativo</h1>
-                  <p className="mt-1 max-w-xl text-sm text-slate-300">
+                  <h1 className="text-xl font-bold tracking-tight text-[color:var(--foreground)] sm:text-2xl">Portal colaborativo</h1>
+                  <p className="mt-1 max-w-xl text-sm text-[color:var(--muted-foreground)]">
                     Intranet WPS: notícias, destaques, manuais, agenda e pessoas — conteúdo publicado pelo administrador do portal.
                   </p>
                 </div>
               </div>
               <div className="flex w-full flex-col items-center gap-4 sm:w-auto sm:min-w-[280px] lg:items-end">
-                <p className="w-full text-center text-base font-semibold capitalize leading-snug tracking-wide text-white drop-shadow-sm sm:text-lg lg:text-right">
+                <p className="w-full text-center text-base font-semibold capitalize leading-snug tracking-wide text-[color:var(--foreground)]  sm:text-lg lg:text-right">
                   {now.toLocaleDateString("pt-BR", {
                     weekday: "long",
                     day: "2-digit",
@@ -2065,17 +2106,17 @@ function PortalItemImage({
             />
           )}
         {loading && (
-          <p className="text-center text-sm text-slate-400">Carregando portal…</p>
+          <p className="text-center text-sm text-[color:var(--muted-foreground)]">Carregando portal…</p>
         )}
         {loadError && (
-          <div className="mb-6 rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-3 text-sm text-red-100">
+          <div className="mb-6 rounded-xl border border-red-500/40 bg-red-50 px-4 py-3 text-sm text-red-100">
             {loadError}
           </div>
         )}
 
         {!loading && missingSlugs.length > 0 && (
-          <div className="mb-8 flex flex-col items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-950/30 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-amber-100">
+          <div className="mb-8 flex flex-col items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-amber-950">
               Faltam seções do portal neste ambiente ({missingSlugs.join(", ")}).{" "}
               {canEdit ? "Crie as seções padrão com um clique." : "Peça ao administrador do portal para configurar."}
             </p>
@@ -2093,33 +2134,34 @@ function PortalItemImage({
         )}
 
         {portalView === "empresa" && (
+        <div className="space-y-8">
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="space-y-8">
             {/* Notícias — carrossel de imagens */}
-            <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-2xl shadow-black/40 backdrop-blur">
-              <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3 sm:px-5">
+            <section className="overflow-hidden rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-2xl shadow-black/40 backdrop-blur">
+              <div className="flex items-center justify-between gap-2 border-b border-[color:var(--border)] px-4 py-3 sm:px-5">
                 <div className="flex items-center gap-2">
-                  <PartyPopper className="h-4 w-4 text-fuchsia-300" />
-                  <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-200">Notícias</h2>
+                  <PartyPopper className="h-4 w-4 text-fuchsia-700" />
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--foreground)]">Notícias</h2>
                 </div>
                 <div className="flex items-center gap-2">
-                {newsPeriods.length > 1 && (
-                  <label className="flex items-center gap-1.5 text-[11px] text-slate-300">
+                {(newsPeriods.length > 0 || newsImageItems.length > 0) && (
+                  <label className="flex items-center gap-1.5 text-[11px] text-[color:var(--muted-foreground)]">
                     <span className="sr-only">Período das notícias</span>
-                    <CalendarDays className="h-3.5 w-3.5 text-slate-400" />
+                    <CalendarDays className="h-3.5 w-3.5 text-[color:var(--muted-foreground)]" />
                     <select
-                      value={newsPeriod ?? newsPeriods[0]!.key}
+                      value={newsPeriod ?? (newsPeriods.length > 1 ? NEWS_ALL_PERIODS : newsPeriods[0]?.key ?? NEWS_ALL_PERIODS)}
                       onChange={(e) => setNewsPeriod(e.target.value)}
-                      className="rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white outline-none focus:border-fuchsia-400/60"
+                      className="rounded-full border border-[color:var(--border)] bg-[color:var(--surface-2)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--foreground)] outline-none focus:border-fuchsia-400/60"
                     >
+                      <option value={NEWS_ALL_PERIODS} className="text-slate-900">
+                        Todos os meses ({newsImageItems.length})
+                      </option>
                       {newsPeriods.map((p) => (
                         <option key={p.key} value={p.key} className="text-slate-900">
                           {p.label} ({p.count})
                         </option>
                       ))}
-                      <option value={NEWS_ALL_PERIODS} className="text-slate-900">
-                        Todos os meses ({newsImageItems.length})
-                      </option>
                     </select>
                   </label>
                 )}
@@ -2131,7 +2173,7 @@ function PortalItemImage({
                       setManageSlug(SLUG.news);
                       setItemError(null);
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-white/15"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--surface-2)] px-3 py-1.5 text-[11px] font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)]"
                   >
                     <ImagePlus className="h-3.5 w-3.5" />
                     Gerenciar
@@ -2139,10 +2181,10 @@ function PortalItemImage({
                 )}
                 </div>
               </div>
-              <div className="relative w-full bg-slate-900/80 min-h-[220px] max-h-[min(520px,64vh)] sm:min-h-[260px] sm:max-h-[min(560px,56vh)]">
+              <div className="relative w-full bg-[color:var(--surface-2)] min-h-[320px] sm:min-h-[420px]">
                 {newsCount > 0 && activeNews ? (
                   <div className="relative w-full">
-                    <div className="relative aspect-[16/9] w-full overflow-hidden bg-black/20">
+                    <div className="relative aspect-[16/9] min-h-[320px] w-full overflow-hidden bg-[color:var(--surface-2)] sm:min-h-[440px] lg:min-h-[520px]">
                       {(() => {
                         const cover = parseNewsCoverUrl(activeNews.metadata);
                         const pos = newsObjectPosition(activeNews.metadata);
@@ -2169,7 +2211,6 @@ function PortalItemImage({
                         );
                       })()}
 
-                      {/* Gradiente tipo Windows 11 */}
                       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
 
                       {(() => {
@@ -2198,34 +2239,45 @@ function PortalItemImage({
                             </p>
                           ) : null;
                         })()}
+                        {newsCount > 1 ? (
+                          <p className="mt-1 text-[11px] font-medium text-white/80">
+                            {newsPageIndex + 1} de {newsCount}
+                          </p>
+                        ) : null}
                       </div>
 
-                      {/* Setas só quando tiver mais de uma notícia */}
                       {newsCount > 1 && (
                         <>
                           <button
                             type="button"
                             aria-label="Anterior"
-                            onClick={() => setNewsPageIndex((i) => (i - 1 + newsPageCount) % newsPageCount)}
-                            className="absolute left-3 top-1/2 z-[4] flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white hover:bg-black/70"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setNewsPageIndex((i) => (i - 1 + newsPageCount) % newsPageCount);
+                            }}
+                            className="absolute left-3 top-1/2 z-[5] flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white shadow-lg ring-1 ring-white/20 hover:bg-black/75"
                           >
-                            <ChevronLeft className="h-6 w-6" />
+                            <ChevronLeft className="h-7 w-7" />
                           </button>
                           <button
                             type="button"
                             aria-label="Próximo"
-                            onClick={() => setNewsPageIndex((i) => (i + 1) % newsPageCount)}
-                            className="absolute right-3 top-1/2 z-[4] flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white hover:bg-black/70"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setNewsPageIndex((i) => (i + 1) % newsPageCount);
+                            }}
+                            className="absolute right-3 top-1/2 z-[5] flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white shadow-lg ring-1 ring-white/20 hover:bg-black/75"
                           >
-                            <ChevronRight className="h-6 w-6" />
+                            <ChevronRight className="h-7 w-7" />
                           </button>
                         </>
                       )}
                     </div>
 
-                    {/* Bolinhas de navegação */}
                     {newsCount > 1 && (
-                      <div className="pointer-events-auto py-3 flex justify-center gap-1.5">
+                      <div className="pointer-events-auto flex justify-center gap-1.5 py-3">
                         {Array.from({ length: newsPageCount }, (_, idx) => (
                           <button
                             key={idx}
@@ -2239,9 +2291,57 @@ function PortalItemImage({
                         ))}
                       </div>
                     )}
+
+                    {newsImageItems.length > 1 && (
+                      <div className="border-t border-[color:var(--border)] px-4 py-3 sm:px-5">
+                        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                          Histórico de notícias
+                        </p>
+                        <ul className="max-h-40 space-y-1.5 overflow-y-auto pr-1">
+                          {newsImageItems.map((item, idx) => {
+                            const inCarousel = newsCarousel.some((n) => n.id === item.id);
+                            const carouselIdx = newsCarousel.findIndex((n) => n.id === item.id);
+                            const active = inCarousel && carouselIdx === newsPageIndex;
+                            const when = item.createdAt
+                              ? new Date(item.createdAt).toLocaleString("pt-BR", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : newsPeriodLabel(newsPeriodKey(item));
+                            return (
+                              <li key={item.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (newsPeriod !== NEWS_ALL_PERIODS) setNewsPeriod(NEWS_ALL_PERIODS);
+                                    window.setTimeout(() => {
+                                      const allIdx = newsImageItems.findIndex((n) => n.id === item.id);
+                                      if (allIdx >= 0) setNewsPageIndex(allIdx);
+                                    }, 0);
+                                  }}
+                                  className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-xs transition ${
+                                    active
+                                      ? "bg-fuchsia-500/20 text-white ring-1 ring-fuchsia-400/40"
+                                      : "bg-[color:var(--surface)] text-[color:var(--muted-foreground)] hover:bg-[color:var(--surface-2)]"
+                                  }`}
+                                >
+                                  <span className="min-w-0 truncate font-medium">
+                                    {newsDisplayCaption(item) || `Notícia ${idx + 1}`}
+                                  </span>
+                                  <span className="shrink-0 text-[10px] text-[color:var(--muted-foreground)]">{when}</span>
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-2 px-6 text-center text-slate-500">
+                  <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-2 px-6 text-center text-[color:var(--muted-foreground)] sm:min-h-[420px]">
                     <ImagePlus className="h-10 w-10 opacity-50" />
                     <p className="text-sm">Nenhuma imagem de notícia ainda.</p>
                     {canEdit && (
@@ -2251,7 +2351,7 @@ function PortalItemImage({
                           clearNewsDraft();
                           setManageSlug(SLUG.news);
                         }}
-                        className="text-xs font-semibold text-fuchsia-300 hover:underline"
+                        className="text-xs font-semibold text-fuchsia-700 hover:underline"
                       >
                         Enviar primeira imagem
                       </button>
@@ -2262,11 +2362,11 @@ function PortalItemImage({
             </section>
 
             {/* Pontos de Inspiração — pódio compacto abaixo das notícias */}
-            <section className="overflow-hidden rounded-2xl border border-amber-500/15 bg-amber-950/15 p-3 shadow-lg backdrop-blur sm:p-4">
+            <section className="overflow-hidden rounded-2xl border border-amber-500/25 bg-[color:var(--surface)] p-3 shadow-lg sm:p-4">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
-                  <Gift className="h-3.5 w-3.5 text-amber-300/90" />
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-100/85">Pontos de Inspiração</h2>
+                  <Gift className="h-3.5 w-3.5 text-amber-600" />
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-800">Pontos de Inspiração</h2>
                 </div>
                 {canEdit && (
                   <button
@@ -2275,7 +2375,7 @@ function PortalItemImage({
                       setManageSlug(SLUG.awards);
                       setItemError(null);
                     }}
-                    className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-500/25"
+                    className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold text-amber-800 hover:bg-amber-500/25"
                   >
                     <ImagePlus className="h-3 w-3" />
                     Gerenciar
@@ -2285,65 +2385,43 @@ function PortalItemImage({
               <div className="flex flex-wrap items-start justify-center gap-5 sm:gap-8 px-1 pb-1">
                 {([1, 2, 3] as const).map((rank) => {
                   const item = inspirationByRank[rank];
-                  const meta = item ? parseInspirationMeta(item) : null;
-                  const name = (item?.title || "").trim() || `— ${rank}º lugar —`;
-                  const cargo = (meta?.cargo || "").trim();
-                  const points = meta?.points ?? null;
                   const photo = item?.content?.trim() || "";
-                  const initials = name
-                    .split(/\s+/)
-                    .filter(Boolean)
-                    .slice(0, 2)
-                    .map((w) => w[0])
-                    .join("")
-                    .toUpperCase() || "?";
                   return (
                     <div key={rank} className="flex w-[128px] shrink-0 flex-col items-center sm:w-[138px]">
                       <div className="relative mx-auto aspect-square w-[96px] max-w-full sm:w-[104px]">
                         <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/10 to-white/5 shadow-inner ring-1 ring-amber-400/20" />
-                        <div className="absolute inset-[2px] overflow-hidden rounded-full bg-slate-900 ring-1 ring-white/10">
+                        <div className="absolute inset-[2px] overflow-hidden rounded-full bg-[color:var(--surface)] ring-1 ring-[color:var(--border)]">
                           {photo && item ? (
                             <PortalItemImage itemId={item.id} srcRaw={photo} alt="" className="h-full w-full object-cover" />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-slate-800 text-xs font-bold text-slate-500">
-                              {initials}
+                            <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-[color:var(--surface-2)] px-2 text-center text-[9px] font-medium text-[color:var(--muted-foreground)]">
+                              <ImagePlus className="h-4 w-4 opacity-60" />
+                              Imagem
                             </div>
                           )}
                         </div>
                         <PodiumMedal rank={rank} size="sm" />
-                        {points != null && (
-                          <div className="absolute bottom-0.5 left-1/2 z-10 -translate-x-1/2 rounded-full bg-sky-600 px-1.5 py-px text-[9px] font-bold tabular-nums text-white shadow ring-1 ring-slate-950/80">
-                            {points}
-                          </div>
-                        )}
                       </div>
-                      <p className="mt-2 max-w-full truncate text-center text-[10px] font-bold uppercase leading-tight tracking-wide text-sky-200/95">
-                        {name}
+                      <p className="mt-2 text-center text-[10px] font-bold uppercase tracking-wide text-sky-800">
+                        {rank}º lugar
                       </p>
-                      {cargo ? (
-                        <p className="mt-0.5 line-clamp-2 max-w-full text-center text-[8px] font-medium uppercase leading-snug tracking-wide text-sky-300/80">
-                          {cargo}
-                        </p>
-                      ) : (
-                        <p className="mt-0.5 h-2.5 text-[8px] text-slate-600"> </p>
-                      )}
                     </div>
                   );
                 })}
               </div>
               {!canEdit && ![1, 2, 3].some((r) => inspirationByRank[r as InspirationRank]) && (
-                <p className="text-center text-[10px] text-slate-500">Em breve o pódio do mês será publicado aqui.</p>
+                <p className="text-center text-[10px] text-[color:var(--muted-foreground)]">Em breve o pódio do mês será publicado aqui.</p>
               )}
             </section>
           </div>
 
           {/* Coluna direita: agenda, aniversariantes e WPSer do mês */}
           <div className="flex w-full min-w-0 flex-col gap-6">
-            <section className="w-full rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur sm:p-5">
+            <section className="w-full rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-xl backdrop-blur sm:p-5">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <CalendarDays className="h-4 w-4 text-sky-300" />
-                  <h2 className="text-sm font-semibold text-slate-200">Agenda</h2>
+                  <CalendarDays className="h-4 w-4 text-sky-700" />
+                  <h2 className="text-sm font-semibold text-[color:var(--foreground)]">Agenda</h2>
                 </div>
                 <div
                   className="flex flex-wrap items-center gap-2"
@@ -2355,7 +2433,7 @@ function PortalItemImage({
                       setCalendarFilterEngaged(true);
                       setCalMonth(Number(e.target.value));
                     }}
-                    className="rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-xs text-white"
+                    className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-2)] px-2 py-1 text-xs text-[color:var(--foreground)]"
                   >
                     {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                       <option key={m} value={m}>
@@ -2369,7 +2447,7 @@ function PortalItemImage({
                       setCalendarFilterEngaged(true);
                       setCalYear(Number(e.target.value));
                     }}
-                    className="rounded-lg border border-white/15 bg-black/30 px-2 py-1 text-xs text-white"
+                    className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-2)] px-2 py-1 text-xs text-[color:var(--foreground)]"
                   >
                     {Array.from({ length: 9 }, (_, i) => now.getFullYear() - 4 + i).map((y) => (
                       <option key={y} value={y}>
@@ -2381,7 +2459,7 @@ function PortalItemImage({
                     <button
                       type="button"
                       onClick={() => setManageEventsOpen(true)}
-                      className="inline-flex items-center gap-1 rounded-full bg-sky-500/20 px-2.5 py-1 text-[11px] font-semibold text-sky-200 hover:bg-sky-500/30"
+                      className="inline-flex items-center gap-1 rounded-full bg-sky-500/20 px-2.5 py-1 text-[11px] font-semibold text-sky-800 hover:bg-sky-500/30"
                     >
                       <Plus className="h-3 w-3" />
                       Evento
@@ -2391,24 +2469,24 @@ function PortalItemImage({
               </div>
 
               {!isSelectedCurrentMonth && upcomingEvents.length > 0 && (
-                <div className="mb-4 rounded-2xl border border-white/10 bg-black/20 p-3">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300/90">
+                <div className="mb-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-3">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]/90">
                     Próximos eventos
                   </p>
                   <ul className="space-y-2">
                     {upcomingEvents.slice(0, 3).map((ev) => (
-                      <li key={ev.id} className="flex items-start gap-3 rounded-xl border border-white/5 bg-black/10 px-3 py-2">
+                      <li key={ev.id} className="flex items-start gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-2)] px-3 py-2">
                         <div className="flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded-lg bg-gradient-to-br from-sky-500/25 to-violet-600/25 text-center">
-                          <span className="text-[9px] font-bold uppercase text-sky-200">
+                          <span className="text-[9px] font-bold uppercase text-sky-800">
                             {new Date(ev.date).toLocaleDateString("pt-BR", { month: "short" })}
                           </span>
-                          <span className="text-base font-bold leading-none text-white">
+                          <span className="text-base font-bold leading-none text-[color:var(--foreground)]">
                             {new Date(ev.date).getDate()}
                           </span>
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-white">{ev.title}</p>
-                          <p className="mt-0.5 text-[10px] text-slate-400">
+                          <p className="truncate text-sm font-semibold text-[color:var(--foreground)]">{ev.title}</p>
+                          <p className="mt-0.5 text-[10px] text-[color:var(--muted-foreground)]">
                             {new Date(ev.date).toLocaleDateString("pt-BR", { weekday: "short", year: "numeric" })}
                           </p>
                         </div>
@@ -2419,7 +2497,7 @@ function PortalItemImage({
               )}
 
               {displayedMonthEvents.length === 0 ? (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[color:var(--muted-foreground)]">
                   {isSelectedCurrentMonth && eventsForSelectedMonth.length > 0 && !calendarFilterEngaged
                     ? "Nenhum evento futuro neste mês."
                     : "Nenhum evento neste mês."}
@@ -2429,27 +2507,27 @@ function PortalItemImage({
                   {displayedMonthEvents.map((ev) => (
                     <li
                       key={ev.id}
-                      className="flex gap-3 rounded-2xl border border-white/5 bg-black/20 px-3 py-2.5"
+                      className="flex gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] px-3 py-2.5"
                     >
                       <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-sky-500/30 to-violet-600/30 text-center">
-                        <span className="text-[10px] font-bold uppercase text-sky-200">
+                        <span className="text-[10px] font-bold uppercase text-sky-800">
                           {new Date(ev.date).toLocaleDateString("pt-BR", { month: "short" })}
                         </span>
-                        <span className="text-lg font-bold leading-none text-white">
+                        <span className="text-lg font-bold leading-none text-[color:var(--foreground)]">
                           {new Date(ev.date).getDate()}
                         </span>
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-white">{ev.title}</p>
+                        <p className="text-sm font-medium text-[color:var(--foreground)]">{ev.title}</p>
                         {ev.description && (
-                          <p className="mt-0.5 text-[11px] text-slate-400 line-clamp-2">{ev.description}</p>
+                          <p className="mt-0.5 text-[11px] text-[color:var(--muted-foreground)] line-clamp-2">{ev.description}</p>
                         )}
                       </div>
                       {canEdit && (
                         <button
                           type="button"
                           onClick={() => void handleDeleteEvent(ev.id)}
-                          className="self-start rounded-lg p-1 text-slate-500 hover:bg-red-500/20 hover:text-red-300"
+                          className="self-start rounded-lg p-1 text-[color:var(--muted-foreground)] hover:bg-red-500/20 hover:text-red-300"
                           aria-label="Excluir evento"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -2463,11 +2541,11 @@ function PortalItemImage({
 
             <section className="w-full rounded-3xl border border-fuchsia-500/20 bg-gradient-to-b from-fuchsia-950/40 to-slate-950/60 p-4 shadow-xl backdrop-blur sm:p-5">
               <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-fuchsia-100">
-                <Sparkles className="h-4 w-4 text-fuchsia-300" />
+                <Sparkles className="h-4 w-4 text-fuchsia-700" />
                 Aniversariantes do mês
               </h2>
               {birthdays.length === 0 ? (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[color:var(--muted-foreground)]">
                   Ninguém com data de nascimento cadastrada neste mês — incentive o time a preencher o perfil.
                 </p>
               ) : (
@@ -2483,24 +2561,24 @@ function PortalItemImage({
                     return (
                       <li
                         key={b.id}
-                        className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-3 transition hover:border-fuchsia-400/40 hover:bg-white/10"
+                        className="group relative overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 transition hover:border-fuchsia-400/40 hover:bg-[color:var(--surface-2)]"
                       >
                         <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-fuchsia-500/10 blur-2xl" />
                         <div className="flex items-center gap-3">
                           <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-600 to-violet-700 shadow-lg">
-                            <span className="text-[9px] font-bold uppercase text-white/80">{monthShort}</span>
-                            <span className="text-xl font-black text-white">{day}</span>
+                            <span className="text-[9px] font-bold uppercase text-[color:var(--muted-foreground)]">{monthShort}</span>
+                            <span className="text-xl font-black text-[color:var(--foreground)]">{day}</span>
                           </div>
                           <Avatar
                             name={b.name}
                             avatarUrl={b.avatarUrl}
                             size={48}
-                            className="ring-2 ring-white/20 shadow-md"
+                            className="ring-2 ring-[color:var(--border)] shadow-md"
                             imgClassName="object-cover"
                             fallbackClassName="text-sm font-bold"
                           />
                           <div className="min-w-0 flex-1">
-                            <p className="truncate font-semibold text-white">{b.name}</p>
+                            <p className="truncate font-semibold text-[color:var(--foreground)]">{b.name}</p>
                             {b.cargo && <p className="truncate text-[11px] text-fuchsia-100/80">{b.cargo}</p>}
                           </div>
                         </div>
@@ -2512,11 +2590,11 @@ function PortalItemImage({
             </section>
 
             {/* WPSer do mês — abaixo dos aniversariantes */}
-            <section className="w-full overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl backdrop-blur sm:p-5">
+            <section className="w-full overflow-hidden rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-xl backdrop-blur sm:p-5">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <UserCircle2 className="h-4 w-4 text-violet-300" />
-                  <h2 className="text-sm font-semibold text-slate-200">WPSer do mês</h2>
+                  <UserCircle2 className="h-4 w-4 text-violet-700" />
+                  <h2 className="text-sm font-semibold text-[color:var(--foreground)]">WPSer do mês</h2>
                 </div>
                 {canEdit && (
                   <button
@@ -2525,13 +2603,13 @@ function PortalItemImage({
                       setManageSlug(SLUG.employee);
                       setItemError(null);
                     }}
-                    className="text-[11px] font-semibold text-violet-300 hover:underline"
+                    className="text-[11px] font-semibold text-violet-700 hover:underline"
                   >
                     Gerenciar
                   </button>
                 )}
               </div>
-              <div className="w-full overflow-hidden rounded-2xl border border-white/10 bg-slate-950/50">
+              <div className="w-full overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)]">
                 {employeeItems[0] && isImageItem(employeeItems[0]) ? (
                   (() => {
                     const it = employeeItems[0];
@@ -2542,7 +2620,7 @@ function PortalItemImage({
                         itemId={it.id}
                         srcRaw={it.content}
                         alt={it.title}
-                        className={`w-full max-w-full bg-black/20 max-h-[min(520px,60vh)] ${
+                        className={`w-full max-w-full bg-[color:var(--surface-2)] max-h-[min(520px,60vh)] ${
                           fit === "cover" ? "h-[min(520px,60vh)] object-cover" : "h-auto object-contain"
                         }`}
                         style={fit === "cover" ? { objectPosition: `${focal.x}% ${focal.y}%` } : undefined}
@@ -2550,7 +2628,7 @@ function PortalItemImage({
                     );
                   })()
                 ) : (
-                  <div className="flex min-h-[240px] w-full max-w-full flex-col items-center justify-center gap-2 text-center text-slate-500">
+                  <div className="flex min-h-[240px] w-full max-w-full flex-col items-center justify-center gap-2 text-center text-[color:var(--muted-foreground)]">
                     <p className="text-xs px-4">Arte do WPSer do mês (imagem).</p>
                   </div>
                 )}
@@ -2558,11 +2636,82 @@ function PortalItemImage({
             </section>
           </div>
         </div>
+
+        <section className="overflow-hidden rounded-3xl border border-violet-400/25 bg-[color:var(--surface)] shadow-xl">
+          <div className="flex items-center justify-between gap-2 border-b border-[color:var(--border)] px-4 py-3 sm:px-5">
+            <div className="flex items-center gap-2">
+              <Rocket className="h-4 w-4 text-violet-600" />
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-[color:var(--foreground)]">
+                Atualizações do WPS One
+              </h2>
+            </div>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => {
+                  setManageSlug(SLUG.updates);
+                  setItemError(null);
+                  setUpdateTitleDraft("");
+                  setUpdateBodyDraft("");
+                }}
+                className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/15 px-3 py-1.5 text-[11px] font-semibold text-violet-700 hover:bg-violet-500/25"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Gerenciar
+              </button>
+            )}
+          </div>
+          <div className="px-4 py-4 sm:px-5">
+            {updateItems.length === 0 ? (
+              <p className="text-sm text-[color:var(--muted-foreground)]">
+                Em breve publicaremos novidades e melhorias do produto por aqui.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {updateItems.map((item) => {
+                  const whenRaw =
+                    (item.metadata &&
+                      typeof item.metadata === "object" &&
+                      typeof (item.metadata as Record<string, unknown>).publishedAt === "string" &&
+                      String((item.metadata as Record<string, unknown>).publishedAt)) ||
+                    item.createdAt ||
+                    "";
+                  const when = whenRaw
+                    ? new Date(whenRaw).toLocaleString("pt-BR", {
+                        day: "2-digit",
+                        month: "long",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : "—";
+                  return (
+                    <li
+                      key={item.id}
+                      className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] px-4 py-3"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <h3 className="text-sm font-semibold text-[color:var(--foreground)]">{item.title}</h3>
+                        <time className="shrink-0 text-[11px] text-violet-700">{when}</time>
+                      </div>
+                      {item.content?.trim() ? (
+                        <p className="mt-1.5 whitespace-pre-wrap text-xs leading-relaxed text-[color:var(--muted-foreground)]">
+                          {item.content}
+                        </p>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </section>
+        </div>
         )}
 
         {portalView === "admin" && (
           <div className="mx-auto max-w-4xl space-y-4 px-1">
-            <div className="flex flex-wrap gap-2 border-b border-white/10 pb-3">
+            <div className="flex flex-wrap gap-2 border-b border-[color:var(--border)] pb-3">
               {ADMIN_PORTAL_SUBSECTIONS.map((s) => (
                 <button
                   key={s.slug}
@@ -2571,7 +2720,7 @@ function PortalItemImage({
                   className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                     adminTab === s.slug
                       ? "bg-violet-600 text-white"
-                      : "border border-white/15 bg-white/5 text-slate-200 hover:bg-white/10"
+                      : "border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)]"
                   }`}
                 >
                   {s.label}
@@ -2660,15 +2809,16 @@ function PortalItemImage({
           }}
         >
           <div
-            className={`max-h-[90vh] w-full overflow-y-auto rounded-3xl border border-white/10 bg-slate-900 p-5 shadow-2xl ${
+            className={`max-h-[90vh] w-full overflow-y-auto rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5 shadow-2xl ${
               manageSlug === SLUG.awards ? "max-w-4xl" : manageSlug === SLUG.news ? "max-w-2xl" : "max-w-lg"
             }`}
           >
             <div className="mb-4 flex items-center justify-between gap-2">
-              <h3 className="text-lg font-bold text-white">
+              <h3 className="text-lg font-bold text-[color:var(--foreground)]">
                 {manageSlug === SLUG.news && "Notícias"}
                 {manageSlug === SLUG.employee && "WPSer do mês"}
                 {manageSlug === SLUG.awards && "Pontos de Inspiração"}
+                {manageSlug === SLUG.updates && "Atualizações do WPS One"}
               </h3>
               <button
                 type="button"
@@ -2688,7 +2838,7 @@ function PortalItemImage({
                   if (newsCoverInputRef.current) newsCoverInputRef.current.value = "";
                   if (inspirationFileInputRef.current) inspirationFileInputRef.current.value = "";
                 }}
-                className="rounded-full px-2 py-1 text-xs text-slate-400 hover:bg-white/10 hover:text-white"
+                className="rounded-full px-2 py-1 text-xs text-[color:var(--muted-foreground)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--foreground)]"
               >
                 Fechar
               </button>
@@ -2696,9 +2846,9 @@ function PortalItemImage({
 
             {manageSlug === SLUG.news && (
               <div className="mb-4 space-y-4">
-                <p className="text-[11px] text-slate-400">
-                  Anexe <strong className="text-slate-200">PNG, JPG, WebP</strong> e/ou <strong className="text-slate-200">PDF</strong>.
-                  Opcionalmente defina uma <strong className="text-slate-200">capa</strong> (imagem diferente da principal). No portal,
+                <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                  Anexe <strong className="text-[color:var(--foreground)]">PNG, JPG, WebP</strong> e/ou <strong className="text-[color:var(--foreground)]">PDF</strong>.
+                  Opcionalmente defina uma <strong className="text-[color:var(--foreground)]">capa</strong> (imagem diferente da principal). No portal,
                   use as setas se houver mais de uma notícia; ao clicar na capa, a imagem ou o PDF abre em tela cheia.
                 </p>
                 <input
@@ -2765,22 +2915,22 @@ function PortalItemImage({
                     e.currentTarget.value = "";
                   }}
                 />
-                <div className="rounded-2xl border border-white/10 bg-black/30 p-3 sm:p-4 space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Nova notícia</p>
-                  <p className="text-xs text-slate-400">
-                    <strong className="text-slate-200">Capa no portal:</strong> proporção sugerida{" "}
-                    <strong className="text-slate-200">16:9</strong> (ex.: 1280×720). A capa pode ser a mesma imagem principal,
+                <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-3 sm:p-4 space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">Nova notícia</p>
+                  <p className="text-xs text-[color:var(--muted-foreground)]">
+                    <strong className="text-[color:var(--foreground)]">Capa no portal:</strong> proporção sugerida{" "}
+                    <strong className="text-[color:var(--foreground)]">16:9</strong> (ex.: 1280×720). A capa pode ser a mesma imagem principal,
                     só o PDF (ícone até abrir) ou uma imagem separada.
                   </p>
-                  <label className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
-                    <span className="font-semibold text-slate-200">Mês de referência</span>
+                  <label className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--muted-foreground)]">
+                    <span className="font-semibold text-[color:var(--foreground)]">Mês de referência</span>
                     <input
                       type="month"
                       value={newsReferenceMonth}
                       onChange={(e) => setNewsReferenceMonth(e.target.value)}
-                      className="rounded-xl border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white outline-none focus:border-fuchsia-400/60"
+                      className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-xs text-[color:var(--foreground)] outline-none focus:border-fuchsia-400/60"
                     />
-                    <span className="text-[11px] text-slate-400">
+                    <span className="text-[11px] text-[color:var(--muted-foreground)]">
                       Define em qual mês a notícia aparece no portal. As dos meses anteriores continuam
                       disponíveis no seletor de período.
                     </span>
@@ -2795,7 +2945,7 @@ function PortalItemImage({
                         setNewsReplaceCoverId(null);
                         newsAddAnyFileInputRef.current?.click();
                       }}
-                      className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-50"
+                      className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-xs font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
                     >
                       <ImagePlus className="h-4 w-4" />
                       {newsNewFiles.length ? `Arquivos da notícia (${newsNewFiles.length})` : "Anexar imagem ou PDF"}
@@ -2809,7 +2959,7 @@ function PortalItemImage({
                         setNewsReplaceCoverId(null);
                         newsCoverInputRef.current?.click();
                       }}
-                      className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-50"
+                      className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-xs font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
                     >
                       <ImagePlus className="h-4 w-4" />
                       {newsCoverFile ? "Trocar capa (opcional)" : "Capa opcional (imagem)"}
@@ -2833,10 +2983,10 @@ function PortalItemImage({
                     </button>
                   </div>
                   {newsNewFiles.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-[color:var(--muted-foreground)]">
                       <span>
-                        Selecionados: <strong className="text-slate-200">{newsNewThumbs.length}</strong> imagem(ns) e{" "}
-                        <strong className="text-slate-200">{newsNewPdfs.length}</strong> PDF(s)
+                        Selecionados: <strong className="text-[color:var(--foreground)]">{newsNewThumbs.length}</strong> imagem(ns) e{" "}
+                        <strong className="text-[color:var(--foreground)]">{newsNewPdfs.length}</strong> PDF(s)
                       </span>
                       <button
                         type="button"
@@ -2858,13 +3008,13 @@ function PortalItemImage({
                     </div>
                   )}
                   {(newsNewFiles.length > 0 || effectiveThumb) && (
-                    <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Composição da notícia</p>
+                    <div className="space-y-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">Composição da notícia</p>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-2">
-                          <p className="text-[11px] text-slate-400">Escolha a imagem principal</p>
+                          <p className="text-[11px] text-[color:var(--muted-foreground)]">Escolha a imagem principal</p>
                           {newsNewThumbs.length === 0 ? (
-                            <p className="text-xs text-slate-400">
+                            <p className="text-xs text-[color:var(--muted-foreground)]">
                               Sem imagem principal (se publicar só PDF, usamos ícone até abrir o PDF).
                             </p>
                           ) : (
@@ -2881,7 +3031,7 @@ function PortalItemImage({
                                     className={`w-full text-left rounded-lg border px-2 py-1.5 text-xs ${
                                       selected
                                         ? "border-fuchsia-400/60 bg-fuchsia-500/10 text-white"
-                                        : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                                        : "border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)]"
                                     }`}
                                   >
                                     {f.name}
@@ -2892,9 +3042,9 @@ function PortalItemImage({
                           )}
                         </div>
                         <div className="space-y-2">
-                          <p className="text-[11px] text-slate-400">Escolha o PDF</p>
+                          <p className="text-[11px] text-[color:var(--muted-foreground)]">Escolha o PDF</p>
                           {newsNewPdfs.length === 0 ? (
-                            <p className="text-xs text-slate-400">Sem PDF (se publicar só PNG, a notícia será a própria imagem).</p>
+                            <p className="text-xs text-[color:var(--muted-foreground)]">Sem PDF (se publicar só PNG, a notícia será a própria imagem).</p>
                           ) : (
                             <div className="space-y-1">
                               {newsNewPdfs.map((f) => {
@@ -2909,7 +3059,7 @@ function PortalItemImage({
                                     className={`w-full text-left rounded-lg border px-2 py-1.5 text-xs ${
                                       selected
                                         ? "border-fuchsia-400/60 bg-fuchsia-500/10 text-white"
-                                        : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                                        : "border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)]"
                                     }`}
                                   >
                                     {f.name}
@@ -2921,8 +3071,8 @@ function PortalItemImage({
                         </div>
                       </div>
                       {newsCoverPreviewUrl && (
-                        <div className="rounded-lg border border-white/10 bg-black/25 p-2">
-                          <p className="text-[11px] text-slate-400 mb-2">Prévia da capa opcional</p>
+                        <div className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-2)] p-2">
+                          <p className="text-[11px] text-[color:var(--muted-foreground)] mb-2">Prévia da capa opcional</p>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={newsCoverPreviewUrl}
@@ -2932,8 +3082,8 @@ function PortalItemImage({
                         </div>
                       )}
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="text-[11px] text-slate-400">
-                          Posição horizontal (X): <span className="text-slate-200">{newsFocalX}%</span>
+                        <label className="text-[11px] text-[color:var(--muted-foreground)]">
+                          Posição horizontal (X): <span className="text-[color:var(--foreground)]">{newsFocalX}%</span>
                           <input
                             type="range"
                             min={0}
@@ -2944,8 +3094,8 @@ function PortalItemImage({
                             disabled={savingItem}
                           />
                         </label>
-                        <label className="text-[11px] text-slate-400">
-                          Posição vertical (Y): <span className="text-slate-200">{newsFocalY}%</span>
+                        <label className="text-[11px] text-[color:var(--muted-foreground)]">
+                          Posição vertical (Y): <span className="text-[color:var(--foreground)]">{newsFocalY}%</span>
                           <input
                             type="range"
                             min={0}
@@ -2958,9 +3108,9 @@ function PortalItemImage({
                         </label>
                       </div>
                       {effectiveThumbPreviewUrl && (
-                        <div className="rounded-xl border border-white/10 bg-black/25 p-2">
-                          <div className="text-[11px] text-slate-400 mb-2">Prévia</div>
-                          <div className="relative h-40 w-full overflow-hidden rounded-lg border border-white/10 bg-black/30">
+                        <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-2">
+                          <div className="text-[11px] text-[color:var(--muted-foreground)] mb-2">Prévia</div>
+                          <div className="relative h-40 w-full overflow-hidden rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-2)]">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={effectiveThumbPreviewUrl}
@@ -2981,9 +3131,9 @@ function PortalItemImage({
                     return (
                       <li
                         key={it.id}
-                        className="overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-3 sm:p-4"
+                        className="overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-3 sm:p-4"
                       >
-                        <label className="mb-2 block text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                        <label className="mb-2 block text-[10px] font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]">
                           Nome da notícia
                           <input
                             type="text"
@@ -2992,18 +3142,18 @@ function PortalItemImage({
                               setNewsTitleDrafts((p) => ({ ...p, [it.id]: e.target.value }))
                             }
                             placeholder="Ex.: Radar WPS — Abril"
-                            className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-sm text-white placeholder:text-slate-500"
+                            className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--input-bg)] px-2 py-1.5 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)]"
                           />
                         </label>
 
-                        <label className="mb-2 block text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                        <label className="mb-2 block text-[10px] font-medium uppercase tracking-wide text-[color:var(--muted-foreground)]">
                           Mês no portal
                           <input
                             type="month"
                             disabled={savingItem}
                             value={newsPeriodKey(it)}
                             onChange={(e) => void updateNewsReferenceMonth(it, e.target.value)}
-                            className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-sm text-white disabled:opacity-50"
+                            className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--input-bg)] px-2 py-1.5 text-sm text-[color:var(--foreground)] disabled:opacity-50"
                           />
                         </label>
 
@@ -3017,7 +3167,7 @@ function PortalItemImage({
                               setNewsReplaceThumbId(it.id);
                               newsAddAnyFileInputRef.current?.click();
                             }}
-                            className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-50"
+                            className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-xs font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
                           >
                             Imagem principal
                           </button>
@@ -3030,7 +3180,7 @@ function PortalItemImage({
                               setNewsReplaceCoverId(it.id);
                               newsCoverInputRef.current?.click();
                             }}
-                            className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-50"
+                            className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-xs font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
                           >
                             Capa (opcional)
                           </button>
@@ -3043,7 +3193,7 @@ function PortalItemImage({
                               setNewsReplacePdfId(it.id);
                               newsAddAnyFileInputRef.current?.click();
                             }}
-                            className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-50"
+                            className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-xs font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
                           >
                             {parseNewsPdfUrl(it.metadata) ? "Trocar PDF" : "Anexar PDF"}
                           </button>
@@ -3073,15 +3223,87 @@ function PortalItemImage({
                   })}
                 </ul>
                 {newsImageItems.length === 0 && (
-                  <p className="text-center text-xs text-slate-500">Nenhuma imagem ainda. Anexe a primeira acima.</p>
+                  <p className="text-center text-xs text-[color:var(--muted-foreground)]">Nenhuma imagem ainda. Anexe a primeira acima.</p>
                 )}
+              </div>
+            )}
+
+            {manageSlug === SLUG.updates && (
+              <div className="mb-4 space-y-4">
+                <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                  Publique novidades do produto com título e descrição. A data e o horário são registrados na publicação.
+                </p>
+                <label className="block text-[11px] text-[color:var(--muted-foreground)]">
+                  Título
+                  <input
+                    type="text"
+                    value={updateTitleDraft}
+                    onChange={(e) => setUpdateTitleDraft(e.target.value)}
+                    placeholder="Ex.: Novo fluxo de assinatura"
+                    className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)]"
+                  />
+                </label>
+                <label className="block text-[11px] text-[color:var(--muted-foreground)]">
+                  Descrição
+                  <textarea
+                    value={updateBodyDraft}
+                    onChange={(e) => setUpdateBodyDraft(e.target.value)}
+                    rows={4}
+                    placeholder="O que mudou e para quem..."
+                    className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)]"
+                  />
+                </label>
+                {itemError && <p className="text-xs text-red-400">{itemError}</p>}
+                <button
+                  type="button"
+                  disabled={savingItem}
+                  onClick={() => void saveWpsOneUpdate()}
+                  className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white hover:bg-violet-500 disabled:opacity-50"
+                >
+                  {savingItem ? "Publicando…" : "Publicar atualização"}
+                </button>
+                <div className="border-t border-[color:var(--border)] pt-3">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Publicadas
+                  </p>
+                  {updateItems.length === 0 ? (
+                    <p className="text-xs text-[color:var(--muted-foreground)]">Nenhuma atualização ainda.</p>
+                  ) : (
+                    <ul className="max-h-56 space-y-2 overflow-y-auto">
+                      {updateItems.map((it) => (
+                        <li
+                          key={it.id}
+                          className="flex items-start justify-between gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-2)] px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-semibold text-[color:var(--foreground)]">{it.title}</p>
+                            <p className="mt-0.5 text-[10px] text-[color:var(--muted-foreground)]">
+                              {it.createdAt
+                                ? new Date(it.createdAt).toLocaleString("pt-BR")
+                                : "—"}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={savingItem}
+                            onClick={() => setConfirmDeleteItem(it)}
+                            className="shrink-0 rounded-lg border border-red-500/30 bg-red-500/10 p-1.5 text-red-200 hover:bg-red-500/20 disabled:opacity-50"
+                            aria-label="Excluir atualização"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
             )}
 
             {manageSlug === SLUG.awards && (
               <div className="mb-4 space-y-4">
-                <p className="text-[11px] text-slate-400">
-                  Configure os três lugares do pódio (foto, nome, cargo e pontos). Atualize todo mês conforme o ranking.
+                <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                  Anexe uma imagem para cada lugar do pódio (1º, 2º e 3º). Sem nomes — só a arte.
                 </p>
                 <input
                   ref={inspirationFileInputRef}
@@ -3100,17 +3322,20 @@ function PortalItemImage({
                     return (
                       <div
                         key={rank}
-                        className="rounded-2xl border border-white/10 bg-black/30 p-3 space-y-2.5"
+                        className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-3 space-y-2.5"
                       >
                         <p className="text-center text-xs font-bold uppercase tracking-wide text-amber-200">{label}</p>
                         <div className="relative mx-auto h-[118px] w-[118px] max-w-full">
                           <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/10 to-transparent" />
-                          <div className="absolute inset-[2px] overflow-hidden rounded-full bg-slate-800 ring-1 ring-white/10">
+                          <div className="absolute inset-[2px] overflow-hidden rounded-full bg-[color:var(--surface-2)] ring-1 ring-[color:var(--border)]">
                             {slot.imageUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={publicFileUrl(slot.imageUrl)} alt="" className="h-full w-full object-cover" />
                             ) : (
-                              <div className="flex h-full w-full items-center justify-center text-[10px] text-slate-500">Foto</div>
+                              <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-[10px] text-[color:var(--muted-foreground)]">
+                                <ImagePlus className="h-5 w-5 opacity-50" />
+                                Anexar
+                              </div>
                             )}
                           </div>
                           <PodiumMedal rank={rank} />
@@ -3122,38 +3347,10 @@ function PortalItemImage({
                             setInspirationUploadRank(rank);
                             inspirationFileInputRef.current?.click();
                           }}
-                          className="w-full rounded-lg border border-white/15 bg-white/5 py-1.5 text-[11px] font-semibold text-white hover:bg-white/10 disabled:opacity-50"
+                          className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] py-1.5 text-[11px] font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
                         >
-                          {savingItem ? "Aguarde…" : "Trocar foto"}
+                          {savingItem ? "Aguarde…" : slot.imageUrl ? "Trocar imagem" : "Anexar imagem"}
                         </button>
-                        <input
-                          type="text"
-                          value={slot.name}
-                          onChange={(e) =>
-                            setInspirationSlots((p) => ({ ...p, [rank]: { ...p[rank], name: e.target.value } }))
-                          }
-                          placeholder="Nome"
-                          className="w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-white placeholder:text-slate-500"
-                        />
-                        <input
-                          type="text"
-                          value={slot.cargo}
-                          onChange={(e) =>
-                            setInspirationSlots((p) => ({ ...p, [rank]: { ...p[rank], cargo: e.target.value } }))
-                          }
-                          placeholder="Cargo"
-                          className="w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-white placeholder:text-slate-500"
-                        />
-                        <input
-                          type="number"
-                          min={0}
-                          value={slot.points}
-                          onChange={(e) =>
-                            setInspirationSlots((p) => ({ ...p, [rank]: { ...p[rank], points: e.target.value } }))
-                          }
-                          placeholder="Pontos"
-                          className="w-full rounded-lg border border-white/10 bg-black/40 px-2 py-1.5 text-xs text-white placeholder:text-slate-500"
-                        />
                         {slot.id && (
                           <button
                             type="button"
@@ -3164,7 +3361,7 @@ function PortalItemImage({
                             }}
                             className="w-full rounded-lg border border-red-500/30 bg-red-500/10 py-1.5 text-[11px] font-semibold text-red-200 hover:bg-red-500/20 disabled:opacity-50"
                           >
-                            Remover do pódio
+                            Remover imagem
                           </button>
                         )}
                       </div>
@@ -3184,8 +3381,8 @@ function PortalItemImage({
             )}
 
             {manageSlug && PORTAL_IMAGE_SECTION_SLUGS.has(manageSlug) && (
-              <div className="mb-4 space-y-4 rounded-2xl border border-white/10 bg-black/30 p-4">
-                <p className="text-[11px] text-slate-400">
+              <div className="mb-4 space-y-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-4">
+                <p className="text-[11px] text-[color:var(--muted-foreground)]">
                   Envie uma imagem (PNG, JPG, WebP ou GIF). Se já existir uma imagem, o novo arquivo substitui a anterior.
                 </p>
                 <input
@@ -3200,8 +3397,8 @@ function PortalItemImage({
                 />
 
                 {manageSlug === SLUG.employee && (
-                  <div className="grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  <div className="grid gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
                       Ajuste de exibição (WPSer do mês)
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
@@ -3211,7 +3408,7 @@ function PortalItemImage({
                         className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
                           employeeImageFit === "contain"
                             ? "bg-violet-600 text-white"
-                            : "border border-white/15 bg-white/5 text-slate-200 hover:bg-white/10"
+                            : "border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)]"
                         }`}
                       >
                         Sem corte
@@ -3222,7 +3419,7 @@ function PortalItemImage({
                         className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
                           employeeImageFit === "cover"
                             ? "bg-violet-600 text-white"
-                            : "border border-white/15 bg-white/5 text-slate-200 hover:bg-white/10"
+                            : "border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] hover:bg-[color:var(--surface-2)]"
                         }`}
                       >
                         Preencher (pode cortar)
@@ -3231,7 +3428,7 @@ function PortalItemImage({
 
                     {employeeImageFit === "cover" && (
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="text-[11px] text-slate-300">
+                        <label className="text-[11px] text-[color:var(--muted-foreground)]">
                           Posição horizontal
                           <input
                             type="range"
@@ -3242,7 +3439,7 @@ function PortalItemImage({
                             className="mt-1 w-full"
                           />
                         </label>
-                        <label className="text-[11px] text-slate-300">
+                        <label className="text-[11px] text-[color:var(--muted-foreground)]">
                           Posição vertical
                           <input
                             type="range"
@@ -3255,7 +3452,7 @@ function PortalItemImage({
                         </label>
                       </div>
                     )}
-                    <p className="text-[10px] text-slate-500">
+                    <p className="text-[10px] text-[color:var(--muted-foreground)]">
                       Dica: “Sem corte” mostra a imagem inteira. “Preencher” ocupa todo o card, mas pode cortar — use as barras para ajustar.
                     </p>
                   </div>
@@ -3271,13 +3468,13 @@ function PortalItemImage({
                 </button>
                 {itemError && <p className="text-xs text-red-400">{itemError}</p>}
                 {currentManageImageItem ? (
-                  <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+                  <div className="overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--input-bg)]">
                     {manageSlug === SLUG.employee ? (
                       <PortalItemImage
                         itemId={currentManageImageItem.id}
                         srcRaw={currentManageImageItem.content}
                         alt={currentManageImageItem.title}
-                        className={`w-full bg-black/20 ${
+                        className={`w-full bg-[color:var(--surface-2)] ${
                           employeeImageFit === "cover" ? "aspect-video object-cover" : "h-auto max-h-[min(520px,60vh)] object-contain"
                         }`}
                         style={
@@ -3294,13 +3491,13 @@ function PortalItemImage({
                       className="aspect-video w-full object-cover"
                     />
                     )}
-                    <div className="flex justify-end border-t border-white/10 p-3">
+                    <div className="flex justify-end border-t border-[color:var(--border)] p-3">
                       {manageSlug === SLUG.employee && (
                         <button
                           type="button"
                           disabled={savingItem}
                           onClick={() => void saveEmployeeImageDisplaySettings()}
-                          className="mr-auto inline-flex items-center gap-2 rounded-xl border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-100 hover:bg-violet-500/20 disabled:opacity-50"
+                          className="mr-auto inline-flex items-center gap-2 rounded-xl border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-800 hover:bg-violet-500/20 disabled:opacity-50"
                         >
                           Salvar ajuste
                         </button>
@@ -3317,7 +3514,7 @@ function PortalItemImage({
                     </div>
                   </div>
                 ) : (
-                  <p className="text-center text-xs text-slate-500">Nenhuma imagem anexada ainda.</p>
+                  <p className="text-center text-xs text-[color:var(--muted-foreground)]">Nenhuma imagem anexada ainda.</p>
                 )}
               </div>
             )}
@@ -3334,7 +3531,7 @@ function PortalItemImage({
         >
           <button
             type="button"
-            className="absolute right-3 top-3 z-[102] rounded-full border border-white/15 bg-white/10 p-2 text-white transition hover:bg-white/20"
+            className="absolute right-3 top-3 z-[102] rounded-full border border-[color:var(--border)] bg-[color:var(--surface-2)] p-2 text-[color:var(--foreground)] transition hover:bg-white/20"
             aria-label="Fechar"
             onClick={(e) => {
               e.stopPropagation();
@@ -3344,13 +3541,13 @@ function PortalItemImage({
             <X className="h-5 w-5" />
           </button>
           <div
-            className="max-h-[92vh] w-full max-w-[min(96vw,1600px)] overflow-auto rounded-xl border border-white/10 bg-slate-950/90 p-2 shadow-2xl"
+            className="max-h-[92vh] w-full max-w-[min(96vw,1600px)] overflow-auto rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-2 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
             role="presentation"
           >
             {parseNewsPdfUrl(newsLightboxItem.metadata) ? (
               newsExpandedPdfLoading ? (
-                <p className="py-20 text-center text-slate-300">Carregando PDF…</p>
+                <p className="py-20 text-center text-[color:var(--muted-foreground)]">Carregando PDF…</p>
               ) : newsExpandedPdfBlobUrl ? (
                 <iframe
                   title={newsDisplayCaption(newsLightboxItem)}
@@ -3369,10 +3566,10 @@ function PortalItemImage({
               />
             )}
           </div>
-          <p className="mt-3 max-w-2xl px-2 text-center text-sm font-medium text-slate-200">
+          <p className="mt-3 max-w-2xl px-2 text-center text-sm font-medium text-[color:var(--foreground)]">
             {newsDisplayCaption(newsLightboxItem)}
           </p>
-          <p className="mt-1 text-center text-[10px] text-slate-500">
+          <p className="mt-1 text-center text-[10px] text-[color:var(--muted-foreground)]">
             {parseNewsPdfUrl(newsLightboxItem.metadata)
               ? "Use os controles do leitor de PDF ou role a página."
               : "Role a tela se a imagem for maior que a janela."}
@@ -3421,16 +3618,16 @@ function PortalItemImage({
             }
           }}
         >
-          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900 p-5 shadow-2xl">
+          <div className="w-full max-w-md rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white">Novo evento</h3>
+              <h3 className="text-lg font-bold text-[color:var(--foreground)]">Novo evento</h3>
               <button
                 type="button"
                 onClick={() => {
                   setManageEventsOpen(false);
                   setEvError(null);
                 }}
-                className="text-xs text-slate-400 hover:text-white"
+                className="text-xs text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
               >
                 Fechar
               </button>
@@ -3441,20 +3638,20 @@ function PortalItemImage({
                 value={evTitle}
                 onChange={(e) => setEvTitle(e.target.value)}
                 placeholder="Título do evento"
-                className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--foreground)]"
               />
               <input
                 type="date"
                 value={evDate}
                 onChange={(e) => setEvDate(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--foreground)]"
               />
               <textarea
                 value={evDesc}
                 onChange={(e) => setEvDesc(e.target.value)}
                 placeholder="Descrição (opcional)"
                 rows={3}
-                className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
+                className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--foreground)]"
               />
               {evError && <p className="text-xs text-red-400">{evError}</p>}
               <button

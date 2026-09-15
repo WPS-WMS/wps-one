@@ -28,7 +28,7 @@ export default function PortalPage() {
 
   if (loading || !user || !can("portal.corporativo")) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-400 text-sm">
+      <div className="flex min-h-screen items-center justify-center bg-[color:var(--background)] text-[color:var(--muted-foreground)] text-sm">
         Carregando portal…
       </div>
     );
