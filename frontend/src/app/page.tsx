@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE_URL } from "@/lib/api";
+import { LandingSobreModules } from "@/components/LandingSobreModules";
 import { Mail, MapPin } from "lucide-react";
 
 const PURPLE = "#5c00e1";
@@ -74,240 +75,6 @@ function readSectionFromLocation(): LandingSection {
   if (raw === "sobre") return "sobre";
   if (raw === "contato") return "contato";
   return "home";
-}
-
-function LandingAppPreview({ isDark }: { isDark: boolean }) {
-  const border = isDark ? "rgba(255,255,255,0.12)" : "rgba(17,24,39,0.12)";
-  const cardBg = isDark ? "rgba(18,12,28,0.85)" : "#ffffff";
-  const muted = isDark ? "rgba(244,242,255,0.65)" : "rgba(17,24,39,0.55)";
-  const fg = isDark ? "#f4f2ff" : "#111827";
-  const sidebarBg = isDark ? "rgba(20,10,34,0.98)" : "#160a26";
-  const sidebarItem = isDark ? "rgba(244,242,255,0.82)" : "rgba(255,255,255,0.86)";
-  const sidebarMuted = isDark ? "rgba(244,242,255,0.58)" : "rgba(255,255,255,0.62)";
-  const shellBg = isDark ? "rgba(8,6,12,0.78)" : "rgba(255,255,255,0.92)";
-  const pageBg = isDark ? "rgba(10,8,16,0.65)" : "#f8fafc";
-
-  return (
-    <div
-      className="overflow-hidden rounded-2xl shadow-2xl"
-      style={{
-        border: `1px solid ${border}`,
-        background: pageBg,
-        boxShadow: isDark ? "0 40px 100px rgba(0,0,0,0.45)" : "0 32px 80px rgba(17,24,39,0.12)",
-      }}
-    >
-      <div className="flex min-h-[330px] md:min-h-[380px]">
-        <aside
-          className="hidden w-[172px] shrink-0 flex-col justify-between sm:flex"
-          style={{ background: sidebarBg, borderRight: `1px solid ${isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.10)"}` }}
-        >
-          <div className="p-3">
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.92)" }}>
-                WPS One
-              </p>
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)" }}>
-                ≡
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              {[
-                { t: "Home", active: true },
-                { t: "Projetos" },
-                { t: "Apontamento" },
-                { t: "Banco de horas" },
-                { t: "Portal colaborativo" },
-                { t: "Relatórios" },
-                { t: "Configurações" },
-              ].map((i) => (
-                <div
-                  key={i.t}
-                  className="flex items-center gap-2 rounded-xl px-2 py-2 text-[11px]"
-                  style={{
-                    background: i.active ? "rgba(92,0,225,0.26)" : "transparent",
-                    border: i.active ? "1px solid rgba(92,0,225,0.35)" : "1px solid transparent",
-                    color: i.active ? "#fff" : sidebarItem,
-                  }}
-                >
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg" style={{ background: i.active ? "rgba(92,0,225,0.55)" : "rgba(255,255,255,0.06)", color: i.active ? "#fff" : sidebarMuted }}>
-                    ●
-                  </span>
-                  <span className="truncate">{i.t}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="p-3">
-            <div className="rounded-2xl p-3" style={{ border: "1px solid rgba(255,255,255,0.14)", background: "rgba(0,0,0,0.18)" }}>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-[11px] font-bold" style={{ background: "rgba(92,0,225,0.40)", color: "#fff" }}>
-                  AD
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-[11px] font-semibold" style={{ color: "rgba(255,255,255,0.92)" }}>
-                    Administrador
-                  </p>
-                  <p className="truncate text-[10px]" style={{ color: sidebarMuted }}>
-                    admin@wpsone.com.br
-                  </p>
-                </div>
-              </div>
-              <div className="mt-3 flex items-center justify-between text-[10px]" style={{ color: sidebarMuted }}>
-                <span>Configurações</span>
-                <span>Sair</span>
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        <div className="min-w-0 flex-1 p-4 md:p-5" style={{ background: pageBg }}>
-          <div className="relative">
-            <div className="absolute right-0 top-0 hidden sm:flex">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: shellBg, border: `1px solid ${border}`, color: muted }}>
-                ☾
-              </div>
-            </div>
-
-            <div
-              className="rounded-2xl p-4 md:p-6"
-              style={{
-                border: `1px solid ${border}`,
-                color: fg,
-                background: isDark
-                  ? "radial-gradient(820px 420px at 30% 20%, rgba(92,0,225,0.40), rgba(12,8,18,0.92) 60%)"
-                  : "radial-gradient(820px 420px at 30% 20%, rgba(92,0,225,0.24), rgba(255,255,255,0.95) 62%)",
-              }}
-            >
-              <div className="flex items-start justify-between gap-6">
-                <div>
-                  <p className="text-lg font-semibold md:text-xl">Olá, Administrador!</p>
-                  <p className="mt-1 text-[11px] md:text-xs" style={{ color: muted }}>
-                    Acompanhe suas horas e tarefas em um só lugar.
-                  </p>
-                </div>
-                <div className="hidden text-right text-[10px] md:block" style={{ color: muted }}>
-                  <p className="font-medium">Mês atual: Abril de 2026</p>
-                  <p>Semana atual: 02</p>
-                  <p>Hoje: 14 de abril de 2026</p>
-                </div>
-              </div>
-
-              <div className="mt-5 grid grid-cols-3 gap-3">
-                {[
-                  { k: "Hoje", v: "00:00" },
-                  { k: "Semana", v: "11:00" },
-                  { k: "Mês", v: "22:30" },
-                ].map((i) => (
-                  <div key={i.k} className="rounded-xl px-3 py-2.5" style={{ background: "rgba(0,0,0,0.18)", border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(17,24,39,0.10)"}` }}>
-                    <p className="text-[10px]" style={{ color: muted }}>
-                      {i.k}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold tabular-nums md:text-base">{i.v}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-2xl p-4 md:p-5" style={{ background: shellBg, border: `1px solid ${border}` }}>
-              <p className="text-sm font-semibold" style={{ color: fg }}>
-                Lista de tarefas
-              </p>
-              <p className="mt-1 text-[11px]" style={{ color: muted }}>
-                Ordenadas por prioridade (Urgente → Alta → Média → Baixa)
-              </p>
-              <div className="mt-4 rounded-xl px-4 py-10 text-center text-[11px]" style={{ border: `1px dashed ${border}`, color: muted }}>
-                Nenhuma tarefa atribuída a você no momento.
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LandingKanbanPreview({ isDark }: { isDark: boolean }) {
-  const border = isDark ? "rgba(255,255,255,0.12)" : "rgba(17,24,39,0.12)";
-  const cardBg = isDark ? "rgba(18,12,28,0.85)" : "#ffffff";
-  const muted = isDark ? "rgba(244,242,255,0.65)" : "rgba(17,24,39,0.55)";
-  const fg = isDark ? "#f4f2ff" : "#111827";
-
-  const colBg = isDark ? "rgba(255,255,255,0.04)" : "rgba(17,24,39,0.04)";
-
-  return (
-    <div
-      className="overflow-hidden rounded-2xl shadow-2xl"
-      style={{
-        border: `1px solid ${border}`,
-        background: isDark ? "rgba(12,8,18,0.9)" : "#f8fafc",
-        boxShadow: isDark ? "0 40px 100px rgba(0,0,0,0.45)" : "0 32px 80px rgba(17,24,39,0.12)",
-      }}
-    >
-      <div className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderBottom: `1px solid ${border}` }}>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold" style={{ color: fg }}>
-            Kanban do projeto
-          </p>
-          <p className="truncate text-[11px]" style={{ color: muted }}>
-            Prioridades, WIP e SLA em tempo real.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="rounded-full px-2.5 py-1 text-[10px] font-semibold" style={{ border: `1px solid ${border}`, color: muted, background: cardBg }}>
-            Sprint 03
-          </span>
-          <span className="rounded-full px-2.5 py-1 text-[10px] font-semibold text-white" style={{ background: PURPLE }}>
-            + Novo
-          </span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-2 p-4">
-        {[
-          { title: "Backlog", count: 6, dot: "rgba(148,163,184,0.95)" },
-          { title: "Em execução", count: 4, dot: "rgba(245,158,11,0.95)" },
-          { title: "Concluído", count: 12, dot: "rgba(16,185,129,0.95)" },
-        ].map((col) => (
-          <div key={col.title} className="rounded-xl p-2.5" style={{ background: colBg, border: `1px solid ${border}` }}>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full" style={{ background: col.dot }} aria-hidden />
-                <p className="text-[11px] font-semibold" style={{ color: fg }}>
-                  {col.title}
-                </p>
-              </div>
-              <p className="text-[11px] font-semibold tabular-nums" style={{ color: muted }}>
-                {col.count}
-              </p>
-            </div>
-            <div className="mt-2 space-y-2">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="rounded-lg p-2" style={{ background: cardBg, border: `1px solid ${border}` }}>
-                  <p className="text-[10px] font-semibold" style={{ color: fg }}>
-                    {col.title === "Concluído"
-                      ? `Entrega ${i + 1} • Finalizada`
-                      : col.title === "Em execução"
-                        ? `Chamado ${i + 1} • Em andamento`
-                        : `Item ${i + 1} • Priorizado`}
-                  </p>
-                  <div className="mt-1 flex items-center justify-between gap-2 text-[9px]">
-                    <p className="truncate" style={{ color: muted }}>
-                      {col.title === "Backlog" ? "Aguardando início" : col.title === "Em execução" ? "WIP 2/3" : "No prazo"}
-                    </p>
-                    <span className="rounded-full px-2 py-0.5 font-semibold" style={{ border: `1px solid ${border}`, color: muted }}>
-                      {col.title === "Concluído" ? "OK" : col.title === "Em execução" ? "SLA" : "P1"}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function NavLink({
@@ -625,87 +392,43 @@ export default function LandingPage() {
                 border: `1px solid ${isDark ? "rgba(255,255,255,0.10)" : "rgba(17,24,39,0.10)"}`,
               }}
             >
-              <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_1.05fr] lg:items-center lg:gap-12">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: PURPLE }}>
-                    Sobre o WPS One
-                  </p>
-                  <h2
-                    id="sobre-heading"
-                    className="mt-3 text-2xl font-bold leading-tight md:text-3xl"
-                    style={{ color: isDark ? "#fff" : "#0b0b12" }}
-                  >
-                    Controle total da operação de serviços — com visão executiva, foco no SLA e rentabilidade no dia a dia.
-                  </h2>
-                  <p className="mt-4 text-sm leading-relaxed md:text-base" style={{ color: mutedBody }}>
-                    O WPS One centraliza o que normalmente fica espalhado em planilhas, e-mails e mensagens: projetos,
-                    chamados, horas, banco de horas e indicadores. Em poucos cliques você enxerga o que está em atraso,
-                    o que virou risco de SLA e onde a margem está sendo consumida — com contexto, histórico e dono.
-                  </p>
-                  <ul className="mt-6 space-y-3 text-sm md:text-[15px]" style={{ color: mutedBody }}>
-                    <li className="flex gap-2">
-                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: PURPLE }} />
-                      <span>
-                        <strong className="font-semibold text-[color:inherit]">Projetos com previsibilidade:</strong>{" "}
-                        escopo, horas contratadas, banco de horas e status real — sem “cadê o andamento?”.
-                      </span>
-                    </li>
-                    <li className="flex gap-2">
-                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: PURPLE }} />
-                      <span>
-                        <strong className="font-semibold text-[color:inherit]">Chamados com SLA na mão:</strong> fila,
-                        prioridade, responsáveis, comentários e anexos — com alerta de risco antes do atraso.
-                      </span>
-                    </li>
-                    <li className="flex gap-2">
-                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: PURPLE }} />
-                      <span>
-                        <strong className="font-semibold text-[color:inherit]">Horas e margem sob controle:</strong>{" "}
-                        apontamentos, utilização e relatórios prontos para gestão e faturamento — com rastreabilidade.
-                      </span>
-                    </li>
-                    <li className="flex gap-2">
-                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: PURPLE }} />
-                      <span>
-                        <strong className="font-semibold text-[color:inherit]">Decisão em minutos:</strong> dashboard
-                        executivo para priorizar o que traz resultado e reduzir retrabalho da operação.
-                      </span>
-                    </li>
-                  </ul>
-                  <div className="mt-8 flex flex-wrap gap-3">
-                    <Link
-                      href="/login"
-                      className="inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold text-white hover:opacity-95 transition-opacity"
-                      style={{ background: PURPLE }}
-                    >
-                      Quero entrar no sistema
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => navigateSection("contato")}
-                      className="inline-flex items-center justify-center rounded-full border px-6 py-3 text-sm font-semibold transition-opacity hover:opacity-90"
-                      style={{
-                        borderColor: isDark ? "rgba(255,255,255,0.22)" : "rgba(17,24,39,0.18)",
-                        color: isDark ? "#fff" : "#0b0b12",
-                        background: "transparent",
-                      }}
-                    >
-                      Falar com a equipe
-                    </button>
-                  </div>
-                </div>
-                <div className="relative">
-                  <p
-                    className="mb-3 text-center text-[11px] font-medium uppercase tracking-wide lg:text-left"
-                    style={{ color: isDark ? "rgba(244,242,255,0.45)" : "rgba(17,24,39,0.45)" }}
-                  >
-                    Prévia da interface — dashboards e Kanban como no uso real
-                  </p>
-                  <div className="space-y-3">
-                    <LandingAppPreview isDark={isDark} />
-                  </div>
-                </div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: PURPLE }}>
+                Sobre o WPS One
+              </p>
+              <h2
+                id="sobre-heading"
+                className="mt-3 max-w-3xl text-2xl font-bold leading-tight md:text-3xl"
+                style={{ color: isDark ? "#fff" : "#0b0b12" }}
+              >
+                Controle total da operação de serviços — com visão executiva, foco no SLA e rentabilidade no dia a dia.
+              </h2>
+              <p className="mt-4 max-w-3xl text-sm leading-relaxed md:text-base" style={{ color: mutedBody }}>
+                O WPS One centraliza projetos, chamados, horas, financeiro e indicadores. Explore cada módulo abaixo
+                como no menu do sistema — com prévia da tela e o que ela resolve no dia a dia.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link
+                  href="/login"
+                  className="inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold text-white hover:opacity-95 transition-opacity"
+                  style={{ background: PURPLE }}
+                >
+                  Quero entrar no sistema
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => navigateSection("contato")}
+                  className="inline-flex items-center justify-center rounded-full border px-6 py-3 text-sm font-semibold transition-opacity hover:opacity-90"
+                  style={{
+                    borderColor: isDark ? "rgba(255,255,255,0.22)" : "rgba(17,24,39,0.18)",
+                    color: isDark ? "#fff" : "#0b0b12",
+                    background: "transparent",
+                  }}
+                >
+                  Falar com a equipe
+                </button>
               </div>
+
+              <LandingSobreModules isDark={isDark} />
             </div>
           </div>
         )}
