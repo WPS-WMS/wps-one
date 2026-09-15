@@ -65,7 +65,7 @@ export function ThemeToggle() {
 export function ThemeToggleInline({ className = "" }: { className?: string }) {
   return (
     <ThemeToggleButton
-      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white shadow-sm backdrop-blur transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-fuchsia-400/50 ${className}`}
+      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--foreground)] shadow-sm transition hover:bg-[color:var(--surface-2)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/40 ${className}`}
     />
   );
 }

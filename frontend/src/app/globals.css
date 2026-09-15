@@ -140,6 +140,16 @@ body {
 }
 
 [data-theme="dark"] .bg-white { background-color: var(--surface) !important; }
+
+/* Portal: acentos pensados para o claro continuam legíveis no escuro */
+[data-theme="dark"] .bg-amber-50 { background-color: rgba(120, 53, 15, 0.28) !important; }
+[data-theme="dark"] .text-amber-800,
+[data-theme="dark"] .text-amber-950 { color: rgb(253 230 138) !important; }
+[data-theme="dark"] .text-fuchsia-700 { color: rgb(240 171 252) !important; }
+[data-theme="dark"] .text-violet-700,
+[data-theme="dark"] .text-violet-800 { color: rgb(196 181 253) !important; }
+[data-theme="dark"] .text-sky-700,
+[data-theme="dark"] .text-sky-800 { color: rgb(125 211 252) !important; }
 [data-theme="dark"] .bg-gray-50 { background-color: rgba(18, 12, 28, 0.45) !important; }
 [data-theme="dark"] .bg-slate-50 { background-color: rgba(18, 12, 28, 0.45) !important; }
 
