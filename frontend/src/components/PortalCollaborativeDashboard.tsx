@@ -10,7 +10,6 @@ import {
   ChevronLeft,
   ChevronRight,
   FileStack,
-  Gift,
   ImagePlus,
   LayoutGrid,
   Library,
@@ -20,7 +19,6 @@ import {
   Plus,
   Sparkles,
   Trash2,
-  UserCircle2,
   X,
   Rocket,
 } from "lucide-react";
@@ -1399,7 +1397,7 @@ function PortalItemImage({
   async function saveInspirationFromModal() {
     const sectionId = sectionIdBySlug[SLUG.awards];
     if (!sectionId) {
-      setItemError("Seção Pontos de Inspiração não encontrada.");
+      setItemError("Seção do pódio não encontrada.");
       return;
     }
     setSavingItem(true);
@@ -2019,28 +2017,22 @@ function PortalItemImage({
               </div>
             </section>
 
-            {/* Pontos de Inspiração — pódio compacto abaixo das notícias */}
-            <section className="overflow-hidden rounded-2xl border border-amber-500/25 bg-[color:var(--surface)] p-3 shadow-lg sm:p-4">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5">
-                  <Gift className="h-3.5 w-3.5 text-amber-600" />
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-800">Pontos de Inspiração</h2>
-                </div>
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setManageSlug(SLUG.awards);
-                      setItemError(null);
-                    }}
-                    className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold text-amber-800 hover:bg-amber-500/25"
-                  >
-                    <ImagePlus className="h-3 w-3" />
-                    Gerenciar
-                  </button>
-                )}
-              </div>
-              <div className="flex flex-wrap items-start justify-center gap-5 sm:gap-8 px-1 pb-1">
+            {/* Pódio de imagens — sem título de seção */}
+            <section className="relative overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-lg sm:p-4">
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManageSlug(SLUG.awards);
+                    setItemError(null);
+                  }}
+                  className="absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-2.5 py-1 text-[10px] font-semibold text-[color:var(--muted-foreground)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--foreground)]"
+                >
+                  <ImagePlus className="h-3 w-3" />
+                  Gerenciar
+                </button>
+              )}
+              <div className={`flex flex-wrap items-start justify-center gap-5 sm:gap-8 px-1 pb-1 ${canEdit ? "pt-6" : ""}`}>
                 {([1, 2, 3] as const).map((rank) => {
                   const gallery = inspirationGalleryByRank[rank];
                   const idx = Math.min(inspirationGalleryIndex[rank], Math.max(0, gallery.length - 1));
@@ -2049,7 +2041,7 @@ function PortalItemImage({
                   return (
                     <div key={rank} className="flex w-[128px] shrink-0 flex-col items-center sm:w-[138px]">
                       <div className="relative mx-auto aspect-square w-[96px] max-w-full sm:w-[104px]">
-                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/10 to-white/5 shadow-inner ring-1 ring-amber-400/20" />
+                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-amber-100/80 to-orange-50 shadow-inner ring-1 ring-amber-300/40" />
                         <div className="absolute inset-[2px] overflow-hidden rounded-full bg-[color:var(--surface)] ring-1 ring-[color:var(--border)]">
                           {photo && item ? (
                             <PortalItemImage itemId={item.id} srcRaw={photo} alt="" className="h-full w-full object-cover" />
@@ -2103,10 +2095,6 @@ function PortalItemImage({
                   );
                 })}
               </div>
-              {!canEdit &&
-                ![1, 2, 3].some((r) => inspirationGalleryByRank[r as InspirationRank].length > 0) && (
-                <p className="text-center text-[10px] text-[color:var(--muted-foreground)]">Em breve o pódio do mês será publicado aqui.</p>
-              )}
             </section>
           </div>
 
@@ -2234,48 +2222,45 @@ function PortalItemImage({
               )}
             </section>
 
-            <section className="w-full rounded-3xl border border-fuchsia-500/20 bg-gradient-to-b from-fuchsia-950/40 to-slate-950/60 p-4 shadow-xl backdrop-blur sm:p-5">
-              <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-fuchsia-100">
-                <Sparkles className="h-4 w-4 text-fuchsia-700" />
+            <section className="w-full rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-xl sm:p-5">
+              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[color:var(--foreground)]">
+                <PartyPopper className="h-4 w-4 text-[color:var(--primary)]" />
                 Aniversariantes do mês
               </h2>
               {birthdays.length === 0 ? (
                 <p className="text-xs text-[color:var(--muted-foreground)]">
-                  Ninguém com data de nascimento cadastrada neste mês — incentive o time a preencher o perfil.
+                  Ninguém com data de nascimento cadastrada neste mês.
                 </p>
               ) : (
-                <ul className="grid gap-3">
+                <ul className="space-y-2">
                   {birthdays.map((b) => {
-                    // `birthDate` é uma data "pura". Se vier como ISO UTC (ex.: 2026-03-07T00:00:00.000Z),
-                    // `new Date()` + `getDate()` pode voltar 1 dia em fusos negativos. Por isso, exibimos em UTC.
                     const d = b.birthDate ? new Date(b.birthDate) : null;
                     const day = d ? d.getUTCDate() : "—";
                     const monthShort = d
-                      ? d.toLocaleDateString("pt-BR", { month: "short", timeZone: "UTC" })
+                      ? d.toLocaleDateString("pt-BR", { month: "short", timeZone: "UTC" }).replace(".", "")
                       : "";
                     return (
                       <li
                         key={b.id}
-                        className="group relative overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 transition hover:border-fuchsia-400/40 hover:bg-[color:var(--surface-2)]"
+                        className="flex items-center gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] px-3 py-2.5"
                       >
-                        <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-fuchsia-500/10 blur-2xl" />
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-600 to-violet-700 shadow-lg">
-                            <span className="text-[9px] font-bold uppercase text-[color:var(--muted-foreground)]">{monthShort}</span>
-                            <span className="text-xl font-black text-[color:var(--foreground)]">{day}</span>
-                          </div>
-                          <Avatar
-                            name={b.name}
-                            avatarUrl={b.avatarUrl}
-                            size={48}
-                            className="ring-2 ring-[color:var(--border)] shadow-md"
-                            imgClassName="object-cover"
-                            fallbackClassName="text-sm font-bold"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate font-semibold text-[color:var(--foreground)]">{b.name}</p>
-                            {b.cargo && <p className="truncate text-[11px] text-fuchsia-100/80">{b.cargo}</p>}
-                          </div>
+                        <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-[color:var(--primary)] text-center text-white shadow-sm">
+                          <span className="text-[9px] font-bold uppercase leading-none opacity-90">{monthShort}</span>
+                          <span className="text-lg font-black leading-none">{day}</span>
+                        </div>
+                        <Avatar
+                          name={b.name}
+                          avatarUrl={b.avatarUrl}
+                          size={40}
+                          className="ring-1 ring-[color:var(--border)]"
+                          imgClassName="object-cover"
+                          fallbackClassName="text-xs font-bold"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-[color:var(--foreground)]">{b.name}</p>
+                          {b.cargo ? (
+                            <p className="truncate text-[11px] text-[color:var(--muted-foreground)]">{b.cargo}</p>
+                          ) : null}
                         </div>
                       </li>
                     );
@@ -2284,27 +2269,21 @@ function PortalItemImage({
               )}
             </section>
 
-            {/* WPSer do mês — abaixo dos aniversariantes */}
-            <section className="w-full overflow-hidden rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-xl backdrop-blur sm:p-5">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <UserCircle2 className="h-4 w-4 text-violet-700" />
-                  <h2 className="text-sm font-semibold text-[color:var(--foreground)]">WPSer do mês</h2>
-                </div>
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setManageSlug(SLUG.employee);
-                      setItemError(null);
-                    }}
-                    className="text-[11px] font-semibold text-violet-700 hover:underline"
-                  >
-                    Gerenciar
-                  </button>
-                )}
-              </div>
-              <div className="relative w-full overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)]">
+            {/* Área de imagem (ex-WPSer) — sem título de seção */}
+            <section className="relative w-full overflow-hidden rounded-3xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-xl sm:p-4">
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManageSlug(SLUG.employee);
+                    setItemError(null);
+                  }}
+                  className="absolute right-3 top-3 z-10 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--muted-foreground)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--foreground)]"
+                >
+                  Gerenciar
+                </button>
+              )}
+              <div className="relative w-full overflow-hidden rounded-2xl border border-dashed border-[color:var(--border)] bg-[color:var(--surface-2)]">
                 {employeeGallery.length > 0 ? (
                   (() => {
                     const idx = Math.min(employeeGalleryIndex, employeeGallery.length - 1);
@@ -2353,9 +2332,9 @@ function PortalItemImage({
                     );
                   })()
                 ) : (
-                  <div className="flex min-h-[240px] w-full max-w-full flex-col items-center justify-center gap-2 text-center text-[color:var(--muted-foreground)]">
+                  <div className="flex min-h-[220px] w-full max-w-full flex-col items-center justify-center gap-2 text-center text-[color:var(--muted-foreground)]">
                     <ImagePlus className="h-8 w-8 opacity-50" />
-                    <p className="text-xs px-4">Anexe a imagem do WPSer do mês.</p>
+                    <p className="text-xs px-4">Anexe uma imagem</p>
                   </div>
                 )}
               </div>
@@ -2517,8 +2496,8 @@ function PortalItemImage({
             <div className="mb-4 flex items-center justify-between gap-2">
               <h3 className="text-lg font-bold text-[color:var(--foreground)]">
                 {manageSlug === SLUG.news && "Notícias"}
-                {manageSlug === SLUG.employee && "WPSer do mês"}
-                {manageSlug === SLUG.awards && "Pontos de Inspiração"}
+                {manageSlug === SLUG.employee && "Anexar imagem"}
+                {manageSlug === SLUG.awards && "Anexar imagens do pódio"}
               </h3>
               <button
                 type="button"
@@ -2738,7 +2717,7 @@ function PortalItemImage({
                 {manageSlug === SLUG.employee && (
                   <div className="grid gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-3">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-                      Ajuste de exibição (WPSer do mês)
+                      Ajuste de exibição
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
                       <button
