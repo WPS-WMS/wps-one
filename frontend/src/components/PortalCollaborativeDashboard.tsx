@@ -2669,13 +2669,18 @@ function PortalItemImage({
             ) : (
               <ul className="space-y-3">
                 {updateItems.map((item) => {
+                  const publishedAt =
+                    item.metadata &&
+                    typeof item.metadata === "object" &&
+                    !Array.isArray(item.metadata)
+                      ? (item.metadata as Record<string, unknown>).publishedAt
+                      : undefined;
                   const whenRaw =
-                    (item.metadata &&
-                      typeof item.metadata === "object" &&
-                      typeof (item.metadata as Record<string, unknown>).publishedAt === "string" &&
-                      String((item.metadata as Record<string, unknown>).publishedAt)) ||
-                    item.createdAt ||
-                    "";
+                    typeof publishedAt === "string" && publishedAt.trim()
+                      ? publishedAt.trim()
+                      : typeof item.createdAt === "string"
+                        ? item.createdAt
+                        : "";
                   const when = whenRaw
                     ? new Date(whenRaw).toLocaleString("pt-BR", {
                         day: "2-digit",
