@@ -1196,6 +1196,32 @@ export function PortalCollaborativeDashboard() {
     }
   }
 
+  async function saveEmployeeImageDisplaySettings() {
+    const it = currentManageImageItem;
+    if (!it) return;
+    setSavingItem(true);
+    setItemError(null);
+    try {
+      const metadata = buildEmployeeImageMetadata(it.metadata, {
+        fit: employeeImageFit,
+        focalX: employeeFocalX,
+        focalY: employeeFocalY,
+      });
+      const res = await apiFetch(`/api/portal/items/${it.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ metadata }),
+      });
+      const errBody = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar ajuste da imagem.");
+      await refreshAll();
+    } catch (e: unknown) {
+      setItemError(e instanceof Error ? e.message : "Erro ao salvar ajuste.");
+    } finally {
+      setSavingItem(false);
+    }
+  }
+
   function clickOpenInNewTab(href: string) {
     const a = document.createElement("a");
     a.href = href;
