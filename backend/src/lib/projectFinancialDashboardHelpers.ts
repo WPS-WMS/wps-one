@@ -405,7 +405,8 @@ export async function computeProjectFinancialDashboard(
           tenantId,
           status: { not: "CANCELADO" },
           projectRevenueId: null,
-          NOT: { sourceType: "REIMBURSEMENT" },
+          // Prisma/SQL: `not: "REIMBURSEMENT"` exclui sourceType NULL (CR manual).
+          OR: [{ sourceType: null }, { sourceType: { not: "REIMBURSEMENT" } }],
           AND: [
             {
               OR: [
