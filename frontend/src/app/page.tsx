@@ -384,7 +384,7 @@ export default function LandingPage() {
         )}
 
         {section === "sobre" && (
-          <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 md:py-14" aria-labelledby="sobre-heading">
+          <div className="mx-auto w-full max-w-[1400px] flex-1 px-6 py-10 md:py-14" aria-labelledby="sobre-heading">
             <div
               className="rounded-3xl px-6 py-10 md:px-10 md:py-12"
               style={{
@@ -406,27 +406,6 @@ export default function LandingPage() {
                 O WPS One centraliza projetos, chamados, horas, financeiro e indicadores. Explore cada módulo abaixo
                 como no menu do sistema — com prévia da tela e o que ela resolve no dia a dia.
               </p>
-              <div className="mt-6 flex flex-wrap gap-3">
-                <Link
-                  href="/login"
-                  className="inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold text-white hover:opacity-95 transition-opacity"
-                  style={{ background: PURPLE }}
-                >
-                  Quero entrar no sistema
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => navigateSection("contato")}
-                  className="inline-flex items-center justify-center rounded-full border px-6 py-3 text-sm font-semibold transition-opacity hover:opacity-90"
-                  style={{
-                    borderColor: isDark ? "rgba(255,255,255,0.22)" : "rgba(17,24,39,0.18)",
-                    color: isDark ? "#fff" : "#0b0b12",
-                    background: "transparent",
-                  }}
-                >
-                  Falar com a equipe
-                </button>
-              </div>
 
               <LandingSobreModules isDark={isDark} />
             </div>
