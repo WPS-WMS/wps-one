@@ -3,7 +3,7 @@ import { activeTimeEntryWhere } from "./activeTimeEntryWhere.js";
 import { formatCentsToBrl } from "./financialEntryHelpers.js";
 import { computePayableTotalCents } from "./payableHelpers.js";
 import { computeAgingSummary } from "./receivableService.js";
-import { classifyReceivableByAccountSubcategory } from "./receivableRevenueClassification.js";
+import { classifyReceivableRevenueAccount } from "./receivableRevenueClassification.js";
 
 /** Mesma visibilidade da listagem de Contas a pagar: oculta abertos de recorrência inativa. */
 const payableListVisibilityWhere = {
@@ -421,12 +421,12 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
   const isFaturamentoReceivable = (r: {
     projectRevenueId: string | null;
     kind: string;
-    financialAccount?: { dreSubcategory: string | null } | null;
+    financialAccount?: { name?: string | null; dreSubcategory: string | null } | null;
   }) => {
-    const byAccount = classifyReceivableByAccountSubcategory(r.financialAccount?.dreSubcategory);
+    const byAccount = classifyReceivableRevenueAccount(r.financialAccount);
     if (byAccount === "OUTRAS_RECEITAS") return false;
     if (byAccount === "FATURAMENTO") return true;
-    // Conta sem subcategoria: fallback legado por kind / vínculo de receita.
+    // Conta sem subcategoria e sem nome: fallback legado por kind / vínculo de receita.
     if (r.projectRevenueId) return true;
     const kind = String(r.kind ?? "").trim().toUpperCase();
     return kind === "PROJETO" || kind === "RECORRENTE";
@@ -436,7 +436,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
     r: {
       projectRevenueId: string | null;
       kind: string;
-      financialAccount?: { dreSubcategory: string | null } | null;
+      financialAccount?: { name?: string | null; dreSubcategory: string | null } | null;
     },
     monthKey: string,
     amountCents: number,
@@ -468,7 +468,7 @@ export async function computeGerencialDre(tenantId: string, period: ReportPeriod
           kind: true,
           totalAmountCents: true,
           competenceDate: true,
-          financialAccount: { select: { dreSubcategory: true } },
+          financialAccount: { select: { name: true, dreSubcategory: true } },
           installments: {
             where: { status: { not: "CANCELADO" } },
             orderBy: { installmentNumber: "asc" },

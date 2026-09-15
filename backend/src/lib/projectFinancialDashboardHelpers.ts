@@ -2,7 +2,7 @@ import { prisma } from "./prisma.js";
 import { activeTimeEntryWhere } from "./activeTimeEntryWhere.js";
 import { costLineTotal, sumBillingLines, sumCostLines } from "./projectRevenueCompositionHelpers.js";
 import {
-  classifyReceivableByAccountSubcategory,
+  classifyReceivableRevenueAccount,
   isReembolsoReceivableAccountName,
 } from "./receivableRevenueClassification.js";
 import { buildHourlyRateResolver } from "./userHourlyRateHistory.js";
@@ -403,26 +403,35 @@ export async function computeProjectFinancialDashboard(
       prisma.receivable.findMany({
         where: {
           tenantId,
-          projectId: { in: projectIds },
           status: { not: "CANCELADO" },
           projectRevenueId: null,
           NOT: { sourceType: "REIMBURSEMENT" },
-          ...(isMonthly
-            ? {
-                OR: [
-                  { competenceDate: { gte: monthStart, lt: monthEndExclusive } },
+          AND: [
+            {
+              OR: [
+                { projectId: { in: projectIds } },
+                { allocations: { some: { projectId: { in: projectIds } } } },
+              ],
+            },
+            ...(isMonthly
+              ? [
                   {
-                    competenceDate: null,
-                    installments: {
-                      some: {
-                        status: { not: "CANCELADO" },
-                        dueDate: { gte: monthStart, lt: monthEndExclusive },
+                    OR: [
+                      { competenceDate: { gte: monthStart, lt: monthEndExclusive } },
+                      {
+                        competenceDate: null,
+                        installments: {
+                          some: {
+                            status: { not: "CANCELADO" },
+                            dueDate: { gte: monthStart, lt: monthEndExclusive },
+                          },
+                        },
                       },
-                    },
+                    ],
                   },
-                ],
-              }
-            : {}),
+                ]
+              : []),
+          ],
         },
         select: {
           id: true,
@@ -430,10 +439,15 @@ export async function computeProjectFinancialDashboard(
           notes: true,
           contractTitle: true,
           totalAmountCents: true,
+          projectId: true,
           competenceDate: true,
           createdAt: true,
           client: { select: { name: true } },
           financialAccount: { select: { id: true, name: true, dreSubcategory: true } },
+          allocations: {
+            where: { projectId: { in: projectIds } },
+            select: { amountCents: true, projectId: true },
+          },
         },
         orderBy: { createdAt: "asc" },
       }),
@@ -450,9 +464,7 @@ export async function computeProjectFinancialDashboard(
   );
 
   const isFaturamentoRevenue = (revenue: (typeof revenues)[number]) => {
-    const sub = classifyReceivableByAccountSubcategory(
-      revenue.receivable?.financialAccount?.dreSubcategory,
-    );
+    const sub = classifyReceivableRevenueAccount(revenue.receivable?.financialAccount);
     // Sem CR vinculada (receita cadastrada na UI): conta como faturamento.
     if (sub == null) return true;
     return sub === "FATURAMENTO";
@@ -577,15 +589,18 @@ export async function computeProjectFinancialDashboard(
     { accountId: string; accountName: string; children: DashboardDetailRow[]; amount: number }
   >();
   for (const row of projectReceivables) {
-    if (
-      classifyReceivableByAccountSubcategory(row.financialAccount?.dreSubcategory) !==
-      "OUTRAS_RECEITAS"
-    ) {
+    if (classifyReceivableRevenueAccount(row.financialAccount) !== "OUTRAS_RECEITAS") {
       continue;
     }
     const accountId = row.financialAccount?.id ?? "__sem_conta__";
     const accountName = row.financialAccount?.name?.trim() || "Outras receitas";
-    const amount = roundMoney(row.totalAmountCents / 100);
+    // Header do projeto: valor cheio. Só rateio: soma das alocações deste projeto.
+    const amountCents =
+      row.projectId && projectIds.includes(row.projectId)
+        ? row.totalAmountCents
+        : row.allocations.reduce((sum, a) => sum + a.amountCents, 0);
+    if (amountCents <= 0) continue;
+    const amount = roundMoney(amountCents / 100);
     const desc = row.description?.trim() || "";
     const notes = row.notes?.trim() || "";
     const contract = row.contractTitle?.trim() || "";

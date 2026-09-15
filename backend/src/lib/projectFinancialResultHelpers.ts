@@ -8,11 +8,14 @@ import { prisma } from "./prisma.js";
 import {
   computeAccumulatedProjectTaxAmount,
 } from "./projectFinancialDashboardHelpers.js";
-import { classifyReceivableByAccountSubcategory } from "./receivableRevenueClassification.js";
+import { classifyReceivableRevenueAccount } from "./receivableRevenueClassification.js";
 import { buildHourlyRateResolver } from "./userHourlyRateHistory.js";
 
-function isFaturamentoRevenueForTax(dreSubcategory: string | null | undefined): boolean {
-  const sub = classifyReceivableByAccountSubcategory(dreSubcategory);
+function isFaturamentoRevenueForTax(account: {
+  name?: string | null;
+  dreSubcategory?: string | null;
+} | null | undefined): boolean {
+  const sub = classifyReceivableRevenueAccount(account);
   // Sem CR vinculada (receita cadastrada na UI): conta como faturamento.
   if (sub == null) return true;
   return sub === "FATURAMENTO";
@@ -169,7 +172,7 @@ export async function computeProjectFinancialResult(
       taxType: { select: { id: true, name: true, ratePercent: true } },
       receivable: {
         select: {
-          financialAccount: { select: { dreSubcategory: true } },
+          financialAccount: { select: { name: true, dreSubcategory: true } },
         },
       },
     },
@@ -180,7 +183,7 @@ export async function computeProjectFinancialResult(
   const realizadaByProject = await sumReceitaRealizadaByProjectId(tenantId, projectIds);
   const receitaRealizada = [...realizadaByProject.values()].reduce((s, v) => s + v, 0);
   const faturamentoRevenues = revenues.filter((revenue) =>
-    isFaturamentoRevenueForTax(revenue.receivable?.financialAccount?.dreSubcategory),
+    isFaturamentoRevenueForTax(revenue.receivable?.financialAccount),
   );
   const custoImpostos = computeAccumulatedProjectTaxAmount(
     faturamentoRevenues.map((revenue) => ({
@@ -365,7 +368,7 @@ export async function listProjectsFinancialOverview(
         taxType: { select: { id: true, name: true, ratePercent: true } },
         receivable: {
           select: {
-            financialAccount: { select: { dreSubcategory: true } },
+            financialAccount: { select: { name: true, dreSubcategory: true } },
           },
         },
       },
@@ -431,7 +434,7 @@ export async function listProjectsFinancialOverview(
       rootId,
       (receitaPrevistaByRoot.get(rootId) ?? 0) + (rev.expectedRevenue ?? 0),
     );
-    if (isFaturamentoRevenueForTax(rev.receivable?.financialAccount?.dreSubcategory)) {
+    if (isFaturamentoRevenueForTax(rev.receivable?.financialAccount)) {
       const list = taxRevenuesByRoot.get(rootId) ?? [];
       list.push({
         costLines: [],

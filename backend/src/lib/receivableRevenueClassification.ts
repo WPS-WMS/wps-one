@@ -39,7 +39,7 @@ export function isReembolsoReceivableAccountName(name: string | null | undefined
 
 /**
  * Heurística só para seed/migração de contas antigas sem subcategoria.
- * Não usar na importação nem no DRE em runtime.
+ * Preferir `classifyReceivableRevenueAccount` no runtime do DRE/resultado.
  */
 export function inferReceitaSubcategoryFromName(name: string | null | undefined): ReceivableRevenueDreClass {
   const n = normalizeText(name);
@@ -53,4 +53,20 @@ export function inferReceitaSubcategoryFromName(name: string | null | undefined)
     return "OUTRAS_RECEITAS";
   }
   return "FATURAMENTO";
+}
+
+/**
+ * Classifica conta de receita para DRE / Resultado por projeto.
+ * Usa subcategoria do plano de contas; se estiver vazia (tenants antigos),
+ * infere pelo nome (ex.: "Juros/Multa", "Reembolso").
+ */
+export function classifyReceivableRevenueAccount(account: {
+  name?: string | null;
+  dreSubcategory?: string | null;
+} | null | undefined): ReceivableRevenueDreClass | null {
+  const bySub = classifyReceivableByAccountSubcategory(account?.dreSubcategory);
+  if (bySub) return bySub;
+  const name = account?.name?.trim();
+  if (!name) return null;
+  return inferReceitaSubcategoryFromName(name);
 }
