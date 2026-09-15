@@ -54,6 +54,14 @@ type PortalEvent = {
   date: string;
 };
 
+type ProductUpdate = {
+  id: string;
+  title: string;
+  content: string;
+  publishedAt: string;
+  createdAt?: string;
+};
+
 function portalEventDateKey(date: string): string {
   const d = new Date(String(date ?? "").trim());
   if (Number.isNaN(d.getTime())) return "";
@@ -275,7 +283,6 @@ const SLUG = {
   newsletter: "newsletter",
   employee: "colaborador-do-mes",
   awards: "premios",
-  updates: "atualizacoes-wpsone",
   manuals: "manuais",
   politicaDespesa: "politica-despesa",
   politicaLgpd: "politica-lgpd",
@@ -291,7 +298,6 @@ const PORTAL_ITEM_SLUGS: readonly string[] = [
   SLUG.newsletter,
   SLUG.employee,
   SLUG.awards,
-  SLUG.updates,
   SLUG.manuals,
   SLUG.politicaDespesa,
   SLUG.politicaLgpd,
@@ -305,7 +311,7 @@ type PortalMainViewName = "empresa" | "admin" | "manuais" | "templates" | "bibli
 
 /** Seções necessárias por view: o portal só busca o que a aba aberta usa. */
 const PORTAL_VIEW_SLUGS: Record<PortalMainViewName, readonly string[]> = {
-  empresa: [SLUG.news, SLUG.newsletter, SLUG.employee, SLUG.awards, SLUG.updates],
+  empresa: [SLUG.news, SLUG.newsletter, SLUG.employee, SLUG.awards],
   manuais: [SLUG.manuals],
   templates: [SLUG.templates],
   biblioteca: [SLUG.biblioteca],
@@ -387,13 +393,43 @@ function parseInspirationMeta(item: PortalItem): { rank: InspirationRank; points
   };
 }
 
-function inspirationItemByRank(items: PortalItem[]): Record<InspirationRank, PortalItem | null> {
-  const out: Record<InspirationRank, PortalItem | null> = { 1: null, 2: null, 3: null };
+function inspirationItemsByRank(items: PortalItem[]): Record<InspirationRank, PortalItem[]> {
+  const out: Record<InspirationRank, PortalItem[]> = { 1: [], 2: [], 3: [] };
   for (const it of items) {
     const p = parseInspirationMeta(it);
-    if (p) out[p.rank] = it;
+    if (!p) continue;
+    if (it.content?.trim() || String(it.type || "").toLowerCase() === "inspiration") {
+      out[p.rank].push(it);
+    }
   }
+  const byNewest = (a: PortalItem, b: PortalItem) => {
+    const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return tb - ta;
+  };
+  out[1].sort(byNewest);
+  out[2].sort(byNewest);
+  out[3].sort(byNewest);
   return out;
+}
+
+function inspirationItemByRank(items: PortalItem[]): Record<InspirationRank, PortalItem | null> {
+  const lists = inspirationItemsByRank(items);
+  return {
+    1: lists[1][0] ?? null,
+    2: lists[2][0] ?? null,
+    3: lists[3][0] ?? null,
+  };
+}
+
+function sortImagesNewestFirst(items: PortalItem[]): PortalItem[] {
+  return [...items]
+    .filter(isImageItem)
+    .sort((a, b) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return tb - ta;
+    });
 }
 
 function emptyInspirationSlots(): Record<InspirationRank, InspirationSlotDraft> {
@@ -723,8 +759,13 @@ export function PortalCollaborativeDashboard() {
   const [employeeImageFit, setEmployeeImageFit] = useState<EmployeeImageFit>("contain");
   const [employeeFocalX, setEmployeeFocalX] = useState(50);
   const [employeeFocalY, setEmployeeFocalY] = useState(50);
-  const [updateTitleDraft, setUpdateTitleDraft] = useState("");
-  const [updateBodyDraft, setUpdateBodyDraft] = useState("");
+  const [employeeGalleryIndex, setEmployeeGalleryIndex] = useState(0);
+  const [inspirationGalleryIndex, setInspirationGalleryIndex] = useState<Record<InspirationRank, number>>({
+    1: 0,
+    2: 0,
+    3: 0,
+  });
+  const [productUpdates, setProductUpdates] = useState<ProductUpdate[]>([]);
 
   const [evTitle, setEvTitle] = useState("");
   const [evDate, setEvDate] = useState("");
@@ -741,7 +782,24 @@ export function PortalCollaborativeDashboard() {
   const newsItems = itemsBySlug[SLUG.news] ?? [];
   const employeeItems = itemsBySlug[SLUG.employee] ?? [];
   const awardItems = itemsBySlug[SLUG.awards] ?? [];
-  const updateItems = itemsBySlug[SLUG.updates] ?? [];
+  const employeeGallery = useMemo(() => sortImagesNewestFirst(employeeItems), [employeeItems]);
+  const inspirationGalleryByRank = useMemo(() => inspirationItemsByRank(awardItems), [awardItems]);
+
+  useEffect(() => {
+    setEmployeeGalleryIndex((i) => Math.min(i, Math.max(0, employeeGallery.length - 1)));
+  }, [employeeGallery.length]);
+
+  useEffect(() => {
+    setInspirationGalleryIndex((prev) => ({
+      1: Math.min(prev[1], Math.max(0, inspirationGalleryByRank[1].length - 1)),
+      2: Math.min(prev[2], Math.max(0, inspirationGalleryByRank[2].length - 1)),
+      3: Math.min(prev[3], Math.max(0, inspirationGalleryByRank[3].length - 1)),
+    }));
+  }, [
+    inspirationGalleryByRank[1].length,
+    inspirationGalleryByRank[2].length,
+    inspirationGalleryByRank[3].length,
+  ]);
 
   /** Imagem atual no modal simples (WPSer do mês). */
   const currentManageImageItem = useMemo(() => {
@@ -836,6 +894,16 @@ export function PortalCollaborativeDashboard() {
     setUpcomingEvents(Array.isArray(data?.events) ? data.events : []);
   }, []);
 
+  const loadProductUpdates = useCallback(async () => {
+    const res = await apiFetch("/api/product-updates?limit=30");
+    if (!res.ok) {
+      setProductUpdates([]);
+      return;
+    }
+    const data = (await res.json()) as { items?: ProductUpdate[] };
+    setProductUpdates(Array.isArray(data?.items) ? data.items : []);
+  }, []);
+
   /** Recarrega o que já foi carregado (usado depois de criar/editar/excluir). */
   const refreshAll = useCallback(async () => {
     setLoadError(null);
@@ -849,6 +917,7 @@ export function PortalCollaborativeDashboard() {
         loadBootstrap(slugs),
         loadUpcomingEvents(),
         loadCalendarMeta(month, year),
+        loadProductUpdates(),
       ]);
       setNewsPageIndex(0);
     } catch (e: unknown) {
@@ -856,7 +925,7 @@ export function PortalCollaborativeDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [loadBootstrap, loadUpcomingEvents, loadCalendarMeta]);
+  }, [loadBootstrap, loadUpcomingEvents, loadCalendarMeta, loadProductUpdates]);
 
   // Carga inicial: só as seções da tela da empresa + próximos eventos.
   // Os eventos/aniversários do mês vêm do efeito de calendário abaixo.
@@ -866,7 +935,11 @@ export function PortalCollaborativeDashboard() {
       setLoadError(null);
       setLoading(true);
       try {
-        await Promise.all([loadBootstrap(PORTAL_VIEW_SLUGS.empresa), loadUpcomingEvents()]);
+        await Promise.all([
+          loadBootstrap(PORTAL_VIEW_SLUGS.empresa),
+          loadUpcomingEvents(),
+          loadProductUpdates(),
+        ]);
       } catch (e: unknown) {
         if (!cancelled) setLoadError(e instanceof Error ? e.message : "Erro ao carregar.");
       } finally {
@@ -876,7 +949,7 @@ export function PortalCollaborativeDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [loadBootstrap, loadUpcomingEvents]);
+  }, [loadBootstrap, loadUpcomingEvents, loadProductUpdates]);
 
   useEffect(() => {
     void loadCalendarMeta(calMonth, calYear);
@@ -1002,8 +1075,6 @@ export function PortalCollaborativeDashboard() {
     setInspirationSlots(slotsFromAwardItems(awardItems));
   }, [manageSlug, awardItems]);
 
-  const inspirationByRank = useMemo(() => inspirationItemByRank(awardItems), [awardItems]);
-
   const newsCount = newsCarousel.length;
   const newsPageCount = Math.max(1, newsCount);
   const activeNews = newsCarousel[newsPageIndex] ?? newsCarousel[0];
@@ -1053,7 +1124,7 @@ export function PortalCollaborativeDashboard() {
     return uploadPortalImage(file);
   }
 
-  /** Substitui a imagem do WPSer do mês (uma imagem por seção). */
+  /** Anexa nova imagem ao WPSer do mês (mantém histórico para Voltar). */
   async function replaceOrCreatePortalSectionImage(file: File) {
     const slug = manageSlug;
     if (!slug || !PORTAL_IMAGE_SECTION_SLUGS.has(slug)) return;
@@ -1065,52 +1136,32 @@ export function PortalCollaborativeDashboard() {
     try {
       const content = await uploadPortalImage(file);
       const title = PORTAL_IMAGE_DEFAULT_TITLE[slug] || "Imagem";
-      const items = itemsBySlug[slug] ?? [];
-      const imageItems = items.filter(isImageItem);
       const metadata =
         slug === SLUG.employee
-          ? buildEmployeeImageMetadata(imageItems[0]?.metadata, {
+          ? buildEmployeeImageMetadata(null, {
               fit: employeeImageFit,
               focalX: employeeFocalX,
               focalY: employeeFocalY,
             })
           : null;
 
-      if (imageItems.length > 0) {
-        const first = imageItems[0];
-        const res = await apiFetch(`/api/portal/items/${first.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title,
-            content,
-            type: "image",
-            metadata,
-          }),
-        });
-        const errBody = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(errBody?.error || "Erro ao atualizar imagem.");
-        for (const extra of imageItems.slice(1)) {
-          await apiFetch(`/api/portal/items/${extra.id}`, { method: "DELETE" });
-        }
-      } else {
-        const res = await apiFetch("/api/portal/items", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sectionId,
-            title,
-            content,
-            type: "image",
-            metadata,
-            isActive: true,
-          }),
-        });
-        const errBody = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar imagem.");
-      }
+      const res = await apiFetch("/api/portal/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sectionId,
+          title,
+          content,
+          type: "image",
+          metadata,
+          isActive: true,
+        }),
+      });
+      const errBody = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar imagem.");
 
       await refreshAll();
+      setEmployeeGalleryIndex(0);
       if (portalImageFileInputRef.current) portalImageFileInputRef.current.value = "";
     } catch (e: unknown) {
       setItemError(e instanceof Error ? e.message : "Erro ao enviar.");
@@ -1742,55 +1793,25 @@ function PortalItemImage({
     setItemError(null);
     try {
       const url = await uploadPortalImage(file);
-      let merged!: InspirationSlotDraft;
-      setInspirationSlots((prev) => {
-        merged = { ...prev[rank], imageUrl: url };
-        return { ...prev, [rank]: merged };
-      });
-      await persistInspirationSlot(rank, merged, sectionId);
-      await refreshAll();
-      if (inspirationFileInputRef.current) inspirationFileInputRef.current.value = "";
-    } catch (e: unknown) {
-      setItemError(e instanceof Error ? e.message : "Erro ao enviar foto.");
-    } finally {
-      setSavingItem(false);
-    }
-  }
-
-  async function saveWpsOneUpdate() {
-    const sectionId = sectionIdBySlug[SLUG.updates];
-    if (!sectionId) {
-      setItemError("Seção de atualizações não encontrada. Clique em criar seções padrão.");
-      return;
-    }
-    const title = updateTitleDraft.trim();
-    const content = updateBodyDraft.trim();
-    if (!title) {
-      setItemError("Informe o título da atualização.");
-      return;
-    }
-    setSavingItem(true);
-    setItemError(null);
-    try {
       const res = await apiFetch("/api/portal/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sectionId,
-          title,
-          content,
-          type: "update",
+          title: `Pódio — ${rank}º lugar`,
+          content: url,
+          type: "inspiration",
+          metadata: { rank },
           isActive: true,
-          metadata: { publishedAt: new Date().toISOString() },
         }),
       });
       const errBody = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(errBody?.error || "Erro ao publicar atualização.");
-      setUpdateTitleDraft("");
-      setUpdateBodyDraft("");
+      if (!res.ok) throw new Error(errBody?.error || "Erro ao salvar imagem.");
       await refreshAll();
+      setInspirationGalleryIndex((prev) => ({ ...prev, [rank]: 0 }));
+      if (inspirationFileInputRef.current) inspirationFileInputRef.current.value = "";
     } catch (e: unknown) {
-      setItemError(e instanceof Error ? e.message : "Erro ao publicar.");
+      setItemError(e instanceof Error ? e.message : "Erro ao enviar foto.");
     } finally {
       setSavingItem(false);
     }
@@ -2384,7 +2405,9 @@ function PortalItemImage({
               </div>
               <div className="flex flex-wrap items-start justify-center gap-5 sm:gap-8 px-1 pb-1">
                 {([1, 2, 3] as const).map((rank) => {
-                  const item = inspirationByRank[rank];
+                  const gallery = inspirationGalleryByRank[rank];
+                  const idx = Math.min(inspirationGalleryIndex[rank], Math.max(0, gallery.length - 1));
+                  const item = gallery[idx] ?? null;
                   const photo = item?.content?.trim() || "";
                   return (
                     <div key={rank} className="flex w-[128px] shrink-0 flex-col items-center sm:w-[138px]">
@@ -2396,20 +2419,55 @@ function PortalItemImage({
                           ) : (
                             <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-[color:var(--surface-2)] px-2 text-center text-[9px] font-medium text-[color:var(--muted-foreground)]">
                               <ImagePlus className="h-4 w-4 opacity-60" />
-                              Imagem
+                              Anexar
                             </div>
                           )}
                         </div>
                         <PodiumMedal rank={rank} size="sm" />
                       </div>
-                      <p className="mt-2 text-center text-[10px] font-bold uppercase tracking-wide text-sky-800">
-                        {rank}º lugar
-                      </p>
+                      {gallery.length > 1 ? (
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            aria-label="Voltar imagem anterior"
+                            disabled={idx >= gallery.length - 1}
+                            onClick={() =>
+                              setInspirationGalleryIndex((prev) => ({
+                                ...prev,
+                                [rank]: Math.min(gallery.length - 1, prev[rank] + 1),
+                              }))
+                            }
+                            className="rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] p-1 text-[color:var(--foreground)] disabled:opacity-35"
+                          >
+                            <ChevronLeft className="h-3.5 w-3.5" />
+                          </button>
+                          <span className="text-[9px] tabular-nums text-[color:var(--muted-foreground)]">
+                            {idx + 1}/{gallery.length}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label="Próxima imagem"
+                            disabled={idx <= 0}
+                            onClick={() =>
+                              setInspirationGalleryIndex((prev) => ({
+                                ...prev,
+                                [rank]: Math.max(0, prev[rank] - 1),
+                              }))
+                            }
+                            className="rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] p-1 text-[color:var(--foreground)] disabled:opacity-35"
+                          >
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="mt-2 h-6" />
+                      )}
                     </div>
                   );
                 })}
               </div>
-              {!canEdit && ![1, 2, 3].some((r) => inspirationByRank[r as InspirationRank]) && (
+              {!canEdit &&
+                ![1, 2, 3].some((r) => inspirationGalleryByRank[r as InspirationRank].length > 0) && (
                 <p className="text-center text-[10px] text-[color:var(--muted-foreground)]">Em breve o pódio do mês será publicado aqui.</p>
               )}
             </section>
@@ -2609,27 +2667,58 @@ function PortalItemImage({
                   </button>
                 )}
               </div>
-              <div className="w-full overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)]">
-                {employeeItems[0] && isImageItem(employeeItems[0]) ? (
+              <div className="relative w-full overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)]">
+                {employeeGallery.length > 0 ? (
                   (() => {
-                    const it = employeeItems[0];
+                    const idx = Math.min(employeeGalleryIndex, employeeGallery.length - 1);
+                    const it = employeeGallery[idx]!;
                     const fit = parseEmployeeImageFit(it.metadata);
                     const focal = parseEmployeeFocal(it.metadata);
                     return (
-                      <PortalItemImage
-                        itemId={it.id}
-                        srcRaw={it.content}
-                        alt={it.title}
-                        className={`w-full max-w-full bg-[color:var(--surface-2)] max-h-[min(520px,60vh)] ${
-                          fit === "cover" ? "h-[min(520px,60vh)] object-cover" : "h-auto object-contain"
-                        }`}
-                        style={fit === "cover" ? { objectPosition: `${focal.x}% ${focal.y}%` } : undefined}
-                      />
+                      <>
+                        <PortalItemImage
+                          itemId={it.id}
+                          srcRaw={it.content}
+                          alt=""
+                          className={`w-full max-w-full bg-[color:var(--surface-2)] max-h-[min(520px,60vh)] ${
+                            fit === "cover" ? "h-[min(520px,60vh)] object-cover" : "h-auto object-contain"
+                          }`}
+                          style={fit === "cover" ? { objectPosition: `${focal.x}% ${focal.y}%` } : undefined}
+                        />
+                        {employeeGallery.length > 1 ? (
+                          <div className="flex items-center justify-between gap-2 border-t border-[color:var(--border)] px-3 py-2">
+                            <button
+                              type="button"
+                              disabled={idx >= employeeGallery.length - 1}
+                              onClick={() =>
+                                setEmployeeGalleryIndex((i) => Math.min(employeeGallery.length - 1, i + 1))
+                              }
+                              className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-[11px] font-semibold text-[color:var(--foreground)] disabled:opacity-40"
+                            >
+                              <ChevronLeft className="h-3.5 w-3.5" />
+                              Voltar
+                            </button>
+                            <span className="text-[11px] tabular-nums text-[color:var(--muted-foreground)]">
+                              {idx + 1} de {employeeGallery.length}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={idx <= 0}
+                              onClick={() => setEmployeeGalleryIndex((i) => Math.max(0, i - 1))}
+                              className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-[11px] font-semibold text-[color:var(--foreground)] disabled:opacity-40"
+                            >
+                              Avançar
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : null}
+                      </>
                     );
                   })()
                 ) : (
                   <div className="flex min-h-[240px] w-full max-w-full flex-col items-center justify-center gap-2 text-center text-[color:var(--muted-foreground)]">
-                    <p className="text-xs px-4">Arte do WPSer do mês (imagem).</p>
+                    <ImagePlus className="h-8 w-8 opacity-50" />
+                    <p className="text-xs px-4">Anexe a imagem do WPSer do mês.</p>
                   </div>
                 )}
               </div>
@@ -2645,42 +2734,16 @@ function PortalItemImage({
                 Atualizações do WPS One
               </h2>
             </div>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() => {
-                  setManageSlug(SLUG.updates);
-                  setItemError(null);
-                  setUpdateTitleDraft("");
-                  setUpdateBodyDraft("");
-                }}
-                className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/15 px-3 py-1.5 text-[11px] font-semibold text-violet-700 hover:bg-violet-500/25"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Gerenciar
-              </button>
-            )}
           </div>
           <div className="px-4 py-4 sm:px-5">
-            {updateItems.length === 0 ? (
+            {productUpdates.length === 0 ? (
               <p className="text-sm text-[color:var(--muted-foreground)]">
                 Em breve publicaremos novidades e melhorias do produto por aqui.
               </p>
             ) : (
               <ul className="space-y-3">
-                {updateItems.map((item) => {
-                  const publishedAt =
-                    item.metadata &&
-                    typeof item.metadata === "object" &&
-                    !Array.isArray(item.metadata)
-                      ? (item.metadata as Record<string, unknown>).publishedAt
-                      : undefined;
-                  const whenRaw =
-                    typeof publishedAt === "string" && publishedAt.trim()
-                      ? publishedAt.trim()
-                      : typeof item.createdAt === "string"
-                        ? item.createdAt
-                        : "";
+                {productUpdates.map((item) => {
+                  const whenRaw = item.publishedAt || item.createdAt || "";
                   const when = whenRaw
                     ? new Date(whenRaw).toLocaleString("pt-BR", {
                         day: "2-digit",
@@ -2823,7 +2886,6 @@ function PortalItemImage({
                 {manageSlug === SLUG.news && "Notícias"}
                 {manageSlug === SLUG.employee && "WPSer do mês"}
                 {manageSlug === SLUG.awards && "Pontos de Inspiração"}
-                {manageSlug === SLUG.updates && "Atualizações do WPS One"}
               </h3>
               <button
                 type="button"
@@ -3233,82 +3295,10 @@ function PortalItemImage({
               </div>
             )}
 
-            {manageSlug === SLUG.updates && (
-              <div className="mb-4 space-y-4">
-                <p className="text-[11px] text-[color:var(--muted-foreground)]">
-                  Publique novidades do produto com título e descrição. A data e o horário são registrados na publicação.
-                </p>
-                <label className="block text-[11px] text-[color:var(--muted-foreground)]">
-                  Título
-                  <input
-                    type="text"
-                    value={updateTitleDraft}
-                    onChange={(e) => setUpdateTitleDraft(e.target.value)}
-                    placeholder="Ex.: Novo fluxo de assinatura"
-                    className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)]"
-                  />
-                </label>
-                <label className="block text-[11px] text-[color:var(--muted-foreground)]">
-                  Descrição
-                  <textarea
-                    value={updateBodyDraft}
-                    onChange={(e) => setUpdateBodyDraft(e.target.value)}
-                    rows={4}
-                    placeholder="O que mudou e para quem..."
-                    className="mt-1 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)]"
-                  />
-                </label>
-                {itemError && <p className="text-xs text-red-400">{itemError}</p>}
-                <button
-                  type="button"
-                  disabled={savingItem}
-                  onClick={() => void saveWpsOneUpdate()}
-                  className="w-full rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white hover:bg-violet-500 disabled:opacity-50"
-                >
-                  {savingItem ? "Publicando…" : "Publicar atualização"}
-                </button>
-                <div className="border-t border-[color:var(--border)] pt-3">
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-                    Publicadas
-                  </p>
-                  {updateItems.length === 0 ? (
-                    <p className="text-xs text-[color:var(--muted-foreground)]">Nenhuma atualização ainda.</p>
-                  ) : (
-                    <ul className="max-h-56 space-y-2 overflow-y-auto">
-                      {updateItems.map((it) => (
-                        <li
-                          key={it.id}
-                          className="flex items-start justify-between gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-2)] px-3 py-2"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-semibold text-[color:var(--foreground)]">{it.title}</p>
-                            <p className="mt-0.5 text-[10px] text-[color:var(--muted-foreground)]">
-                              {it.createdAt
-                                ? new Date(it.createdAt).toLocaleString("pt-BR")
-                                : "—"}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            disabled={savingItem}
-                            onClick={() => setConfirmDeleteItem(it)}
-                            className="shrink-0 rounded-lg border border-red-500/30 bg-red-500/10 p-1.5 text-red-200 hover:bg-red-500/20 disabled:opacity-50"
-                            aria-label="Excluir atualização"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            )}
-
             {manageSlug === SLUG.awards && (
               <div className="mb-4 space-y-4">
                 <p className="text-[11px] text-[color:var(--muted-foreground)]">
-                  Anexe uma imagem para cada lugar do pódio (1º, 2º e 3º). Sem nomes — só a arte.
+                  Anexe uma imagem por lugar do pódio. Cada novo anexo entra no histórico — use as setas no card para voltar às imagens anteriores.
                 </p>
                 <input
                   ref={inspirationFileInputRef}
@@ -3388,7 +3378,7 @@ function PortalItemImage({
             {manageSlug && PORTAL_IMAGE_SECTION_SLUGS.has(manageSlug) && (
               <div className="mb-4 space-y-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-4">
                 <p className="text-[11px] text-[color:var(--muted-foreground)]">
-                  Envie uma imagem (PNG, JPG, WebP ou GIF). Se já existir uma imagem, o novo arquivo substitui a anterior.
+                  Anexe uma imagem (PNG, JPG, WebP ou GIF). Novas imagens entram no histórico — use <strong className="text-[color:var(--foreground)]">Voltar</strong> no card para ver as anteriores.
                 </p>
                 <input
                   ref={portalImageFileInputRef}

@@ -211,8 +211,7 @@ async function main() {
     { slug: "noticias", title: "Notícias", order: 0 },
     { slug: "colaborador-do-mes", title: "WPSer do mês", order: 1 },
     { slug: "premios", title: "Pontos de Inspiração", order: 2 },
-    { slug: "atualizacoes-wpsone", title: "Atualizações WPS One", order: 3 },
-    { slug: "manuais", title: "Manuais e documentos", order: 4 },
+    { slug: "manuais", title: "Manuais e documentos", order: 3 },
   ];
   for (const ps of portalSections) {
     await prisma.portalSection.upsert({

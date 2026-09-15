@@ -484,6 +484,18 @@ model PortalEvent {
   @@index([tenantId, date])
 }
 
+/** Atualizações globais do produto (visíveis em todos os tenants; só PLATFORM_ADMIN publica). */
+model ProductUpdate {
+  id          String   @id @default(cuid())
+  title       String
+  content     String   @default("")
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([publishedAt])
+}
+
 model Client {
   id        String   @id @default(cuid())
   name      String
