@@ -64,7 +64,11 @@ export default function PlatformHomePage() {
     cnpj: "",
     phone: "",
     email: "",
+    planId: "",
   });
+  const [plans, setPlans] = useState<
+    { id: string; label: string; pricePerUserFormatted: string; moduleLabels?: string[] }[]
+  >([]);
 
   const loadTenants = useCallback(async () => {
     setLoading(true);
@@ -87,6 +91,15 @@ export default function PlatformHomePage() {
         )
         .slice(0, 8),
     );
+    const planList = Array.isArray(body?.plans) ? body.plans : [];
+    setPlans(
+      planList.map((p: { id: string; label?: string; name?: string; pricePerUserFormatted?: string; moduleLabels?: string[] }) => ({
+        id: p.id,
+        label: p.label || p.name || p.id,
+        pricePerUserFormatted: p.pricePerUserFormatted || "—",
+        moduleLabels: p.moduleLabels,
+      })),
+    );
     setLoading(false);
   }, []);
 
@@ -94,15 +107,41 @@ export default function PlatformHomePage() {
     void loadTenants();
   }, [loadTenants]);
 
-  function openModal() {
-    setForm({ companyName: "", cnpj: "", phone: "", email: "" });
+  async function openModal() {
     setFormError(null);
     setCreatedCreds(null);
+    let available = plans;
+    if (available.length === 0) {
+      const r = await apiFetch("/api/platform/plans");
+      const body = await r.json().catch(() => null);
+      if (r.ok && Array.isArray(body?.plans)) {
+        available = body.plans
+          .filter((p: { active?: boolean }) => p.active !== false)
+          .map((p: { id: string; label?: string; name?: string; pricePerUserFormatted?: string; moduleLabels?: string[] }) => ({
+            id: p.id,
+            label: p.label || p.name || p.id,
+            pricePerUserFormatted: p.pricePerUserFormatted || "—",
+            moduleLabels: p.moduleLabels,
+          }));
+        setPlans(available);
+      }
+    }
+    setForm({
+      companyName: "",
+      cnpj: "",
+      phone: "",
+      email: "",
+      planId: available[0]?.id ?? "",
+    });
     setModalOpen(true);
   }
 
   async function submitCompany(e: React.FormEvent) {
     e.preventDefault();
+    if (!form.planId) {
+      setFormError("Selecione o plano inicial da empresa.");
+      return;
+    }
     setSaving(true);
     setFormError(null);
     const r = await apiFetch("/api/platform/tenants", {
@@ -113,6 +152,7 @@ export default function PlatformHomePage() {
         cnpj: form.cnpj,
         phone: form.phone,
         email: form.email.trim(),
+        planId: form.planId,
       }),
     });
     const body = await r.json().catch(() => null);
@@ -428,6 +468,35 @@ export default function PlatformHomePage() {
                   <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
                     Este e-mail será o administrador do tenant e poderá cadastrar os demais usuários.
                   </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                    Plano inicial
+                  </label>
+                  <select
+                    required
+                    className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                    style={{ borderColor: "var(--border)" }}
+                    value={form.planId}
+                    onChange={(e) => setForm((f) => ({ ...f, planId: e.target.value }))}
+                  >
+                    <option value="">Selecione um plano</option>
+                    {plans.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label} — {p.pricePerUserFormatted}/usuário
+                        {p.moduleLabels?.length ? ` (${p.moduleLabels.join(", ")})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {plans.length === 0 ? (
+                    <p className="mt-1 text-[11px] text-amber-700">
+                      Cadastre um plano ativo na aba Planos antes de criar a empresa.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                      O cliente já entra com os módulos deste plano liberados.
+                    </p>
+                  )}
                 </div>
 
                 {formError ? <p className="text-sm text-red-600">{formError}</p> : null}

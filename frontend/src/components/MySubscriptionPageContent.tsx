@@ -156,7 +156,11 @@ export function MySubscriptionPageContent() {
     setPlan(row.subscription.planId ?? row.subscription.plan ?? "");
     setPaymentMethod(row.subscription.paymentMethod ?? "");
     setSaveMsg("Assinatura atualizada.");
-    void refreshSession?.();
+    await refreshSession?.();
+    // Garante menus/rotas com os módulos do novo plano.
+    if (typeof window !== "undefined") {
+      window.location.reload();
+    }
   }
 
   async function cancelSubscription() {

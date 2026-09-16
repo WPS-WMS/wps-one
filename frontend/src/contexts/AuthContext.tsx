@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { apiFetch, getToken, clearToken } from "@/lib/api";
 import { clearSessionActivity, IDLE_LOGIN_QUERY, isSessionIdle } from "@/lib/idleSession";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
+import {
+  isFeatureAllowedByTenantModules,
+  type TenantModulesState,
+} from "@/lib/tenantModules";
 
 type User = {
   id: string;
@@ -15,6 +19,7 @@ type User = {
   updatedAt?: string;
   tenantId?: string;
   allowedFeatures?: string[];
+  tenantModules?: TenantModulesState | null;
   platformAdmin?: boolean;
   cargo?: string;
   cargaHorariaSemanal?: number;
@@ -151,6 +156,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const can = useCallback((featureId: string): boolean => {
     if (!user) return false;
+    if (!isFeatureAllowedByTenantModules(user.tenantModules, featureId)) {
+      return false;
+    }
     const list = user.allowedFeatures;
     // Preferir a lista do servidor (já filtra módulos do plano, inclusive SUPER_ADMIN).
     if (Array.isArray(list)) {

@@ -279,11 +279,30 @@ platformRouter.post("/tenants", requirePlatformAdmin, async (req, res) => {
     const temporaryPassword = `Wps${randomBytes(4).toString("hex")}!`;
     const passwordHash = await hashPassword(temporaryPassword);
 
+    const planRaw = body.planId ?? body.plan;
+    if (planRaw === undefined || planRaw === null || planRaw === "" || planRaw === "none") {
+      res.status(400).json({ error: "Selecione o plano inicial da empresa." });
+      return;
+    }
+    const planRecord = await findPlatformPlanById(String(planRaw));
+    if (!planRecord || !planRecord.active) {
+      res.status(400).json({ error: "Plano inválido ou inativo." });
+      return;
+    }
+
+    const startedAt = new Date();
+    const nextPaymentAt = computeNextSubscriptionPaymentAt(startedAt);
+
     const created = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
           name: companyName,
           slug,
+          subscriptionPlanId: planRecord.id,
+          subscriptionPlan: planRecord.code ?? planRecord.name,
+          subscriptionStartedAt: startedAt,
+          subscriptionNextPaymentAt: nextPaymentAt,
+          subscriptionStatus: "active",
         },
       });
 

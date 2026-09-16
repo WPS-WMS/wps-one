@@ -127,6 +127,13 @@ authRouter.post("/login", async (req, res) => {
     }
 
     const role = user.role as RoleId;
+    let tenantModulesPayload: {
+      projetos: boolean;
+      financeiro: boolean;
+      portal: boolean;
+      locked: boolean;
+      status: string;
+    } | null = null;
     if (role !== "PLATFORM_ADMIN") {
       const modules = await getTenantModules(user.tenantId);
       if (modules.locked) {
@@ -137,6 +144,13 @@ authRouter.post("/login", async (req, res) => {
         });
         return;
       }
+      tenantModulesPayload = {
+        projetos: modules.projetos,
+        financeiro: modules.financeiro,
+        portal: modules.portal,
+        locked: modules.locked,
+        status: modules.status,
+      };
     }
 
     devLog("[AUTH] Login successful");
@@ -169,6 +183,7 @@ authRouter.post("/login", async (req, res) => {
         tenantId: user.tenantId,
         mustChangePassword: user.mustChangePassword ?? true,
         allowedFeatures,
+        tenantModules: tenantModulesPayload,
       },
     });
   } catch (err) {
@@ -242,6 +257,13 @@ authRouter.get("/me", async (req, res) => {
       return;
     }
     const role = user.role as RoleId;
+    let tenantModulesPayload: {
+      projetos: boolean;
+      financeiro: boolean;
+      portal: boolean;
+      locked: boolean;
+      status: string;
+    } | null = null;
     if (role !== "PLATFORM_ADMIN") {
       const modules = await getTenantModules(user.tenantId);
       if (modules.locked) {
@@ -252,6 +274,13 @@ authRouter.get("/me", async (req, res) => {
         });
         return;
       }
+      tenantModulesPayload = {
+        projetos: modules.projetos,
+        financeiro: modules.financeiro,
+        portal: modules.portal,
+        locked: modules.locked,
+        status: modules.status,
+      };
     }
     const allowedFeatures = await getAllowedFeaturesForUser({ tenantId: user.tenantId, role });
     const { isPlatformAdmin } = await import("../lib/platformAdmin.js");
@@ -260,7 +289,12 @@ authRouter.get("/me", async (req, res) => {
       role: user.role,
       tenantId: user.tenantId,
     });
-    res.json({ ...user, allowedFeatures, platformAdmin });
+    res.json({
+      ...user,
+      allowedFeatures,
+      platformAdmin,
+      tenantModules: tenantModulesPayload,
+    });
   } catch (err) {
     const code = (err as any)?.code;
     if (code === "P1001") {

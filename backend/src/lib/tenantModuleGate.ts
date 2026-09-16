@@ -81,6 +81,7 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
       subscriptionStatus: true,
       subscriptionAccessUntil: true,
       subscriptionPlanId: true,
+      subscriptionPlan: true,
       platformPlan: true,
     },
   });
@@ -111,6 +112,26 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
     }
   }
 
+  let plan = (tenant.platformPlan as PlatformPlanRecord | null) ?? null;
+
+  // Garante leitura do plano mesmo se a relação não veio preenchida.
+  if (!plan && tenant.subscriptionPlanId) {
+    plan = (await prisma.platformPlan.findUnique({
+      where: { id: tenant.subscriptionPlanId },
+    })) as PlatformPlanRecord | null;
+  }
+  if (!plan && tenant.subscriptionPlan) {
+    const code = String(tenant.subscriptionPlan).trim();
+    plan = (await prisma.platformPlan.findFirst({
+      where: {
+        OR: [
+          { code: { equals: code, mode: "insensitive" } },
+          { name: { equals: code, mode: "insensitive" } },
+        ],
+      },
+    })) as PlatformPlanRecord | null;
+  }
+
   if (status === "locked") {
     return {
       projetos: false,
@@ -119,12 +140,23 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
       locked: true,
       status: "locked",
       accessUntil: accessUntil ? accessUntil.toISOString() : null,
-      plan: (tenant.platformPlan as PlatformPlanRecord | null) ?? null,
+      plan,
     };
   }
 
-  const plan = (tenant.platformPlan as PlatformPlanRecord | null) ?? null;
-  const modules = planModulesFromRecord(plan);
+  const hasSubscription =
+    !!tenant.subscriptionPlanId ||
+    status === "active" ||
+    status === "canceling" ||
+    !!tenant.subscriptionPlan;
+
+  // Com assinatura ativa/indicada: usa módulos do plano. Sem plano resolvido → bloqueia módulos
+  // (evita liberar tudo por falha de vínculo). Sem assinatura → legado permissivo.
+  const modules = hasSubscription
+    ? plan
+      ? planModulesFromRecord(plan)
+      : { projetos: false, financeiro: false, portal: false }
+    : planModulesFromRecord(null);
 
   return {
     ...modules,
