@@ -314,6 +314,34 @@ portalRouter.get("/events", async (req, res) => {
 
 const ensurePortalAdmin = requireFeature("portal.corporativo.editar");
 
+// PATCH /api/portal/sections/:id — renomear seção (ex.: título do card WPSer / destaques)
+portalRouter.patch("/sections/:id", ensurePortalAdmin, async (req, res) => {
+  const user = req.user;
+  const id = String(req.params.id ?? "").trim();
+  const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+  if (!id) {
+    res.status(400).json({ error: "Seção inválida." });
+    return;
+  }
+  if (!title || title.length > 120) {
+    res.status(400).json({ error: "Informe um nome do card (até 120 caracteres)." });
+    return;
+  }
+  const existing = await prisma.portalSection.findFirst({
+    where: { id, tenantId: user.tenantId },
+    select: { id: true },
+  });
+  if (!existing) {
+    res.status(404).json({ error: "Seção não encontrada." });
+    return;
+  }
+  const updated = await prisma.portalSection.update({
+    where: { id },
+    data: { title },
+  });
+  res.json(updated);
+});
+
 /** Seções padrão do intranet (slug estável para o front). */
 const DEFAULT_PORTAL_SECTIONS: Array<{ slug: string; title: string; order: number }> = [
   { slug: "noticias", title: "Notícias", order: 0 },
@@ -342,7 +370,8 @@ portalRouter.post("/bootstrap-sections", ensurePortalAdmin, async (req, res) => 
         title: s.title,
         order: s.order,
       },
-      update: { title: s.title, order: s.order },
+      // Não sobrescreve título customizado pelo cliente.
+      update: { order: s.order },
     });
     created.push(s.slug);
   }

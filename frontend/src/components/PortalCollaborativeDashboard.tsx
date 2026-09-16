@@ -773,6 +773,8 @@ export function PortalCollaborativeDashboard() {
   const [awardsGalleryIndex, setAwardsGalleryIndex] = useState(0);
   const [awardsAutoplay, setAwardsAutoplay] = useState(false);
   const [awardsAutoplayReady, setAwardsAutoplayReady] = useState(false);
+  const [cardTitleDraft, setCardTitleDraft] = useState("");
+  const [savingCardTitle, setSavingCardTitle] = useState(false);
   const [productUpdates, setProductUpdates] = useState<ProductUpdate[]>([]);
 
   const [evTitle, setEvTitle] = useState("");
@@ -786,6 +788,15 @@ export function PortalCollaborativeDashboard() {
     for (const s of sections) m[s.slug] = s.id;
     return m;
   }, [sections]);
+
+  const sectionTitleBySlug = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const s of sections) m[s.slug] = s.title?.trim() || s.slug;
+    return m;
+  }, [sections]);
+
+  const employeeCardTitle = sectionTitleBySlug[SLUG.employee] || "WPSer do mês";
+  const awardsCardTitle = sectionTitleBySlug[SLUG.awards] || "Destaques";
 
   const newsItems = itemsBySlug[SLUG.news] ?? [];
   const employeeItems = itemsBySlug[SLUG.employee] ?? [];
@@ -827,6 +838,12 @@ export function PortalCollaborativeDashboard() {
     }, 5000);
     return () => window.clearInterval(id);
   }, [awardsAutoplay, awardsGallery.length]);
+
+  useEffect(() => {
+    if (!manageSlug || !PORTAL_IMAGE_SECTION_SLUGS.has(manageSlug)) return;
+    const fallback = manageSlug === SLUG.employee ? "WPSer do mês" : "Pontos de Inspiração";
+    setCardTitleDraft(sectionTitleBySlug[manageSlug] || fallback);
+  }, [manageSlug, sectionTitleBySlug]);
 
   /** Imagem atual no modal simples (WPSer do mês). */
   const currentManageImageItem = useMemo(() => {
@@ -1133,6 +1150,37 @@ export function PortalCollaborativeDashboard() {
 
   async function uploadPortalMedia(file: File): Promise<string> {
     return uploadPortalImage(file);
+  }
+
+  async function saveCardSectionTitle() {
+    if (!manageSlug || !PORTAL_IMAGE_SECTION_SLUGS.has(manageSlug)) return;
+    const sectionId = sectionIdBySlug[manageSlug];
+    if (!sectionId) return;
+    const title = cardTitleDraft.trim();
+    if (!title) {
+      setItemError("Informe o nome do card.");
+      return;
+    }
+    setSavingCardTitle(true);
+    setItemError(null);
+    try {
+      const res = await apiFetch(`/api/portal/sections/${sectionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(typeof body?.error === "string" ? body.error : "Não foi possível salvar o nome.");
+      }
+      setSections((prev) =>
+        prev.map((s) => (s.id === sectionId ? { ...s, title: body?.title ?? title } : s)),
+      );
+    } catch (err) {
+      setItemError(err instanceof Error ? err.message : "Não foi possível salvar o nome.");
+    } finally {
+      setSavingCardTitle(false);
+    }
   }
 
   /** Anexa nova imagem ao WPSer do mês (mantém histórico para Voltar). */
@@ -2214,12 +2262,13 @@ function PortalItemImage({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3 lg:col-span-9">
-            <section className="group relative overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-sm sm:col-span-1">
+            <section className="group relative flex flex-col overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-sm sm:col-span-1">
               {canEdit && (
                 <div className="absolute right-3 top-3 z-10">
                   <PortalHoverManageButton
                     onClick={() => {
                       setManageSlug(SLUG.employee);
+                      setCardTitleDraft(sectionTitleBySlug[SLUG.employee] || "WPSer do mês");
                       setItemError(null);
                     }}
                   />
@@ -2280,10 +2329,13 @@ function PortalItemImage({
                   </div>
                 )}
               </div>
+              <h2 className="mt-3 truncate px-0.5 text-center text-sm font-semibold text-[color:var(--foreground)]">
+                {employeeCardTitle}
+              </h2>
             </section>
 
-            <section className="group relative overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-sm sm:col-span-2">
-              <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
+            <section className="group relative flex flex-col overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-sm sm:col-span-2">
+              <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
                 {awardsGallery.length > 1 ? (
                   <button
                     type="button"
@@ -2311,17 +2363,16 @@ function PortalItemImage({
                     </span>
                   </button>
                 ) : null}
-              </div>
-              {canEdit && (
-                <div className="absolute right-3 top-3 z-10">
+                {canEdit && (
                   <PortalHoverManageButton
                     onClick={() => {
                       setManageSlug(SLUG.awards);
+                      setCardTitleDraft(sectionTitleBySlug[SLUG.awards] || "Pontos de Inspiração");
                       setItemError(null);
                     }}
                   />
-                </div>
-              )}
+                )}
+              </div>
               <div className="relative w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-2)]">
                 {awardsGallery.length > 0 ? (
                   (() => {
@@ -2376,6 +2427,9 @@ function PortalItemImage({
                   </div>
                 )}
               </div>
+              <h2 className="mt-3 truncate px-0.5 text-center text-sm font-semibold text-[color:var(--foreground)]">
+                {awardsCardTitle}
+              </h2>
             </section>
           </div>
           </div>
@@ -2532,7 +2586,7 @@ function PortalItemImage({
             <div className="mb-4 flex items-center justify-between gap-2">
               <h3 className="text-lg font-bold text-[color:var(--foreground)]">
                 {manageSlug === SLUG.news && "Notícias"}
-                {(manageSlug === SLUG.employee || manageSlug === SLUG.awards) && "Anexar imagem"}
+                {(manageSlug === SLUG.employee || manageSlug === SLUG.awards) && "Gerenciar card"}
               </h3>
               <button
                 type="button"
@@ -2655,6 +2709,29 @@ function PortalItemImage({
 
             {manageSlug && PORTAL_IMAGE_SECTION_SLUGS.has(manageSlug) && (
               <div className="mb-4 space-y-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-4">
+                <div className="space-y-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                    Nome do card
+                    <input
+                      type="text"
+                      value={cardTitleDraft}
+                      maxLength={120}
+                      onChange={(e) => setCardTitleDraft(e.target.value)}
+                      placeholder={
+                        manageSlug === SLUG.employee ? "Ex.: WPSer do mês" : "Ex.: Destaques do time"
+                      }
+                      className="mt-1.5 w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm font-normal normal-case tracking-normal text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)]"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={savingCardTitle}
+                    onClick={() => void saveCardSectionTitle()}
+                    className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-2)] px-3 py-2 text-xs font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface)] disabled:opacity-50"
+                  >
+                    {savingCardTitle ? "Salvando…" : "Salvar nome"}
+                  </button>
+                </div>
                 <p className="text-[11px] text-[color:var(--muted-foreground)]">
                   Anexe uma imagem (PNG, JPG, WebP ou GIF). Novas imagens entram no histórico — use <strong className="text-[color:var(--foreground)]">Voltar</strong> no card para ver as anteriores.
                 </p>
