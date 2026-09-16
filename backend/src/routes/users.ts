@@ -375,6 +375,7 @@ usersRouter.get("/", async (req, res) => {
   const users = await prisma.user.findMany({
     where: {
       tenantId,
+      isPrimaryAdmin: false,
       ...ativoFilter,
       ...roleFilter,
       ...(q
@@ -850,6 +851,13 @@ usersRouter.patch("/:id", async (req, res) => {
       res.status(404).json({ error: "Usuário não encontrado" });
       return;
     }
+    if (existing.isPrimaryAdmin) {
+      res.status(400).json({
+        error:
+          "O administrador provisionado pela plataforma não pode ser editado aqui. Altere nome e e-mail no painel da Platform.",
+      });
+      return;
+    }
 
     const newRole = role !== undefined ? String(role).trim() : existing.role;
     if (role !== undefined && !isKnownRole(newRole)) {
@@ -1290,6 +1298,12 @@ usersRouter.delete("/:id", async (req, res) => {
   }
   if (existing.tenantId !== authUser.tenantId) {
     res.status(404).json({ error: "Usuário não encontrado" });
+    return;
+  }
+  if (existing.isPrimaryAdmin) {
+    res.status(400).json({
+      error: "O administrador provisionado pela plataforma não pode ser excluído.",
+    });
     return;
   }
 

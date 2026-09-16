@@ -5,6 +5,7 @@ import { Building2, CalendarDays, CreditCard, Loader2, Plus, Users, X } from "lu
 import { Link } from "@/components/Link";
 import { apiFetch } from "@/lib/api";
 import { formatarCnpj, formatarTelefone } from "@/lib/brFormatters";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type Totals = {
   tenants: number;
@@ -473,21 +474,21 @@ export default function PlatformHomePage() {
                   <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
                     Plano inicial
                   </label>
-                  <select
-                    required
-                    className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
-                    style={{ borderColor: "var(--border)" }}
+                  <PopoverSelect
+                    id="platform-create-tenant-plan"
                     value={form.planId}
-                    onChange={(e) => setForm((f) => ({ ...f, planId: e.target.value }))}
-                  >
-                    <option value="">Selecione um plano</option>
-                    {plans.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.label} — {p.pricePerUserFormatted}/usuário
-                        {p.moduleLabels?.length ? ` (${p.moduleLabels.join(", ")})` : ""}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(planId) => setForm((f) => ({ ...f, planId }))}
+                    placeholder="Selecione um plano"
+                    options={[
+                      { value: "", label: "Selecione um plano" },
+                      ...plans.map((p) => ({
+                        value: p.id,
+                        label: `${p.label} — ${p.pricePerUserFormatted}/usuário${
+                          p.moduleLabels?.length ? ` (${p.moduleLabels.join(", ")})` : ""
+                        }`,
+                      })),
+                    ]}
+                  />
                   {plans.length === 0 ? (
                     <p className="mt-1 text-[11px] text-amber-700">
                       Cadastre um plano ativo na aba Planos antes de criar a empresa.

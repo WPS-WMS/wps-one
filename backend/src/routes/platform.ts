@@ -328,6 +328,7 @@ platformRouter.post("/tenants", requirePlatformAdmin, async (req, res) => {
           mustChangePassword: true,
           ativo: true,
           cargaHorariaSemanal: 40,
+          isPrimaryAdmin: true,
         },
         select: {
           id: true,
@@ -335,6 +336,7 @@ platformRouter.post("/tenants", requirePlatformAdmin, async (req, res) => {
           name: true,
           role: true,
           tenantId: true,
+          isPrimaryAdmin: true,
         },
       });
 
@@ -485,8 +487,18 @@ platformRouter.get("/tenants/:id", requirePlatformAdmin, async (req, res) => {
     const usage = await getTenantUsageSnapshot(tenant.id);
     const subscription = subscriptionPayloadForTenant(tenant, usage.billableUsersActive);
 
+    const primaryAdmin = await prisma.user.findFirst({
+      where: { tenantId: tenant.id, isPrimaryAdmin: true },
+      select: { id: true, name: true, email: true, role: true, ativo: true },
+      orderBy: { createdAt: "asc" },
+    });
+
     const recentUsers = await prisma.user.findMany({
-      where: { tenantId: tenant.id, role: { not: "PLATFORM_ADMIN" } },
+      where: {
+        tenantId: tenant.id,
+        role: { not: "PLATFORM_ADMIN" },
+        isPrimaryAdmin: false,
+      },
       orderBy: { updatedAt: "desc" },
       take: 12,
       select: {
@@ -510,6 +522,15 @@ platformRouter.get("/tenants/:id", requirePlatformAdmin, async (req, res) => {
         storageFormatted: formatStorageBytes(usage.storageBytes),
       },
       subscription,
+      primaryAdmin: primaryAdmin
+        ? {
+            id: primaryAdmin.id,
+            name: primaryAdmin.name,
+            email: primaryAdmin.email,
+            role: primaryAdmin.role,
+            ativo: primaryAdmin.ativo,
+          }
+        : null,
       recentUsers: recentUsers.map((u) => ({
         id: u.id,
         name: u.name,
@@ -522,6 +543,167 @@ platformRouter.get("/tenants/:id", requirePlatformAdmin, async (req, res) => {
   } catch (err) {
     console.error("[platform] tenant detail", errorSummary(err));
     res.status(500).json({ error: "Erro ao carregar tenant." });
+  }
+});
+
+/**
+ * Atualiza nome da empresa e/ou e-mail (e nome) do SUPER_ADMIN provisionado pela Platform.
+ */
+platformRouter.patch("/tenants/:id", requirePlatformAdmin, async (req, res) => {
+  const id = String(req.params.id || "").trim();
+  if (!id) {
+    res.status(400).json({ error: "Informe o tenant." });
+    return;
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const companyNameRaw = body.companyName ?? body.name;
+  const adminEmailRaw = body.adminEmail ?? body.email;
+  const adminNameRaw = body.adminName;
+
+  const companyName =
+    companyNameRaw !== undefined ? String(companyNameRaw ?? "").trim() : undefined;
+  const adminEmail =
+    adminEmailRaw !== undefined
+      ? String(adminEmailRaw ?? "")
+          .trim()
+          .toLowerCase()
+      : undefined;
+  const adminName =
+    adminNameRaw !== undefined ? String(adminNameRaw ?? "").trim() : undefined;
+
+  if (companyName !== undefined && !companyName) {
+    res.status(400).json({ error: "Nome da empresa é obrigatório." });
+    return;
+  }
+  if (adminEmail !== undefined) {
+    if (!adminEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) {
+      res.status(400).json({ error: "E-mail do administrador inválido." });
+      return;
+    }
+  }
+  if (adminName !== undefined && !adminName) {
+    res.status(400).json({ error: "Nome do administrador é obrigatório." });
+    return;
+  }
+  if (companyName === undefined && adminEmail === undefined && adminName === undefined) {
+    res.status(400).json({ error: "Nenhum campo para atualizar." });
+    return;
+  }
+
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id },
+      select: { id: true, name: true, slug: true },
+    });
+    if (!tenant) {
+      res.status(404).json({ error: "Tenant não encontrado." });
+      return;
+    }
+
+    const primaryAdmin = await prisma.user.findFirst({
+      where: { tenantId: id, isPrimaryAdmin: true },
+      select: { id: true, email: true, name: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    if ((adminEmail !== undefined || adminName !== undefined) && !primaryAdmin) {
+      res.status(400).json({
+        error: "Este tenant não tem SUPER_ADMIN provisionado pela plataforma.",
+      });
+      return;
+    }
+
+    if (adminEmail !== undefined && primaryAdmin && adminEmail !== primaryAdmin.email) {
+      const conflict = await prisma.user.findFirst({
+        where: { email: adminEmail, id: { not: primaryAdmin.id } },
+        select: { id: true },
+      });
+      if (conflict) {
+        res.status(400).json({ error: "E-mail já cadastrado em outra organização." });
+        return;
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (companyName !== undefined) {
+        await tx.tenant.update({
+          where: { id },
+          data: { name: companyName },
+        });
+      }
+
+      if (primaryAdmin && (adminEmail !== undefined || adminName !== undefined)) {
+        await tx.user.update({
+          where: { id: primaryAdmin.id },
+          data: {
+            ...(adminEmail !== undefined ? { email: adminEmail } : {}),
+            ...(adminName !== undefined ? { name: adminName } : {}),
+          },
+        });
+      }
+
+      if (adminEmail !== undefined) {
+        await tx.tenantCompanyProfile.updateMany({
+          where: { tenantId: id },
+          data: { email: adminEmail },
+        });
+      }
+    });
+
+    const updatedTenant = await prisma.tenant.findUnique({
+      where: { id },
+      select: {
+        ...TENANT_SUBSCRIPTION_SELECT,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    if (!updatedTenant) {
+      res.status(404).json({ error: "Tenant não encontrado." });
+      return;
+    }
+
+    const usage = await getTenantUsageSnapshot(updatedTenant.id);
+    const subscription = subscriptionPayloadForTenant(updatedTenant, usage.billableUsersActive);
+    const updatedAdmin = await prisma.user.findFirst({
+      where: { tenantId: id, isPrimaryAdmin: true },
+      select: { id: true, name: true, email: true, role: true, ativo: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    res.json({
+      id: updatedTenant.id,
+      name: updatedTenant.name,
+      slug: updatedTenant.slug,
+      createdAt: updatedTenant.createdAt.toISOString(),
+      updatedAt: updatedTenant.updatedAt.toISOString(),
+      usage: {
+        ...usage,
+        storageFormatted: formatStorageBytes(usage.storageBytes),
+      },
+      subscription,
+      primaryAdmin: updatedAdmin
+        ? {
+            id: updatedAdmin.id,
+            name: updatedAdmin.name,
+            email: updatedAdmin.email,
+            role: updatedAdmin.role,
+            ativo: updatedAdmin.ativo,
+          }
+        : null,
+    });
+  } catch (err) {
+    const code =
+      err && typeof err === "object" && "code" in err
+        ? String((err as { code?: string }).code)
+        : "";
+    if (code === "P2002") {
+      res.status(400).json({ error: "E-mail já cadastrado." });
+      return;
+    }
+    console.error("[platform] tenant patch", errorSummary(err));
+    res.status(500).json({ error: "Erro ao atualizar empresa." });
   }
 });
 

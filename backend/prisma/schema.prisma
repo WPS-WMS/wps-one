@@ -363,6 +363,8 @@ model User {
   ativo                 Boolean  @default(true)
   inativadoEm           DateTime?
   inativacaoMotivo      String?
+  /// SUPER_ADMIN provisionado pela Platform na criação do tenant (oculto na lista de usuários).
+  isPrimaryAdmin        Boolean  @default(false)
 
   tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   skillProfile          SkillProfile? @relation(fields: [skillProfileId], references: [id], onDelete: SetNull)

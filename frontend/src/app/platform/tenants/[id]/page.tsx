@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, usePathname } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { Link } from "@/components/Link";
 import { apiFetch } from "@/lib/api";
 
@@ -11,6 +11,7 @@ type Detail = {
   name: string;
   slug: string;
   createdAt: string;
+  updatedAt?: string;
   usage: {
     usersTotal: number;
     usersActive: number;
@@ -35,6 +36,13 @@ type Detail = {
     paymentMethod?: string | null;
     paymentMethodLabel?: string | null;
   };
+  primaryAdmin: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    ativo: boolean;
+  } | null;
   recentUsers: Array<{
     id: string;
     name: string;
@@ -82,6 +90,13 @@ export default function PlatformTenantDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [companyName, setCompanyName] = useState("");
+  const [adminName, setAdminName] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveOk, setSaveOk] = useState(false);
+
   useEffect(() => {
     if (!id) {
       setError("Tenant inválido.");
@@ -99,13 +114,61 @@ export default function PlatformTenantDetailPage() {
         setLoading(false);
         return;
       }
-      setDetail(body as Detail);
+      const next = body as Detail;
+      setDetail(next);
+      setCompanyName(next.name ?? "");
+      setAdminName(next.primaryAdmin?.name ?? "");
+      setAdminEmail(next.primaryAdmin?.email ?? "");
       setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
   }, [id]);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!id || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    setSaveOk(false);
+    const payload: Record<string, string> = {
+      companyName: companyName.trim(),
+    };
+    if (detail?.primaryAdmin) {
+      payload.adminName = adminName.trim();
+      payload.adminEmail = adminEmail.trim().toLowerCase();
+    }
+    const r = await apiFetch(`/api/platform/tenants/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const body = await r.json().catch(() => null);
+    setSaving(false);
+    if (!r.ok) {
+      setSaveError(typeof body?.error === "string" ? body.error : "Erro ao salvar.");
+      return;
+    }
+    const next = body as Detail;
+    setDetail((prev) =>
+      prev
+        ? {
+            ...prev,
+            name: next.name,
+            slug: next.slug,
+            updatedAt: next.updatedAt,
+            primaryAdmin: next.primaryAdmin ?? prev.primaryAdmin,
+            usage: next.usage ?? prev.usage,
+            subscription: next.subscription ?? prev.subscription,
+          }
+        : prev,
+    );
+    setCompanyName(next.name ?? companyName);
+    setAdminName(next.primaryAdmin?.name ?? adminName);
+    setAdminEmail(next.primaryAdmin?.email ?? adminEmail);
+    setSaveOk(true);
+  }
 
   if (loading) {
     return <p className="text-sm text-[color:var(--muted-foreground)]">Carregando…</p>;
@@ -135,6 +198,13 @@ export default function PlatformTenantDetailPage() {
     { label: "Storage", value: detail.usage.storageFormatted },
   ];
 
+  const dirty =
+    companyName.trim() !== detail.name ||
+    (detail.primaryAdmin
+      ? adminName.trim() !== detail.primaryAdmin.name ||
+        adminEmail.trim().toLowerCase() !== detail.primaryAdmin.email
+      : false);
+
   return (
     <div className="space-y-6">
       <div>
@@ -157,6 +227,89 @@ export default function PlatformTenantDetailPage() {
           </span>
         </div>
       </div>
+
+      <section
+        className="rounded-2xl border bg-[color:var(--surface)] p-5"
+        style={{ borderColor: "var(--border)" }}
+      >
+        <h3 className="text-sm font-semibold">Dados da empresa</h3>
+        <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
+          Nome do tenant e e-mail do SUPER_ADMIN criado pela plataforma. Esse usuário não aparece
+          na lista de usuários do cliente.
+        </p>
+
+        <form onSubmit={handleSave} className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+              Nome da empresa
+            </label>
+            <input
+              required
+              className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm"
+              style={{ borderColor: "var(--border)" }}
+              value={companyName}
+              onChange={(e) => {
+                setCompanyName(e.target.value);
+                setSaveOk(false);
+              }}
+            />
+          </div>
+          {detail.primaryAdmin ? (
+            <>
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                  Nome do SUPER_ADMIN
+                </label>
+                <input
+                  required
+                  className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm"
+                  style={{ borderColor: "var(--border)" }}
+                  value={adminName}
+                  onChange={(e) => {
+                    setAdminName(e.target.value);
+                    setSaveOk(false);
+                  }}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">
+                  E-mail do SUPER_ADMIN
+                </label>
+                <input
+                  required
+                  type="email"
+                  className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm"
+                  style={{ borderColor: "var(--border)" }}
+                  value={adminEmail}
+                  onChange={(e) => {
+                    setAdminEmail(e.target.value);
+                    setSaveOk(false);
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <p className="sm:col-span-2 text-sm text-amber-700">
+              Nenhum SUPER_ADMIN provisionado pela plataforma encontrado neste tenant.
+            </p>
+          )}
+
+          <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
+            <button
+              type="submit"
+              disabled={saving || !dirty}
+              className="inline-flex items-center gap-2 rounded-xl bg-[color:var(--primary)] px-4 py-2.5 text-sm font-semibold text-[color:var(--primary-foreground)] disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Salvar alterações
+            </button>
+            {saveOk ? (
+              <span className="text-sm text-emerald-700">Salvo.</span>
+            ) : null}
+            {saveError ? <span className="text-sm text-red-600">{saveError}</span> : null}
+          </div>
+        </form>
+      </section>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {metrics.map((m) => (
@@ -239,7 +392,7 @@ export default function PlatformTenantDetailPage() {
         <div className="border-b px-5 py-4" style={{ borderColor: "var(--border)" }}>
           <h3 className="text-sm font-semibold">Usuários recentes</h3>
           <p className="text-xs text-[color:var(--muted-foreground)]">
-            Apenas usuários do tenant (admin da plataforma não entra na cobrança).
+            Sem o SUPER_ADMIN provisionado pela plataforma (editável acima).
           </p>
         </div>
         <ul className="divide-y" style={{ borderColor: "var(--border)" }}>

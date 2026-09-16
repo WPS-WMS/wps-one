@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "@/components/Link";
 import { usePathname } from "next/navigation";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type PlanOption = {
   id: string;
@@ -297,24 +298,23 @@ export function MySubscriptionPageContent() {
         <div className="mt-4 space-y-4">
           <div>
             <label className="mb-1 block text-xs text-[color:var(--muted-foreground)]">Tipo de plano</label>
-            <select
-              className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
-              style={{ borderColor: "var(--border)" }}
+            <PopoverSelect
+              id="subscription-plan"
               value={plan}
               disabled={isCanceling || isLocked}
-              onChange={(e) => {
-                const next = e.target.value;
+              placeholder="Não configurado"
+              onChange={(next) => {
                 setPlan(next);
                 if (!next) setPaymentMethod("");
               }}
-            >
-              <option value="">Não configurado</option>
-              {plans.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label} — {p.pricePerUserFormatted} / usuário
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "Não configurado" },
+                ...plans.map((p) => ({
+                  value: p.id,
+                  label: `${p.label} — ${p.pricePerUserFormatted} / usuário`,
+                })),
+              ]}
+            />
             {plans.length === 0 ? (
               <p className="mt-1 text-[11px] text-amber-700">
                 Nenhum plano ativo disponível. Peça ao time WPS One para cadastrar na aba Planos.
