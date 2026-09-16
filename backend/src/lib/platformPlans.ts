@@ -1,19 +1,26 @@
-/** Planos WPS One — cobrança por usuário ativo (exclui PLATFORM_ADMIN). */
+/** Módulos comerciais do plano WPS One. */
+export const PLAN_MODULES = ["projetos", "financeiro", "portal"] as const;
+export type PlanModuleId = (typeof PLAN_MODULES)[number];
 
-export const PLATFORM_PLANS = {
-  STANDARD: {
-    id: "STANDARD" as const,
-    label: "Standard",
-    priceCentsPerUser: 4900,
-  },
-  PREMIUM: {
-    id: "PREMIUM" as const,
-    label: "Premium",
-    priceCentsPerUser: 9900,
-  },
-} as const;
+export const PLAN_MODULE_LABELS: Record<PlanModuleId, string> = {
+  projetos: "Gestão de projetos",
+  financeiro: "Financeiro",
+  portal: "Portal Colaborativo",
+};
 
-export type PlatformPlanId = keyof typeof PLATFORM_PLANS;
+export type PlatformPlanRecord = {
+  id: string;
+  name: string;
+  code: string | null;
+  priceCentsPerUser: number;
+  moduleProjetos: boolean;
+  moduleFinanceiro: boolean;
+  modulePortal: boolean;
+  active: boolean;
+  sortOrder: number;
+};
+
+export type SubscriptionStatus = "active" | "canceling" | "locked" | "none";
 
 export const SUBSCRIPTION_PAYMENT_METHODS = {
   PIX: { id: "PIX" as const, label: "Pix" },
@@ -22,10 +29,6 @@ export const SUBSCRIPTION_PAYMENT_METHODS = {
 } as const;
 
 export type SubscriptionPaymentMethodId = keyof typeof SUBSCRIPTION_PAYMENT_METHODS;
-
-export function isPlatformPlanId(value: unknown): value is PlatformPlanId {
-  return value === "STANDARD" || value === "PREMIUM";
-}
 
 export function isSubscriptionPaymentMethodId(
   value: unknown,
@@ -42,16 +45,13 @@ export function subscriptionPaymentMethodLabel(
   return null;
 }
 
-export function platformPlanLabel(plan: string | null | undefined): string {
-  if (plan === "STANDARD") return PLATFORM_PLANS.STANDARD.label;
-  if (plan === "PREMIUM") return PLATFORM_PLANS.PREMIUM.label;
-  return "Não configurado";
-}
-
-export function priceCentsForPlan(plan: string | null | undefined): number | null {
-  if (plan === "STANDARD") return PLATFORM_PLANS.STANDARD.priceCentsPerUser;
-  if (plan === "PREMIUM") return PLATFORM_PLANS.PREMIUM.priceCentsPerUser;
-  return null;
+export function normalizeSubscriptionStatus(
+  value: string | null | undefined,
+): SubscriptionStatus {
+  if (value === "active" || value === "canceling" || value === "locked" || value === "none") {
+    return value;
+  }
+  return "none";
 }
 
 /** Próxima parcela mensal a partir da data de início (aniversário do dia). */
@@ -97,16 +97,6 @@ export function resolveNextPaymentAt(params: {
   return null;
 }
 
-export function monthlyBillingCents(params: {
-  plan: string | null | undefined;
-  billableUsersActive: number;
-}): number {
-  const price = priceCentsForPlan(params.plan);
-  if (price == null) return 0;
-  const users = Math.max(0, Math.floor(params.billableUsersActive));
-  return users * price;
-}
-
 export function formatBrlFromCents(cents: number): string {
   return (cents / 100).toLocaleString("pt-BR", {
     style: "currency",
@@ -114,17 +104,63 @@ export function formatBrlFromCents(cents: number): string {
   });
 }
 
+export function planModulesFromRecord(plan: PlatformPlanRecord | null | undefined): {
+  projetos: boolean;
+  financeiro: boolean;
+  portal: boolean;
+} {
+  if (!plan) {
+    // Sem plano configurado: não restringe módulos (legado / pré-assinatura).
+    return { projetos: true, financeiro: true, portal: true };
+  }
+  return {
+    projetos: !!plan.moduleProjetos,
+    financeiro: !!plan.moduleFinanceiro,
+    portal: !!plan.modulePortal,
+  };
+}
+
+export function serializePlan(plan: PlatformPlanRecord) {
+  const modules = planModulesFromRecord(plan);
+  return {
+    id: plan.id,
+    name: plan.name,
+    code: plan.code,
+    label: plan.name,
+    priceCentsPerUser: plan.priceCentsPerUser,
+    pricePerUserFormatted: formatBrlFromCents(plan.priceCentsPerUser),
+    modules,
+    moduleLabels: PLAN_MODULES.filter((m) => modules[m]).map((m) => PLAN_MODULE_LABELS[m]),
+    active: plan.active,
+    sortOrder: plan.sortOrder,
+  };
+}
+
+export function monthlyBillingCents(params: {
+  priceCentsPerUser: number | null | undefined;
+  billableUsersActive: number;
+}): number {
+  if (params.priceCentsPerUser == null) return 0;
+  const users = Math.max(0, Math.floor(params.billableUsersActive));
+  return users * params.priceCentsPerUser;
+}
+
 export function buildSubscriptionPayload(params: {
-  plan: string | null | undefined;
+  plan: PlatformPlanRecord | null | undefined;
+  planId?: string | null;
+  legacyPlanCode?: string | null;
   startedAt: Date | null | undefined;
   nextPaymentAt: Date | null | undefined;
   paymentMethod?: string | null | undefined;
+  status?: string | null | undefined;
+  canceledAt?: Date | null | undefined;
+  accessUntil?: Date | null | undefined;
   billableUsersActive: number;
 }) {
-  const plan = isPlatformPlanId(params.plan) ? params.plan : null;
-  const priceCents = priceCentsForPlan(plan);
+  const plan = params.plan ?? null;
+  const priceCents = plan?.priceCentsPerUser ?? null;
   const monthlyCents = monthlyBillingCents({
-    plan,
+    priceCentsPerUser: priceCents,
     billableUsersActive: params.billableUsersActive,
   });
   const startedAt = params.startedAt ?? null;
@@ -136,11 +172,30 @@ export function buildSubscriptionPayload(params: {
     ? params.paymentMethod
     : null;
 
+  let status = normalizeSubscriptionStatus(params.status);
+  if (status === "none" && plan) status = "active";
+  if (!plan && status === "active") status = "none";
+
+  const modules = planModulesFromRecord(plan);
+  const accessUntil = params.accessUntil ?? null;
+  const canceledAt = params.canceledAt ?? null;
+
+  const statusLabel =
+    status === "active"
+      ? "Ativa"
+      : status === "canceling"
+        ? "Cancelamento agendado"
+        : status === "locked"
+          ? "Encerrada"
+          : "Não configurada";
+
   return {
-    plan,
-    planLabel: platformPlanLabel(plan),
-    status: plan ? ("active" as const) : ("none" as const),
-    label: plan ? platformPlanLabel(plan) : "Não configurado",
+    planId: plan?.id ?? params.planId ?? null,
+    plan: plan?.id ?? params.legacyPlanCode ?? null,
+    planLabel: plan?.name ?? (params.legacyPlanCode ? String(params.legacyPlanCode) : "Não configurado"),
+    status,
+    statusLabel,
+    label: plan?.name ?? "Não configurado",
     priceCentsPerUser: priceCents,
     pricePerUserFormatted: priceCents != null ? formatBrlFromCents(priceCents) : null,
     monthlyAmountCents: monthlyCents,
@@ -149,8 +204,12 @@ export function buildSubscriptionPayload(params: {
     nextPaymentAt: nextPaymentAt ? nextPaymentAt.toISOString() : null,
     paymentMethod,
     paymentMethodLabel: subscriptionPaymentMethodLabel(paymentMethod),
+    canceledAt: canceledAt ? canceledAt.toISOString() : null,
+    accessUntil: accessUntil ? accessUntil.toISOString() : null,
+    modules,
+    moduleLabels: PLAN_MODULES.filter((m) => modules[m]).map((m) => PLAN_MODULE_LABELS[m]),
     note: plan
-      ? `Cobrança por usuário ativo · ${platformPlanLabel(plan)}`
-      : "Defina o plano (Standard R$ 49 ou Premium R$ 99 por usuário ativo).",
+      ? `Cobrança por usuário ativo · ${plan.name}`
+      : "Escolha um plano cadastrado no painel da plataforma.",
   };
 }

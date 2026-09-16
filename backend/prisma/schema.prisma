@@ -9,18 +9,46 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+/// Planos comerciais WPS One (configurados no painel da plataforma).
+model PlatformPlan {
+  id                String   @id @default(cuid())
+  name              String
+  /// Código opcional estável (ex.: STANDARD legado).
+  code              String?  @unique
+  priceCentsPerUser Int
+  moduleProjetos    Boolean  @default(true)
+  moduleFinanceiro  Boolean  @default(true)
+  modulePortal      Boolean  @default(true)
+  active            Boolean  @default(true)
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  tenants           Tenant[]
+
+  @@index([active, sortOrder])
+  @@map("platform_plans")
+}
+
 model Tenant {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  /// Assinatura WPS One: STANDARD | PREMIUM (null = não configurado).
+  /// FK do plano comercial (null = não configurado).
+  subscriptionPlanId         String?
+  /// Legado / denormalizado: code ou nome do plano.
   subscriptionPlan           String?
   subscriptionStartedAt      DateTime?
   subscriptionNextPaymentAt  DateTime?
   /// PIX | BOLETO | CARTAO_CREDITO
   subscriptionPaymentMethod  String?
+  /// active | canceling | locked | none
+  subscriptionStatus         String?
+  subscriptionCanceledAt     DateTime?
+  /// Após cancelamento: acesso liberado até esta data (inclusive).
+  subscriptionAccessUntil    DateTime?
+  platformPlan               PlatformPlan? @relation(fields: [subscriptionPlanId], references: [id], onDelete: SetNull)
   users     User[]
   clients   Client[]
   activities Activity[]

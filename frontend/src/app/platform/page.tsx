@@ -172,7 +172,7 @@ export default function PlatformHomePage() {
             <h2 className="mt-1 text-2xl font-semibold tracking-tight">Controle comercial WPS One</h2>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[color:var(--muted-foreground)]">
               Acompanhe clientes assinantes, usuários ativos cobráveis e faturamento mensal.
-              Planos: Standard R$&nbsp;49 e Premium R$&nbsp;99 por usuário ativo.
+              Planos configuráveis na aba Planos · cobrança por usuário ativo.
             </p>
           </div>
           <button

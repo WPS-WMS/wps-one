@@ -4,6 +4,7 @@ import { activeTimeEntryWhere } from "../lib/activeTimeEntryWhere.js";
 import { verifyPassword, signToken, hashPassword } from "../lib/auth.js";
 import crypto from "crypto";
 import { getAllowedFeaturesForUser, type RoleId } from "../lib/permissions.js";
+import { getTenantModules } from "../lib/tenantModuleGate.js";
 import { sendMail } from "../lib/mailer.js";
 import { renderEmailLayout, escapeHtml } from "../lib/emailTemplate.js";
 import { devLog, errorSummary } from "../lib/devLog.js";
@@ -124,8 +125,21 @@ authRouter.post("/login", async (req, res) => {
       res.status(401).json({ error: "E-mail ou senha inválidos" });
       return;
     }
-    devLog("[AUTH] Login successful");
+
     const role = user.role as RoleId;
+    if (role !== "PLATFORM_ADMIN") {
+      const modules = await getTenantModules(user.tenantId);
+      if (modules.locked) {
+        res.status(403).json({
+          error:
+            "Assinatura encerrada. O acesso à organização foi bloqueado. Entre em contato com o suporte WPS One.",
+          code: "SUBSCRIPTION_LOCKED",
+        });
+        return;
+      }
+    }
+
+    devLog("[AUTH] Login successful");
     const allowedFeatures = await getAllowedFeaturesForUser({ tenantId: user.tenantId, role });
     const token = signToken({
       id: user.id,
@@ -228,6 +242,17 @@ authRouter.get("/me", async (req, res) => {
       return;
     }
     const role = user.role as RoleId;
+    if (role !== "PLATFORM_ADMIN") {
+      const modules = await getTenantModules(user.tenantId);
+      if (modules.locked) {
+        res.status(403).json({
+          error:
+            "Assinatura encerrada. O acesso à organização foi bloqueado. Entre em contato com o suporte WPS One.",
+          code: "SUBSCRIPTION_LOCKED",
+        });
+        return;
+      }
+    }
     const allowedFeatures = await getAllowedFeaturesForUser({ tenantId: user.tenantId, role });
     const { isPlatformAdmin } = await import("../lib/platformAdmin.js");
     const platformAdmin = await isPlatformAdmin({

@@ -177,8 +177,8 @@ export default function PlatformTenantDetailPage() {
       >
         <h3 className="text-sm font-semibold">Assinatura</h3>
         <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-          Somente visual. A empresa define o plano em Minha Assinatura. Standard R$&nbsp;49 · Premium
-          R$&nbsp;99 por usuário ativo.
+          Somente visual. A empresa define o plano em Minha Assinatura. Os planos e módulos são
+          configurados na aba Planos do painel.
         </p>
 
         <dl className="mt-4 grid gap-3 sm:grid-cols-3">

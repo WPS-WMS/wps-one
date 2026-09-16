@@ -8,6 +8,7 @@ import { FinanceiroModuleGuard } from "@/components/finance/FinanceiroModuleGuar
 import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { navigateBack } from "@/lib/navigateBack";
 import { formatarCep, formatarCnpj, formatarTelefone } from "@/lib/brFormatters";
+import { fetchViaCepAddress } from "@/lib/viaCep";
 import {
   FormModalSection,
   formModalInputClass,
@@ -285,24 +286,15 @@ export function CompanyProfileConfigPage() {
     if (cepLimpo.length !== 8) return;
     setLoadingCep(true);
     try {
-      const res = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
-      const data = (await res.json()) as {
-        erro?: boolean;
-        logradouro?: string;
-        complemento?: string;
-        bairro?: string;
-        localidade?: string;
-        uf?: string;
-        ibge?: string;
-      };
-      if (data?.erro) return;
+      const data = await fetchViaCepAddress(cepLimpo);
+      if (!data) return;
       setForm((prev) => ({
         ...prev,
         endereco: data.logradouro || prev.endereco,
-        complemento: data.complemento || prev.complemento,
+        // ViaCEP não retorna número; complementar (faixa/lado) não preenche Número nem Complemento.
         bairro: data.bairro || prev.bairro,
         cidade: data.localidade || prev.cidade,
-        estado: (data.uf || prev.estado).toUpperCase().slice(0, 2),
+        estado: data.uf || prev.estado,
         codigoMunicipio: data.ibge || prev.codigoMunicipio,
       }));
     } catch {
@@ -535,6 +527,7 @@ export function CompanyProfileConfigPage() {
                           onBlur={() => void buscarCep()}
                           className={`${formModalInputClass()} flex-1`}
                           inputMode="numeric"
+                          autoComplete="postal-code"
                         />
                         {loadingCep ? (
                           <Loader2 className="h-4 w-4 animate-spin text-[color:var(--muted-foreground)]" />
@@ -548,6 +541,7 @@ export function CompanyProfileConfigPage() {
                         value={form.endereco}
                         onChange={(e) => patch("endereco", e.target.value)}
                         className={formModalInputClass()}
+                        autoComplete="address-line1"
                       />
                     </div>
                   </div>
@@ -559,6 +553,8 @@ export function CompanyProfileConfigPage() {
                         value={form.numero}
                         onChange={(e) => patch("numero", e.target.value)}
                         className={formModalInputClass()}
+                        name="flowa-addr-number"
+                        autoComplete="off"
                       />
                     </div>
                     <div className="md:col-span-2">
@@ -568,6 +564,8 @@ export function CompanyProfileConfigPage() {
                         value={form.complemento}
                         onChange={(e) => patch("complemento", e.target.value)}
                         className={formModalInputClass()}
+                        name="flowa-addr-complement"
+                        autoComplete="off"
                       />
                     </div>
                   </div>

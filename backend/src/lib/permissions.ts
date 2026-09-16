@@ -1,5 +1,10 @@
 import { prisma } from "./prisma.js";
 import { isKnownRole, type RoleId } from "./roles.js";
+import {
+  filterFeaturesByTenantModules,
+  getTenantModules,
+  isFeatureAllowedByTenantModules,
+} from "./tenantModuleGate.js";
 
 export type { RoleId } from "./roles.js";
 export type PermissionState = "allow" | "deny";
@@ -411,8 +416,6 @@ export async function hasConfigScreenAdminAccess(params: {
   role: string;
   featureId: ConfigScreenFeatureId;
 }): Promise<boolean> {
-  const role = String(params.role ?? "").toUpperCase();
-  if (role === "SUPER_ADMIN") return true;
   return isFeatureAllowed(params);
 }
 
@@ -422,8 +425,6 @@ export async function hasGlobalViewAccess(params: {
   role: string;
   featureId: FeatureId;
 }): Promise<boolean> {
-  const role = String(params.role ?? "").toUpperCase();
-  if (role === "SUPER_ADMIN") return true;
   return isFeatureAllowed(params);
 }
 
@@ -435,6 +436,9 @@ export async function isFeatureAllowed(params: {
   const { tenantId, role, featureId } = params;
 
   if (!isKnownRole(role)) return false;
+
+  const modules = await getTenantModules(tenantId);
+  if (!isFeatureAllowedByTenantModules(modules, featureId)) return false;
 
   if (role === "SUPER_ADMIN") {
     if (featureId === "chamados.criacao") return false;
@@ -481,11 +485,15 @@ export async function isAnyFeatureAllowed(params: {
   const { tenantId, role, featureIds } = params;
   if (!featureIds.length || !isKnownRole(role)) return false;
 
+  const modules = await getTenantModules(tenantId);
+  const gated = filterFeaturesByTenantModules(modules, featureIds);
+  if (!gated.length) return false;
+
   if (role === "SUPER_ADMIN") {
-    return featureIds.some((f) => f !== "chamados.criacao");
+    return gated.some((f) => f !== "chamados.criacao");
   }
 
-  const candidates = featureIds.filter((f) => !(role === "CLIENTE" && f === "tarefa.editar"));
+  const candidates = gated.filter((f) => !(role === "CLIENTE" && f === "tarefa.editar"));
   if (!candidates.length) return false;
 
   const rows = await prisma.tenantFeaturePermission.findMany({
@@ -517,13 +525,23 @@ export async function getAllowedFeaturesForUser(params: { tenantId: string; role
   if (role === "PLATFORM_ADMIN") {
     return [];
   }
+
+  const modules = await getTenantModules(tenantId);
+  if (modules.locked) return [];
+
   if (role === "SUPER_ADMIN") {
-    return FEATURES.filter((f) => f !== "chamados.criacao");
+    return filterFeaturesByTenantModules(
+      modules,
+      FEATURES.filter((f) => f !== "chamados.criacao"),
+    );
   }
 
   const matrix = await getTenantPermissionsMatrix(tenantId);
-  return FEATURES.filter((f) => {
-    if (role === "CLIENTE" && f === "tarefa.editar") return false;
-    return matrix[f][role] !== "deny";
-  });
+  return filterFeaturesByTenantModules(
+    modules,
+    FEATURES.filter((f) => {
+      if (role === "CLIENTE" && f === "tarefa.editar") return false;
+      return matrix[f][role] !== "deny";
+    }),
+  );
 }

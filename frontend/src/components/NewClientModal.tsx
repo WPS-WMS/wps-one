@@ -18,6 +18,7 @@ import {
   type ClientFinancialFormState,
 } from "@/lib/clientFinancialForm";
 import { isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
+import { fetchViaCepAddress } from "@/lib/viaCep";
 
 type NewClientModalProps = {
   onClose: () => void;
@@ -50,16 +51,14 @@ export function NewClientModal({ onClose, onSaved }: NewClientModalProps) {
     setLoadingCep(true);
     setError("");
     try {
-      const cepLimpo = cep.replace(/\D/g, "");
-      const res = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
-      const data = await res.json();
-
-      if (data.erro) {
+      const data = await fetchViaCepAddress(cep);
+      if (!data) {
         setError("CEP não encontrado");
         return;
       }
 
       setEndereco(data.logradouro || "");
+      // ViaCEP não retorna número; complementar (faixa/lado) não preenche Número nem Complemento.
       setBairro(data.bairro || "");
       setCidade(data.localidade || "");
       setEstado(data.uf || "");
@@ -308,6 +307,7 @@ export function NewClientModal({ onClose, onSaved }: NewClientModalProps) {
                       className={`${formModalInputClass(false)} min-w-0 flex-1`}
                       placeholder="00000-000"
                       maxLength={9}
+                      autoComplete="postal-code"
                     />
                     {loadingCep ? (
                       <Loader2
@@ -325,6 +325,7 @@ export function NewClientModal({ onClose, onSaved }: NewClientModalProps) {
                     onChange={(e) => setEndereco(e.target.value)}
                     className={formModalInputClass(false)}
                     placeholder="Ex.: Rua das Flores"
+                    autoComplete="address-line1"
                   />
                 </div>
               </div>
@@ -337,6 +338,8 @@ export function NewClientModal({ onClose, onSaved }: NewClientModalProps) {
                     onChange={(e) => setNumero(e.target.value)}
                     className={formModalInputClass(false)}
                     placeholder="Ex.: 123"
+                    name="flowa-addr-number"
+                    autoComplete="off"
                   />
                 </div>
                 <div>
@@ -347,6 +350,8 @@ export function NewClientModal({ onClose, onSaved }: NewClientModalProps) {
                     onChange={(e) => setComplemento(e.target.value)}
                     className={formModalInputClass(false)}
                     placeholder="Ex.: Sala 45"
+                    name="flowa-addr-complement"
+                    autoComplete="off"
                   />
                 </div>
                 <div>
@@ -357,6 +362,7 @@ export function NewClientModal({ onClose, onSaved }: NewClientModalProps) {
                     onChange={(e) => setBairro(e.target.value)}
                     className={formModalInputClass(false)}
                     placeholder="Ex.: Centro"
+                    autoComplete="address-level3"
                   />
                 </div>
               </div>
@@ -369,6 +375,7 @@ export function NewClientModal({ onClose, onSaved }: NewClientModalProps) {
                     onChange={(e) => setCidade(e.target.value)}
                     className={formModalInputClass(false)}
                     placeholder="Ex.: São Paulo"
+                    autoComplete="address-level2"
                   />
                 </div>
                 <div>
@@ -380,6 +387,7 @@ export function NewClientModal({ onClose, onSaved }: NewClientModalProps) {
                     className={formModalInputClass(false)}
                     placeholder="SP"
                     maxLength={2}
+                    autoComplete="address-level1"
                   />
                 </div>
               </div>

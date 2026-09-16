@@ -16,6 +16,7 @@ import {
   FormModalSection,
 } from "@/components/FormModalPrimitives";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import { fetchViaCepAddress } from "@/lib/viaCep";
 
 type CategoryOption = { id: string; name: string; isActive: boolean; allowMultipleUsers?: boolean };
 type UserLinkOption = { id: string; name: string; email: string; linkedSupplierId?: string | null };
@@ -119,14 +120,13 @@ export function NewSupplierModal({ onClose, onSaved }: NewSupplierModalProps) {
     setLoadingCep(true);
     setError("");
     try {
-      const cepLimpo = cep.replace(/\D/g, "");
-      const res = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
-      const data = await res.json();
-      if (data.erro) {
+      const data = await fetchViaCepAddress(cep);
+      if (!data) {
         setError("CEP não encontrado");
         return;
       }
       setEndereco(data.logradouro || "");
+      // ViaCEP não retorna número; complementar (faixa/lado) não preenche Número nem Complemento.
       setBairro(data.bairro || "");
       setCidade(data.localidade || "");
       setEstado(data.uf || "");
@@ -382,37 +382,77 @@ export function NewSupplierModal({ onClose, onSaved }: NewSupplierModalProps) {
                   onChange={(e) => setCep(formatarCep(e.target.value))}
                   onBlur={() => void buscarCep()}
                   className={`${formModalInputClass(false)} flex-1`}
+                  autoComplete="postal-code"
                 />
                 {loadingCep ? <Loader2 className="h-4 w-4 animate-spin text-[color:var(--muted-foreground)]" /> : null}
               </div>
             </div>
             <div>
               <label className={formModalLabelClass}>Logradouro</label>
-              <input type="text" value={endereco} onChange={(e) => setEndereco(e.target.value)} className={formModalInputClass(false)} />
+              <input
+                type="text"
+                value={endereco}
+                onChange={(e) => setEndereco(e.target.value)}
+                className={formModalInputClass(false)}
+                autoComplete="address-line1"
+              />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className={formModalLabelClass}>Número</label>
-              <input type="text" value={numero} onChange={(e) => setNumero(e.target.value)} className={formModalInputClass(false)} />
+              <input
+                type="text"
+                value={numero}
+                onChange={(e) => setNumero(e.target.value)}
+                className={formModalInputClass(false)}
+                name="flowa-addr-number"
+                autoComplete="off"
+              />
             </div>
             <div>
               <label className={formModalLabelClass}>Complemento</label>
-              <input type="text" value={complemento} onChange={(e) => setComplemento(e.target.value)} className={formModalInputClass(false)} />
+              <input
+                type="text"
+                value={complemento}
+                onChange={(e) => setComplemento(e.target.value)}
+                className={formModalInputClass(false)}
+                name="flowa-addr-complement"
+                autoComplete="off"
+              />
             </div>
             <div>
               <label className={formModalLabelClass}>Bairro</label>
-              <input type="text" value={bairro} onChange={(e) => setBairro(e.target.value)} className={formModalInputClass(false)} />
+              <input
+                type="text"
+                value={bairro}
+                onChange={(e) => setBairro(e.target.value)}
+                className={formModalInputClass(false)}
+                autoComplete="address-level3"
+              />
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className={formModalLabelClass}>Cidade</label>
-              <input type="text" value={cidade} onChange={(e) => setCidade(e.target.value)} className={formModalInputClass(false)} />
+              <input
+                type="text"
+                value={cidade}
+                onChange={(e) => setCidade(e.target.value)}
+                className={formModalInputClass(false)}
+                autoComplete="address-level2"
+              />
             </div>
             <div>
               <label className={formModalLabelClass}>UF</label>
-              <input type="text" value={estado} onChange={(e) => setEstado(e.target.value.toUpperCase().slice(0, 2))} className={formModalInputClass(false)} maxLength={2} />
+              <input
+                type="text"
+                value={estado}
+                onChange={(e) => setEstado(e.target.value.toUpperCase().slice(0, 2))}
+                className={formModalInputClass(false)}
+                maxLength={2}
+                autoComplete="address-level1"
+              />
             </div>
           </div>
         </FormModalSection>

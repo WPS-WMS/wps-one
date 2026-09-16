@@ -83,7 +83,7 @@ export default function PlatformTenantsPage() {
           </p>
           <h2 className="text-xl font-semibold tracking-tight">Clientes assinantes</h2>
           <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
-            Utilização cobrada por usuário ativo · Standard R$&nbsp;49 · Premium R$&nbsp;99
+            Utilização cobrada por usuário ativo · planos definidos na aba Planos
           </p>
         </div>
         <div className="relative w-full sm:max-w-xs">

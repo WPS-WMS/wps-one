@@ -19,6 +19,7 @@ import {
 } from "@/components/FormModalPrimitives";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { FinancePageHeader } from "@/components/finance/FinancePageHeader";
+import { fetchViaCepAddress } from "@/lib/viaCep";
 
 type SupplierDetail = {
   id: string;
@@ -295,13 +296,12 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
     if (!form.cep || form.cep.replace(/\D/g, "").length !== 8) return;
     setLoadingCep(true);
     try {
-      const cepLimpo = form.cep.replace(/\D/g, "");
-      const res = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
-      const data = await res.json();
-      if (!data.erro) {
+      const data = await fetchViaCepAddress(form.cep);
+      if (data) {
         setForm((f) => ({
           ...f,
           endereco: data.logradouro || f.endereco,
+          // ViaCEP não retorna número; não preenche Número nem Complemento.
           bairro: data.bairro || f.bairro,
           cidade: data.localidade || f.cidade,
           estado: data.uf || f.estado,
@@ -681,37 +681,71 @@ export function SupplierDetailPageContent({ supplierId }: SupplierDetailPageProp
                         onChange={(e) => setField("cep", formatarCep(e.target.value))}
                         onBlur={() => void buscarCep()}
                         className={`${formModalInputClass(false)} flex-1`}
+                        autoComplete="postal-code"
                       />
                       {loadingCep ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                     </div>
                   </div>
                   <div>
                     <label className={formModalLabelClass}>Logradouro</label>
-                    <input value={form.endereco} onChange={(e) => setField("endereco", e.target.value)} className={formModalInputClass(false)} />
+                    <input
+                      value={form.endereco}
+                      onChange={(e) => setField("endereco", e.target.value)}
+                      className={formModalInputClass(false)}
+                      autoComplete="address-line1"
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className={formModalLabelClass}>Número</label>
-                    <input value={form.numero} onChange={(e) => setField("numero", e.target.value)} className={formModalInputClass(false)} />
+                    <input
+                      value={form.numero}
+                      onChange={(e) => setField("numero", e.target.value)}
+                      className={formModalInputClass(false)}
+                      name="flowa-addr-number"
+                      autoComplete="off"
+                    />
                   </div>
                   <div>
                     <label className={formModalLabelClass}>Complemento</label>
-                    <input value={form.complemento} onChange={(e) => setField("complemento", e.target.value)} className={formModalInputClass(false)} />
+                    <input
+                      value={form.complemento}
+                      onChange={(e) => setField("complemento", e.target.value)}
+                      className={formModalInputClass(false)}
+                      name="flowa-addr-complement"
+                      autoComplete="off"
+                    />
                   </div>
                   <div>
                     <label className={formModalLabelClass}>Bairro</label>
-                    <input value={form.bairro} onChange={(e) => setField("bairro", e.target.value)} className={formModalInputClass(false)} />
+                    <input
+                      value={form.bairro}
+                      onChange={(e) => setField("bairro", e.target.value)}
+                      className={formModalInputClass(false)}
+                      autoComplete="address-level3"
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className={formModalLabelClass}>Cidade</label>
-                    <input value={form.cidade} onChange={(e) => setField("cidade", e.target.value)} className={formModalInputClass(false)} />
+                    <input
+                      value={form.cidade}
+                      onChange={(e) => setField("cidade", e.target.value)}
+                      className={formModalInputClass(false)}
+                      autoComplete="address-level2"
+                    />
                   </div>
                   <div>
                     <label className={formModalLabelClass}>UF</label>
-                    <input value={form.estado} onChange={(e) => setField("estado", e.target.value.toUpperCase().slice(0, 2))} className={formModalInputClass(false)} maxLength={2} />
+                    <input
+                      value={form.estado}
+                      onChange={(e) => setField("estado", e.target.value.toUpperCase().slice(0, 2))}
+                      className={formModalInputClass(false)}
+                      maxLength={2}
+                      autoComplete="address-level1"
+                    />
                   </div>
                 </div>
               </FormModalSection>

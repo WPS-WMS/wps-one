@@ -5,12 +5,17 @@ import { authMiddleware, hashPassword } from "../lib/auth.js";
 import { isPlatformAdmin } from "../lib/platformAdmin.js";
 import { formatStorageBytes, getTenantUsageSnapshot } from "../lib/platformTenantUsage.js";
 import {
-  buildSubscriptionPayload,
   computeNextSubscriptionPaymentAt,
-  isPlatformPlanId,
   isSubscriptionPaymentMethodId,
-  PLATFORM_PLANS,
+  serializePlan,
+  SUBSCRIPTION_PAYMENT_METHODS,
 } from "../lib/platformPlans.js";
+import {
+  findPlatformPlanById,
+  listPlatformPlans,
+  subscriptionPayloadForTenant,
+  TENANT_SUBSCRIPTION_SELECT,
+} from "../lib/subscriptionHelpers.js";
 import { ensureFinanceDefaults } from "../lib/financeConfigHelpers.js";
 import { errorSummary } from "../lib/devLog.js";
 
@@ -78,18 +83,151 @@ platformRouter.get("/access", async (req, res) => {
   }
 });
 
-platformRouter.get("/plans", requirePlatformAdmin, (_req, res) => {
-  res.json({
-    plans: Object.values(PLATFORM_PLANS).map((p) => ({
-      id: p.id,
-      label: p.label,
-      priceCentsPerUser: p.priceCentsPerUser,
-      pricePerUserFormatted: (p.priceCentsPerUser / 100).toLocaleString("pt-BR", {
-        style: "currency",
-        currency: "BRL",
-      }),
-    })),
-  });
+platformRouter.get("/plans", requirePlatformAdmin, async (_req, res) => {
+  try {
+    const plans = await listPlatformPlans();
+    res.json({ plans: plans.map(serializePlan) });
+  } catch (err) {
+    console.error("[platform] plans list", errorSummary(err));
+    res.status(500).json({ error: "Erro ao listar planos." });
+  }
+});
+
+platformRouter.post("/plans", requirePlatformAdmin, async (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const name = String(body.name ?? "").trim();
+  const priceRaw = Number(body.priceCentsPerUser);
+  if (!name) {
+    res.status(400).json({ error: "Nome do plano é obrigatório." });
+    return;
+  }
+  if (!Number.isFinite(priceRaw) || priceRaw < 0) {
+    res.status(400).json({ error: "Preço por usuário inválido." });
+    return;
+  }
+  const codeRaw = String(body.code ?? "").trim().toUpperCase();
+  const code = codeRaw || null;
+  try {
+    if (code) {
+      const exists = await prisma.platformPlan.findUnique({ where: { code }, select: { id: true } });
+      if (exists) {
+        res.status(400).json({ error: "Já existe um plano com este código." });
+        return;
+      }
+    }
+    const maxSort = await prisma.platformPlan.aggregate({ _max: { sortOrder: true } });
+    const created = await prisma.platformPlan.create({
+      data: {
+        name,
+        code,
+        priceCentsPerUser: Math.round(priceRaw),
+        moduleProjetos: body.moduleProjetos !== false,
+        moduleFinanceiro: body.moduleFinanceiro !== false,
+        modulePortal: body.modulePortal !== false,
+        active: body.active !== false,
+        sortOrder: Number.isFinite(Number(body.sortOrder))
+          ? Math.round(Number(body.sortOrder))
+          : (maxSort._max.sortOrder ?? 0) + 10,
+      },
+    });
+    res.status(201).json({ plan: serializePlan(created) });
+  } catch (err) {
+    console.error("[platform] plans create", errorSummary(err));
+    res.status(500).json({ error: "Erro ao criar plano." });
+  }
+});
+
+platformRouter.patch("/plans/:id", requirePlatformAdmin, async (req, res) => {
+  const id = String(req.params.id || "").trim();
+  if (!id) {
+    res.status(400).json({ error: "Informe o plano." });
+    return;
+  }
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  try {
+    const existing = await findPlatformPlanById(id);
+    if (!existing) {
+      res.status(404).json({ error: "Plano não encontrado." });
+      return;
+    }
+    const data: {
+      name?: string;
+      code?: string | null;
+      priceCentsPerUser?: number;
+      moduleProjetos?: boolean;
+      moduleFinanceiro?: boolean;
+      modulePortal?: boolean;
+      active?: boolean;
+      sortOrder?: number;
+    } = {};
+    if (body.name !== undefined) {
+      const name = String(body.name).trim();
+      if (!name) {
+        res.status(400).json({ error: "Nome do plano é obrigatório." });
+        return;
+      }
+      data.name = name;
+    }
+    if (body.code !== undefined) {
+      const codeRaw = String(body.code ?? "").trim().toUpperCase();
+      data.code = codeRaw || null;
+      if (data.code) {
+        const clash = await prisma.platformPlan.findFirst({
+          where: { code: data.code, NOT: { id } },
+          select: { id: true },
+        });
+        if (clash) {
+          res.status(400).json({ error: "Já existe um plano com este código." });
+          return;
+        }
+      }
+    }
+    if (body.priceCentsPerUser !== undefined) {
+      const priceRaw = Number(body.priceCentsPerUser);
+      if (!Number.isFinite(priceRaw) || priceRaw < 0) {
+        res.status(400).json({ error: "Preço por usuário inválido." });
+        return;
+      }
+      data.priceCentsPerUser = Math.round(priceRaw);
+    }
+    if (body.moduleProjetos !== undefined) data.moduleProjetos = !!body.moduleProjetos;
+    if (body.moduleFinanceiro !== undefined) data.moduleFinanceiro = !!body.moduleFinanceiro;
+    if (body.modulePortal !== undefined) data.modulePortal = !!body.modulePortal;
+    if (body.active !== undefined) data.active = !!body.active;
+    if (body.sortOrder !== undefined && Number.isFinite(Number(body.sortOrder))) {
+      data.sortOrder = Math.round(Number(body.sortOrder));
+    }
+    const updated = await prisma.platformPlan.update({ where: { id }, data });
+    res.json({ plan: serializePlan(updated) });
+  } catch (err) {
+    console.error("[platform] plans patch", errorSummary(err));
+    res.status(500).json({ error: "Erro ao atualizar plano." });
+  }
+});
+
+platformRouter.delete("/plans/:id", requirePlatformAdmin, async (req, res) => {
+  const id = String(req.params.id || "").trim();
+  if (!id) {
+    res.status(400).json({ error: "Informe o plano." });
+    return;
+  }
+  try {
+    const inUse = await prisma.tenant.count({ where: { subscriptionPlanId: id } });
+    if (inUse > 0) {
+      // Soft-disable em vez de apagar planos em uso.
+      const updated = await prisma.platformPlan.update({
+        where: { id },
+        data: { active: false },
+      });
+      res.json({ plan: serializePlan(updated), deactivated: true });
+      return;
+    }
+    await prisma.platformPlan.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[platform] plans delete", errorSummary(err));
+    res.status(500).json({ error: "Erro ao remover plano." });
+  }
 });
 
 /**
@@ -200,12 +338,11 @@ platformRouter.post("/tenants", requirePlatformAdmin, async (req, res) => {
     }
 
     const usage = await getTenantUsageSnapshot(created.tenant.id);
-    const subscription = buildSubscriptionPayload({
-      plan: null,
-      startedAt: null,
-      nextPaymentAt: null,
-      billableUsersActive: usage.billableUsersActive,
+    const tenantRow = await prisma.tenant.findUnique({
+      where: { id: created.tenant.id },
+      select: TENANT_SUBSCRIPTION_SELECT,
     });
+    const subscription = subscriptionPayloadForTenant(tenantRow!, usage.billableUsersActive);
 
     res.status(201).json({
       id: created.tenant.id,
@@ -241,28 +378,16 @@ platformRouter.get("/tenants", requirePlatformAdmin, async (_req, res) => {
     const tenants = await prisma.tenant.findMany({
       orderBy: { createdAt: "desc" },
       select: {
-        id: true,
-        name: true,
-        slug: true,
+        ...TENANT_SUBSCRIPTION_SELECT,
         createdAt: true,
         updatedAt: true,
-        subscriptionPlan: true,
-        subscriptionStartedAt: true,
-        subscriptionNextPaymentAt: true,
-        subscriptionPaymentMethod: true,
       },
     });
 
     const items = await Promise.all(
       tenants.map(async (t) => {
         const usage = await getTenantUsageSnapshot(t.id);
-        const subscription = buildSubscriptionPayload({
-          plan: t.subscriptionPlan,
-          startedAt: t.subscriptionStartedAt,
-          nextPaymentAt: t.subscriptionNextPaymentAt,
-          paymentMethod: t.subscriptionPaymentMethod,
-          billableUsersActive: usage.billableUsersActive,
-        });
+        const subscription = subscriptionPayloadForTenant(t, usage.billableUsersActive);
         return {
           id: t.id,
           name: t.name,
@@ -281,7 +406,7 @@ platformRouter.get("/tenants", requirePlatformAdmin, async (_req, res) => {
     const totals = items.reduce(
       (acc, row) => {
         acc.tenants += 1;
-        acc.subscribedTenants += row.subscription.plan ? 1 : 0;
+        acc.subscribedTenants += row.subscription.planId ? 1 : 0;
         acc.usersActive += row.usage.usersActive;
         acc.billableUsersActive += row.usage.billableUsersActive;
         acc.monthlyBillingCents += row.subscription.monthlyAmountCents;
@@ -298,6 +423,8 @@ platformRouter.get("/tenants", requirePlatformAdmin, async (_req, res) => {
       },
     );
 
+    const plans = await listPlatformPlans({ activeOnly: true });
+
     res.json({
       items,
       totals: {
@@ -308,11 +435,7 @@ platformRouter.get("/tenants", requirePlatformAdmin, async (_req, res) => {
         }),
         storageFormatted: formatStorageBytes(totals.storageBytes),
       },
-      plans: Object.values(PLATFORM_PLANS).map((p) => ({
-        id: p.id,
-        label: p.label,
-        priceCentsPerUser: p.priceCentsPerUser,
-      })),
+      plans: plans.map(serializePlan),
     });
   } catch (err) {
     console.error("[platform] tenants list", errorSummary(err));
@@ -330,15 +453,9 @@ platformRouter.get("/tenants/:id", requirePlatformAdmin, async (req, res) => {
     const tenant = await prisma.tenant.findUnique({
       where: { id },
       select: {
-        id: true,
-        name: true,
-        slug: true,
+        ...TENANT_SUBSCRIPTION_SELECT,
         createdAt: true,
         updatedAt: true,
-        subscriptionPlan: true,
-        subscriptionStartedAt: true,
-        subscriptionNextPaymentAt: true,
-        subscriptionPaymentMethod: true,
       },
     });
     if (!tenant) {
@@ -347,13 +464,7 @@ platformRouter.get("/tenants/:id", requirePlatformAdmin, async (req, res) => {
     }
 
     const usage = await getTenantUsageSnapshot(tenant.id);
-    const subscription = buildSubscriptionPayload({
-      plan: tenant.subscriptionPlan,
-      startedAt: tenant.subscriptionStartedAt,
-      nextPaymentAt: tenant.subscriptionNextPaymentAt,
-      paymentMethod: tenant.subscriptionPaymentMethod,
-      billableUsersActive: usage.billableUsersActive,
-    });
+    const subscription = subscriptionPayloadForTenant(tenant, usage.billableUsersActive);
 
     const recentUsers = await prisma.user.findMany({
       where: { tenantId: tenant.id, role: { not: "PLATFORM_ADMIN" } },
@@ -403,16 +514,19 @@ platformRouter.patch("/tenants/:id/subscription", requirePlatformAdmin, async (r
   }
 
   const body = (req.body ?? {}) as Record<string, unknown>;
-  const planRaw = body.plan;
-  let plan: string | null | undefined = undefined;
+  const planRaw = body.planId ?? body.plan;
+  let planId: string | null | undefined = undefined;
+  let planRecord = null as Awaited<ReturnType<typeof findPlatformPlanById>>;
   if (planRaw !== undefined) {
     if (planRaw === null || planRaw === "" || planRaw === "none") {
-      plan = null;
-    } else if (isPlatformPlanId(planRaw)) {
-      plan = planRaw;
+      planId = null;
     } else {
-      res.status(400).json({ error: "Plano inválido. Use STANDARD ou PREMIUM." });
-      return;
+      planRecord = await findPlatformPlanById(String(planRaw));
+      if (!planRecord || !planRecord.active) {
+        res.status(400).json({ error: "Plano inválido ou inativo." });
+        return;
+      }
+      planId = planRecord.id;
     }
   }
 
@@ -443,20 +557,14 @@ platformRouter.patch("/tenants/:id/subscription", requirePlatformAdmin, async (r
   try {
     const existing = await prisma.tenant.findUnique({
       where: { id },
-      select: {
-        id: true,
-        subscriptionPlan: true,
-        subscriptionStartedAt: true,
-        subscriptionNextPaymentAt: true,
-        subscriptionPaymentMethod: true,
-      },
+      select: TENANT_SUBSCRIPTION_SELECT,
     });
     if (!existing) {
       res.status(404).json({ error: "Tenant não encontrado." });
       return;
     }
 
-    const nextPlan = plan !== undefined ? plan : existing.subscriptionPlan;
+    const nextPlanId = planId !== undefined ? planId : existing.subscriptionPlanId;
     let nextStarted =
       startedAt !== undefined ? startedAt : existing.subscriptionStartedAt;
     let nextPayment =
@@ -464,45 +572,39 @@ platformRouter.patch("/tenants/:id/subscription", requirePlatformAdmin, async (r
     let nextMethod =
       paymentMethod !== undefined ? paymentMethod : existing.subscriptionPaymentMethod;
 
-    if (nextPlan && !nextStarted) {
+    if (nextPlanId && !nextStarted) {
       nextStarted = new Date();
     }
-    if (nextPlan && nextStarted && !nextPayment) {
+    if (nextPlanId && nextStarted && !nextPayment) {
       nextPayment = computeNextSubscriptionPaymentAt(nextStarted);
     }
-    if (!nextPlan) {
+    if (!nextPlanId) {
       nextStarted = null;
       nextPayment = null;
       nextMethod = null;
     }
 
+    const resolvedPlan =
+      planRecord ??
+      (nextPlanId ? await findPlatformPlanById(nextPlanId) : null);
+
     const updated = await prisma.tenant.update({
       where: { id },
       data: {
-        subscriptionPlan: nextPlan,
+        subscriptionPlanId: nextPlanId,
+        subscriptionPlan: resolvedPlan?.code ?? resolvedPlan?.name ?? null,
         subscriptionStartedAt: nextStarted,
         subscriptionNextPaymentAt: nextPayment,
         subscriptionPaymentMethod: nextMethod,
+        subscriptionStatus: nextPlanId ? "active" : "none",
+        subscriptionCanceledAt: null,
+        subscriptionAccessUntil: null,
       },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        subscriptionPlan: true,
-        subscriptionStartedAt: true,
-        subscriptionNextPaymentAt: true,
-        subscriptionPaymentMethod: true,
-      },
+      select: TENANT_SUBSCRIPTION_SELECT,
     });
 
     const usage = await getTenantUsageSnapshot(updated.id);
-    const subscription = buildSubscriptionPayload({
-      plan: updated.subscriptionPlan,
-      startedAt: updated.subscriptionStartedAt,
-      nextPaymentAt: updated.subscriptionNextPaymentAt,
-      paymentMethod: updated.subscriptionPaymentMethod,
-      billableUsersActive: usage.billableUsersActive,
-    });
+    const subscription = subscriptionPayloadForTenant(updated, usage.billableUsersActive);
 
     res.json({
       id: updated.id,

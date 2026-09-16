@@ -6,12 +6,16 @@ import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "@/components/Link";
 import { usePathname } from "next/navigation";
+import { ConfirmModal } from "@/components/ConfirmModal";
 
 type PlanOption = {
   id: string;
+  name?: string;
   label: string;
   priceCentsPerUser: number;
   pricePerUserFormatted: string;
+  modules?: { projetos: boolean; financeiro: boolean; portal: boolean };
+  moduleLabels?: string[];
 };
 
 type PaymentMethodOption = {
@@ -21,8 +25,10 @@ type PaymentMethodOption = {
 
 type SubscriptionPayload = {
   plan: string | null;
+  planId?: string | null;
   planLabel: string;
   status: string;
+  statusLabel?: string;
   label: string;
   note?: string;
   pricePerUserFormatted: string | null;
@@ -31,6 +37,9 @@ type SubscriptionPayload = {
   nextPaymentAt: string | null;
   paymentMethod: string | null;
   paymentMethodLabel: string | null;
+  canceledAt?: string | null;
+  accessUntil?: string | null;
+  moduleLabels?: string[];
 };
 
 type ResponseBody = {
@@ -43,6 +52,7 @@ type ResponseBody = {
   subscription: SubscriptionPayload;
   plans?: PlanOption[];
   paymentMethods?: PaymentMethodOption[];
+  message?: string;
 };
 
 const DEFAULT_PAYMENT_METHODS: PaymentMethodOption[] = [
@@ -69,7 +79,7 @@ function basePathFromPathname(pathname: string): "/admin" | "/gestor" | "/consul
 }
 
 export function MySubscriptionPageContent() {
-  const { user, loading: authLoading, can, permissionsReady } = useAuth();
+  const { user, loading: authLoading, can, permissionsReady, refreshSession } = useAuth();
   const pathname = usePathname();
   const basePath = basePathFromPathname(pathname);
 
@@ -77,9 +87,11 @@ export function MySubscriptionPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [plan, setPlan] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   const allowed = permissionsReady && can("configuracoes.assinatura");
 
@@ -103,7 +115,7 @@ export function MySubscriptionPageContent() {
       }
       const row = body as ResponseBody;
       setData(row);
-      setPlan(row.subscription.plan ?? "");
+      setPlan(row.subscription.planId ?? row.subscription.plan ?? "");
       setPaymentMethod(row.subscription.paymentMethod ?? "");
       setLoading(false);
     })();
@@ -120,7 +132,7 @@ export function MySubscriptionPageContent() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        plan: plan || null,
+        planId: plan || null,
         paymentMethod: plan ? paymentMethod || null : null,
       }),
     });
@@ -141,9 +153,40 @@ export function MySubscriptionPageContent() {
           }
         : row,
     );
-    setPlan(row.subscription.plan ?? "");
+    setPlan(row.subscription.planId ?? row.subscription.plan ?? "");
     setPaymentMethod(row.subscription.paymentMethod ?? "");
     setSaveMsg("Assinatura atualizada.");
+    void refreshSession?.();
+  }
+
+  async function cancelSubscription() {
+    setCanceling(true);
+    setError(null);
+    setSaveMsg(null);
+    const r = await apiFetch("/api/tenants/me/subscription/cancel", { method: "POST" });
+    const body = await r.json().catch(() => null);
+    setCanceling(false);
+    setConfirmCancel(false);
+    if (!r.ok) {
+      setError(typeof body?.error === "string" ? body.error : "Erro ao cancelar assinatura.");
+      return;
+    }
+    const row = body as ResponseBody;
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            usage: row.usage,
+            subscription: row.subscription,
+            tenant: row.tenant,
+          }
+        : row,
+    );
+    setSaveMsg(
+      typeof body?.message === "string"
+        ? body.message
+        : "Cancelamento agendado. Você pode usar a plataforma até o fim do período.",
+    );
   }
 
   if (authLoading || !permissionsReady || loading) {
@@ -167,11 +210,13 @@ export function MySubscriptionPageContent() {
     );
   }
 
-  const plans = data?.plans ?? [
-    { id: "STANDARD", label: "Standard", priceCentsPerUser: 4900, pricePerUserFormatted: "R$ 49,00" },
-    { id: "PREMIUM", label: "Premium", priceCentsPerUser: 9900, pricePerUserFormatted: "R$ 99,00" },
-  ];
+  const plans = data?.plans ?? [];
   const paymentMethods = data?.paymentMethods ?? DEFAULT_PAYMENT_METHODS;
+  const status = data?.subscription.status ?? "none";
+  const isCanceling = status === "canceling";
+  const isLocked = status === "locked";
+  const hasPlan = Boolean(data?.subscription.planId ?? data?.subscription.plan);
+  const accessUntilLabel = fmtDate(data?.subscription.accessUntil);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-6">
@@ -194,6 +239,17 @@ export function MySubscriptionPageContent() {
           style={{ borderColor: "rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.08)" }}
         >
           {error}
+        </div>
+      ) : null}
+
+      {isCanceling ? (
+        <div
+          className="rounded-xl border px-4 py-3 text-sm text-amber-900"
+          style={{ borderColor: "rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.12)" }}
+        >
+          Cancelamento agendado. Você e sua equipe podem usar a plataforma até{" "}
+          <strong>{accessUntilLabel}</strong>. Depois disso o acesso será bloqueado para todos,
+          inclusive o Super administrador.
         </div>
       ) : null}
 
@@ -231,7 +287,7 @@ export function MySubscriptionPageContent() {
       >
         <h2 className="text-sm font-semibold">Detalhes da assinatura</h2>
         <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-          Standard R$&nbsp;49 e Premium R$&nbsp;99 por usuário ativo. Inativos não entram na cobrança.
+          Os planos e módulos são definidos no painel da plataforma. Inativos não entram na cobrança.
         </p>
 
         <div className="mt-4 space-y-4">
@@ -241,6 +297,7 @@ export function MySubscriptionPageContent() {
               className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
               style={{ borderColor: "var(--border)" }}
               value={plan}
+              disabled={isCanceling || isLocked}
               onChange={(e) => {
                 const next = e.target.value;
                 setPlan(next);
@@ -254,6 +311,11 @@ export function MySubscriptionPageContent() {
                 </option>
               ))}
             </select>
+            {plans.length === 0 ? (
+              <p className="mt-1 text-[11px] text-amber-700">
+                Nenhum plano ativo disponível. Peça ao time WPS One para cadastrar na aba Planos.
+              </p>
+            ) : null}
           </div>
 
           {plan ? (
@@ -265,10 +327,14 @@ export function MySubscriptionPageContent() {
                   return (
                     <label
                       key={method.id}
-                      className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-colors"
+                      className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+                        isCanceling || isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                      }`}
                       style={{
                         borderColor: selected ? "var(--primary)" : "var(--border)",
-                        background: selected ? "color-mix(in srgb, var(--primary) 8%, transparent)" : "transparent",
+                        background: selected
+                          ? "color-mix(in srgb, var(--primary) 8%, transparent)"
+                          : "transparent",
                       }}
                     >
                       <input
@@ -276,6 +342,7 @@ export function MySubscriptionPageContent() {
                         name="paymentMethod"
                         className="accent-[color:var(--primary)]"
                         checked={selected}
+                        disabled={isCanceling || isLocked}
                         onChange={() => setPaymentMethod(method.id)}
                       />
                       <span className="font-medium">{method.label}</span>
@@ -290,27 +357,54 @@ export function MySubscriptionPageContent() {
           ) : null}
         </div>
 
-        <dl className="mt-5 grid gap-3 border-t pt-4 text-sm sm:grid-cols-2" style={{ borderColor: "var(--border)" }}>
+        <dl
+          className="mt-5 grid gap-3 border-t pt-4 text-sm sm:grid-cols-2"
+          style={{ borderColor: "var(--border)" }}
+        >
           <div>
             <dt className="text-xs text-[color:var(--muted-foreground)]">Data de aquisição</dt>
             <dd className="mt-1 font-medium">{fmtDate(data?.subscription.startedAt)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-[color:var(--muted-foreground)]">Próxima parcela</dt>
-            <dd className="mt-1 font-medium">{fmtDate(data?.subscription.nextPaymentAt)}</dd>
+            <dt className="text-xs text-[color:var(--muted-foreground)]">
+              {isCanceling ? "Acesso até" : "Próxima parcela"}
+            </dt>
+            <dd className="mt-1 font-medium">
+              {fmtDate(isCanceling ? data?.subscription.accessUntil : data?.subscription.nextPaymentAt)}
+            </dd>
           </div>
           <div>
             <dt className="text-xs text-[color:var(--muted-foreground)]">Preço por usuário</dt>
-            <dd className="mt-1 font-medium">
-              {data?.subscription.pricePerUserFormatted ?? "—"}
-            </dd>
+            <dd className="mt-1 font-medium">{data?.subscription.pricePerUserFormatted ?? "—"}</dd>
           </div>
           <div>
             <dt className="text-xs text-[color:var(--muted-foreground)]">Status</dt>
             <dd className="mt-1 font-medium">
-              {data?.subscription.status === "active" ? "Ativa" : "Não configurada"}
+              {data?.subscription.statusLabel ??
+                (status === "active"
+                  ? "Ativa"
+                  : status === "canceling"
+                    ? "Cancelamento agendado"
+                    : status === "locked"
+                      ? "Encerrada"
+                      : "Não configurada")}
             </dd>
           </div>
+          {data?.subscription.moduleLabels?.length ? (
+            <div className="sm:col-span-2">
+              <dt className="text-xs text-[color:var(--muted-foreground)]">Módulos do plano</dt>
+              <dd className="mt-1 flex flex-wrap gap-1.5">
+                {data.subscription.moduleLabels.map((label) => (
+                  <span
+                    key={label}
+                    className="rounded-full bg-[color:var(--primary)]/10 px-2 py-0.5 text-[11px] font-medium text-[color:var(--primary)]"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </dd>
+            </div>
+          ) : null}
           {data?.subscription.paymentMethodLabel ? (
             <div className="sm:col-span-2">
               <dt className="text-xs text-[color:var(--muted-foreground)]">Pagamento salvo</dt>
@@ -320,15 +414,27 @@ export function MySubscriptionPageContent() {
         </dl>
 
         <div className="mt-5 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => void save()}
-            className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Salvar alterações
-          </button>
+          {!isCanceling && !isLocked ? (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void save()}
+              className="inline-flex items-center gap-2 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Salvar alterações
+            </button>
+          ) : null}
+          {hasPlan && !isCanceling && !isLocked ? (
+            <button
+              type="button"
+              disabled={canceling}
+              onClick={() => setConfirmCancel(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+            >
+              Cancelar assinatura
+            </button>
+          ) : null}
           {saveMsg ? <span className="text-xs text-emerald-700">{saveMsg}</span> : null}
         </div>
       </section>
@@ -338,6 +444,20 @@ export function MySubscriptionPageContent() {
           ← Voltar
         </Link>
       </p>
+
+      {confirmCancel ? (
+        <ConfirmModal
+          title="Cancelar assinatura?"
+          message={`Ao confirmar, você poderá usar a plataforma até o dia da próxima parcela (${fmtDate(
+            data?.subscription.nextPaymentAt ?? data?.subscription.accessUntil,
+          )}). Depois disso o acesso será bloqueado para todos os usuários, inclusive o Super administrador.`}
+          confirmLabel={canceling ? "Cancelando…" : "Confirmar cancelamento"}
+          cancelLabel="Manter assinatura"
+          variant="danger"
+          onCancel={() => !canceling && setConfirmCancel(false)}
+          onConfirm={() => void cancelSubscription()}
+        />
+      ) : null}
     </div>
   );
 }

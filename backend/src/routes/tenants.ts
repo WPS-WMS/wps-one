@@ -5,13 +5,18 @@ import rateLimit from "express-rate-limit";
 import { errorSummary } from "../lib/devLog.js";
 import { isTenantSignupAllowed } from "../lib/deployEnv.js";
 import {
-  buildSubscriptionPayload,
   computeNextSubscriptionPaymentAt,
-  isPlatformPlanId,
   isSubscriptionPaymentMethodId,
-  PLATFORM_PLANS,
+  resolveNextPaymentAt,
+  serializePlan,
   SUBSCRIPTION_PAYMENT_METHODS,
 } from "../lib/platformPlans.js";
+import {
+  findPlatformPlanById,
+  listPlatformPlans,
+  subscriptionPayloadForTenant,
+  TENANT_SUBSCRIPTION_SELECT,
+} from "../lib/subscriptionHelpers.js";
 import { getTenantUsageSnapshot } from "../lib/platformTenantUsage.js";
 
 export const tenantsRouter = Router();
@@ -145,28 +150,15 @@ tenantsRouter.get("/me/subscription", authMiddleware, async (req, res) => {
   try {
     const tenant = await prisma.tenant.findUnique({
       where: { id: user.tenantId },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        subscriptionPlan: true,
-        subscriptionStartedAt: true,
-        subscriptionNextPaymentAt: true,
-        subscriptionPaymentMethod: true,
-      },
+      select: TENANT_SUBSCRIPTION_SELECT,
     });
     if (!tenant) {
       res.status(404).json({ error: "Organização não encontrada." });
       return;
     }
     const usage = await getTenantUsageSnapshot(tenant.id);
-    const subscription = buildSubscriptionPayload({
-      plan: tenant.subscriptionPlan,
-      startedAt: tenant.subscriptionStartedAt,
-      nextPaymentAt: tenant.subscriptionNextPaymentAt,
-      paymentMethod: tenant.subscriptionPaymentMethod,
-      billableUsersActive: usage.billableUsersActive,
-    });
+    const subscription = subscriptionPayloadForTenant(tenant, usage.billableUsersActive);
+    const plans = await listPlatformPlans({ activeOnly: true });
     res.json({
       tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug },
       usage: {
@@ -175,15 +167,7 @@ tenantsRouter.get("/me/subscription", authMiddleware, async (req, res) => {
         billableUsersActive: usage.billableUsersActive,
       },
       subscription,
-      plans: Object.values(PLATFORM_PLANS).map((p) => ({
-        id: p.id,
-        label: p.label,
-        priceCentsPerUser: p.priceCentsPerUser,
-        pricePerUserFormatted: (p.priceCentsPerUser / 100).toLocaleString("pt-BR", {
-          style: "currency",
-          currency: "BRL",
-        }),
-      })),
+      plans: plans.map(serializePlan),
       paymentMethods: Object.values(SUBSCRIPTION_PAYMENT_METHODS).map((m) => ({
         id: m.id,
         label: m.label,
@@ -203,16 +187,19 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
   }
 
   const body = (req.body ?? {}) as Record<string, unknown>;
-  const planRaw = body.plan;
-  let plan: string | null | undefined = undefined;
+  const planRaw = body.planId ?? body.plan;
+  let planId: string | null | undefined = undefined;
+  let planRecord = null as Awaited<ReturnType<typeof findPlatformPlanById>>;
   if (planRaw !== undefined) {
     if (planRaw === null || planRaw === "" || planRaw === "none") {
-      plan = null;
-    } else if (isPlatformPlanId(planRaw)) {
-      plan = planRaw;
+      planId = null;
     } else {
-      res.status(400).json({ error: "Plano inválido. Use STANDARD ou PREMIUM." });
-      return;
+      planRecord = await findPlatformPlanById(String(planRaw));
+      if (!planRecord || !planRecord.active) {
+        res.status(400).json({ error: "Plano inválido ou inativo." });
+        return;
+      }
+      planId = planRecord.id;
     }
   }
 
@@ -232,66 +219,73 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
   try {
     const existing = await prisma.tenant.findUnique({
       where: { id: user.tenantId },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        subscriptionPlan: true,
-        subscriptionStartedAt: true,
-        subscriptionNextPaymentAt: true,
-        subscriptionPaymentMethod: true,
-      },
+      select: TENANT_SUBSCRIPTION_SELECT,
     });
     if (!existing) {
       res.status(404).json({ error: "Organização não encontrada." });
       return;
     }
 
-    const nextPlan = plan !== undefined ? plan : existing.subscriptionPlan;
+    // Em cancelamento agendado, não permite trocar plano por aqui — use reativação explícita.
+    if (
+      existing.subscriptionStatus === "canceling" &&
+      planId === undefined &&
+      paymentMethod === undefined
+    ) {
+      res.status(400).json({ error: "Assinatura em cancelamento. Nenhuma alteração pendente." });
+      return;
+    }
+
+    const nextPlanId = planId !== undefined ? planId : existing.subscriptionPlanId;
     let nextStarted = existing.subscriptionStartedAt;
     let nextPayment = existing.subscriptionNextPaymentAt;
     let nextMethod =
       paymentMethod !== undefined ? paymentMethod : existing.subscriptionPaymentMethod;
+    let nextStatus = existing.subscriptionStatus ?? (nextPlanId ? "active" : "none");
+    let nextCanceledAt = existing.subscriptionCanceledAt;
+    let nextAccessUntil = existing.subscriptionAccessUntil;
 
-    if (nextPlan && !nextStarted) {
-      nextStarted = new Date();
+    if (planId !== undefined) {
+      if (nextPlanId) {
+        if (!nextStarted) nextStarted = new Date();
+        if (nextStarted && !nextPayment) {
+          nextPayment = computeNextSubscriptionPaymentAt(nextStarted);
+        }
+        nextStatus = "active";
+        nextCanceledAt = null;
+        nextAccessUntil = null;
+      } else {
+        // Limpar plano imediatamente só se ainda não estava ativo com período.
+        nextStarted = null;
+        nextPayment = null;
+        nextMethod = null;
+        nextStatus = "none";
+        nextCanceledAt = null;
+        nextAccessUntil = null;
+      }
     }
-    if (nextPlan && nextStarted && !nextPayment) {
-      nextPayment = computeNextSubscriptionPaymentAt(nextStarted);
-    }
-    if (!nextPlan) {
-      nextStarted = null;
-      nextPayment = null;
-      nextMethod = null;
-    }
+
+    const resolvedPlan =
+      planRecord ??
+      (nextPlanId ? await findPlatformPlanById(nextPlanId) : null);
 
     const updated = await prisma.tenant.update({
       where: { id: existing.id },
       data: {
-        subscriptionPlan: nextPlan,
+        subscriptionPlanId: nextPlanId,
+        subscriptionPlan: resolvedPlan?.code ?? resolvedPlan?.name ?? null,
         subscriptionStartedAt: nextStarted,
         subscriptionNextPaymentAt: nextPayment,
         subscriptionPaymentMethod: nextMethod,
+        subscriptionStatus: nextStatus,
+        subscriptionCanceledAt: nextCanceledAt,
+        subscriptionAccessUntil: nextAccessUntil,
       },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        subscriptionPlan: true,
-        subscriptionStartedAt: true,
-        subscriptionNextPaymentAt: true,
-        subscriptionPaymentMethod: true,
-      },
+      select: TENANT_SUBSCRIPTION_SELECT,
     });
 
     const usage = await getTenantUsageSnapshot(updated.id);
-    const subscription = buildSubscriptionPayload({
-      plan: updated.subscriptionPlan,
-      startedAt: updated.subscriptionStartedAt,
-      nextPaymentAt: updated.subscriptionNextPaymentAt,
-      paymentMethod: updated.subscriptionPaymentMethod,
-      billableUsersActive: usage.billableUsersActive,
-    });
+    const subscription = subscriptionPayloadForTenant(updated, usage.billableUsersActive);
 
     res.json({
       tenant: { id: updated.id, name: updated.name, slug: updated.slug },
@@ -305,5 +299,79 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("[tenants] PATCH me/subscription", errorSummary(err));
     res.status(500).json({ error: "Erro ao atualizar assinatura." });
+  }
+});
+
+/** Cancela a assinatura: acesso permanece até a próxima parcela (aniversário). */
+tenantsRouter.post("/me/subscription/cancel", authMiddleware, async (req, res) => {
+  const user = (req as Request & { user: AuthedUser }).user;
+  if (String(user.role || "").toUpperCase() !== "SUPER_ADMIN") {
+    res.status(403).json({ error: "Apenas o Super administrador pode cancelar a assinatura." });
+    return;
+  }
+  try {
+    const existing = await prisma.tenant.findUnique({
+      where: { id: user.tenantId },
+      select: TENANT_SUBSCRIPTION_SELECT,
+    });
+    if (!existing) {
+      res.status(404).json({ error: "Organização não encontrada." });
+      return;
+    }
+    if (!existing.subscriptionPlanId) {
+      res.status(400).json({ error: "Não há assinatura ativa para cancelar." });
+      return;
+    }
+    if (existing.subscriptionStatus === "locked") {
+      res.status(400).json({ error: "A assinatura já está encerrada." });
+      return;
+    }
+    if (existing.subscriptionStatus === "canceling" && existing.subscriptionAccessUntil) {
+      const usage = await getTenantUsageSnapshot(existing.id);
+      res.json({
+        tenant: { id: existing.id, name: existing.name, slug: existing.slug },
+        usage: {
+          usersTotal: usage.usersTotal,
+          usersActive: usage.usersActive,
+          billableUsersActive: usage.billableUsersActive,
+        },
+        subscription: subscriptionPayloadForTenant(existing, usage.billableUsersActive),
+        message: "Cancelamento já estava agendado.",
+      });
+      return;
+    }
+
+    const startedAt = existing.subscriptionStartedAt ?? new Date();
+    const accessUntil =
+      resolveNextPaymentAt({
+        startedAt,
+        nextPaymentAt: existing.subscriptionNextPaymentAt,
+      }) ?? computeNextSubscriptionPaymentAt(startedAt);
+
+    const updated = await prisma.tenant.update({
+      where: { id: existing.id },
+      data: {
+        subscriptionStatus: "canceling",
+        subscriptionCanceledAt: new Date(),
+        subscriptionAccessUntil: accessUntil,
+        subscriptionNextPaymentAt: accessUntil,
+      },
+      select: TENANT_SUBSCRIPTION_SELECT,
+    });
+
+    const usage = await getTenantUsageSnapshot(updated.id);
+    res.json({
+      tenant: { id: updated.id, name: updated.name, slug: updated.slug },
+      usage: {
+        usersTotal: usage.usersTotal,
+        usersActive: usage.usersActive,
+        billableUsersActive: usage.billableUsersActive,
+      },
+      subscription: subscriptionPayloadForTenant(updated, usage.billableUsersActive),
+      message: `Assinatura cancelada. Você pode usar a plataforma até ${accessUntil.toLocaleDateString("pt-BR")}.`,
+    });
+  } catch (err) {
+    console.error("[tenants] POST me/subscription/cancel", errorSummary(err));
+    res.status(500).json({ error: "Erro ao cancelar assinatura." });
   }
 });
