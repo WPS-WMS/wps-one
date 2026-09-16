@@ -21,6 +21,8 @@ import {
   Trash2,
   X,
   Rocket,
+  Pause,
+  Play,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch, apiFetchBlob, publicFileUrl } from "@/lib/api";
@@ -769,6 +771,8 @@ export function PortalCollaborativeDashboard() {
   const [employeeFocalY, setEmployeeFocalY] = useState(50);
   const [employeeGalleryIndex, setEmployeeGalleryIndex] = useState(0);
   const [awardsGalleryIndex, setAwardsGalleryIndex] = useState(0);
+  const [awardsAutoplay, setAwardsAutoplay] = useState(false);
+  const [awardsAutoplayReady, setAwardsAutoplayReady] = useState(false);
   const [productUpdates, setProductUpdates] = useState<ProductUpdate[]>([]);
 
   const [evTitle, setEvTitle] = useState("");
@@ -796,6 +800,33 @@ export function PortalCollaborativeDashboard() {
   useEffect(() => {
     setAwardsGalleryIndex((i) => Math.min(i, Math.max(0, awardsGallery.length - 1)));
   }, [awardsGallery.length]);
+
+  useEffect(() => {
+    try {
+      setAwardsAutoplay(window.localStorage.getItem("portal-awards-autoplay") === "1");
+    } catch {
+      /* ignore */
+    } finally {
+      setAwardsAutoplayReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!awardsAutoplayReady) return;
+    try {
+      window.localStorage.setItem("portal-awards-autoplay", awardsAutoplay ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [awardsAutoplay, awardsAutoplayReady]);
+
+  useEffect(() => {
+    if (!awardsAutoplay || awardsGallery.length < 2) return;
+    const id = window.setInterval(() => {
+      setAwardsGalleryIndex((i) => (i + 1) % awardsGallery.length);
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [awardsAutoplay, awardsGallery.length]);
 
   /** Imagem atual no modal simples (WPSer do mês). */
   const currentManageImageItem = useMemo(() => {
@@ -2014,7 +2045,7 @@ function PortalItemImage({
 
           {/* Secundário: agenda, aniversariantes e destaques visuais */}
           <div className="grid gap-4 lg:grid-cols-12">
-          <div className="flex min-w-0 flex-col gap-4 lg:col-span-5">
+          <div className="flex min-w-0 flex-col gap-4 lg:col-span-3">
             <section className="group relative w-full rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm sm:p-5">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -2182,8 +2213,8 @@ function PortalItemImage({
             </section>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:col-span-7">
-            <section className="group relative overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-sm">
+          <div className="grid gap-4 sm:grid-cols-3 lg:col-span-9">
+            <section className="group relative overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-sm sm:col-span-1">
               {canEdit && (
                 <div className="absolute right-3 top-3 z-10">
                   <PortalHoverManageButton
@@ -2207,8 +2238,8 @@ function PortalItemImage({
                           itemId={it.id}
                           srcRaw={it.content}
                           alt=""
-                          className={`w-full max-w-full bg-[color:var(--surface-2)] max-h-[240px] ${
-                            fit === "cover" ? "h-[240px] object-cover" : "h-auto object-contain"
+                          className={`w-full max-w-full bg-[color:var(--surface-2)] max-h-[280px] ${
+                            fit === "cover" ? "h-[280px] object-cover" : "h-auto object-contain"
                           }`}
                           style={fit === "cover" ? { objectPosition: `${focal.x}% ${focal.y}%` } : undefined}
                         />
@@ -2251,7 +2282,36 @@ function PortalItemImage({
               </div>
             </section>
 
-            <section className="group relative overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-sm">
+            <section className="group relative overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-sm sm:col-span-2">
+              <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
+                {awardsGallery.length > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => setAwardsAutoplay((v) => !v)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)]/95 px-2.5 py-1.5 text-[11px] font-semibold text-[color:var(--foreground)] shadow-sm backdrop-blur hover:bg-[color:var(--surface-2)]"
+                    aria-pressed={awardsAutoplay}
+                    aria-label={
+                      awardsAutoplay
+                        ? "Desativar troca automática de imagens"
+                        : "Ativar troca automática de imagens"
+                    }
+                    title={
+                      awardsAutoplay
+                        ? "Desativar troca automática"
+                        : "Trocar imagens automaticamente"
+                    }
+                  >
+                    {awardsAutoplay ? (
+                      <Pause className="h-3.5 w-3.5" />
+                    ) : (
+                      <Play className="h-3.5 w-3.5" />
+                    )}
+                    <span className="hidden sm:inline">
+                      {awardsAutoplay ? "Pausar" : "Automático"}
+                    </span>
+                  </button>
+                ) : null}
+              </div>
               {canEdit && (
                 <div className="absolute right-3 top-3 z-10">
                   <PortalHoverManageButton
@@ -2265,44 +2325,48 @@ function PortalItemImage({
               <div className="relative w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-2)]">
                 {awardsGallery.length > 0 ? (
                   (() => {
-                    const idx = Math.min(awardsGalleryIndex, awardsGallery.length - 1);
+                    const count = awardsGallery.length;
+                    const idx = Math.min(awardsGalleryIndex, count - 1);
                     const it = awardsGallery[idx]!;
                     return (
-                      <>
+                      <div className="relative">
                         <PortalItemImage
                           itemId={it.id}
                           srcRaw={it.content}
                           alt=""
-                          className="h-auto max-h-[240px] w-full max-w-full bg-[color:var(--surface-2)] object-contain"
+                          className="h-auto max-h-[320px] w-full max-w-full bg-[color:var(--surface-2)] object-contain"
                         />
-                        {awardsGallery.length > 1 ? (
-                          <div className="flex items-center justify-between gap-2 border-t border-[color:var(--border)] px-3 py-2">
+                        {count > 1 ? (
+                          <>
+                            <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-[3] bg-gradient-to-t from-black/60 to-transparent px-4 pb-3 pt-8">
+                              <p className="text-[11px] font-medium text-white/90">
+                                {idx + 1} de {count}
+                                {awardsAutoplay ? " · automático" : ""}
+                              </p>
+                            </div>
                             <button
                               type="button"
-                              disabled={idx >= awardsGallery.length - 1}
-                              onClick={() =>
-                                setAwardsGalleryIndex((i) => Math.min(awardsGallery.length - 1, i + 1))
-                              }
-                              className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-[11px] font-semibold text-[color:var(--foreground)] disabled:opacity-40"
+                              aria-label="Anterior"
+                              onClick={() => {
+                                setAwardsGalleryIndex((i) => (i + 1) % count);
+                              }}
+                              className="absolute left-3 top-1/2 z-[5] flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white shadow-lg ring-1 ring-white/20 hover:bg-black/75"
                             >
-                              <ChevronLeft className="h-3.5 w-3.5" />
-                              Voltar
+                              <ChevronLeft className="h-7 w-7" />
                             </button>
-                            <span className="text-[11px] tabular-nums text-[color:var(--muted-foreground)]">
-                              {idx + 1} de {awardsGallery.length}
-                            </span>
                             <button
                               type="button"
-                              disabled={idx <= 0}
-                              onClick={() => setAwardsGalleryIndex((i) => Math.max(0, i - 1))}
-                              className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-1.5 text-[11px] font-semibold text-[color:var(--foreground)] disabled:opacity-40"
+                              aria-label="Próximo"
+                              onClick={() => {
+                                setAwardsGalleryIndex((i) => (i - 1 + count) % count);
+                              }}
+                              className="absolute right-3 top-1/2 z-[5] flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white shadow-lg ring-1 ring-white/20 hover:bg-black/75"
                             >
-                              Avançar
-                              <ChevronRight className="h-3.5 w-3.5" />
+                              <ChevronRight className="h-7 w-7" />
                             </button>
-                          </div>
+                          </>
                         ) : null}
-                      </>
+                      </div>
                     );
                   })()
                 ) : (
