@@ -9,7 +9,8 @@ import { getAllowedFeaturesForUser } from "../lib/permissions.js";
 import { hasAllUsersTasksListView } from "../lib/projectVisibility.js";
 import { devLog, errorSummary } from "../lib/devLog.js";
 import type { RoleId } from "../lib/permissions.js";
-import { HOUR_BANK_EXCLUDED_ROLES, isKnownRole, roleRequiresTimeEntryConfig } from "../lib/roles.js";
+import { HOUR_BANK_EXCLUDED_ROLES, roleRequiresTimeEntryConfig } from "../lib/roles.js";
+import { findTenantUserProfile, isAssignableTenantRole } from "../lib/tenantUserProfiles.js";
 import {
   parseEffectiveFromDate,
   recordHourlyRateChange,
@@ -364,8 +365,7 @@ usersRouter.get("/", async (req, res) => {
   const q = String(req.query.q || "");
   const status = String(req.query.status ?? "todos").trim().toLowerCase();
   const roleRaw = String(req.query.role ?? "").trim();
-  const roleFilter =
-    roleRaw && isKnownRole(roleRaw) ? { role: roleRaw } : {};
+  const roleFilter = roleRaw ? { role: roleRaw } : {};
   const ativoFilter: Prisma.UserWhereInput =
     status === "inativos"
       ? { ativo: false }
@@ -564,7 +564,7 @@ usersRouter.post("/", async (req, res) => {
     return;
   }
   const roleStr = String(role ?? "").trim();
-  if (!isKnownRole(roleStr)) {
+  if (!(await isAssignableTenantRole(authUser.tenantId, roleStr))) {
     res.status(400).json({ error: "Perfil inválido." });
     return;
   }
@@ -574,12 +574,15 @@ usersRouter.post("/", async (req, res) => {
     });
     return;
   }
-  const needsApontamento = roleRequiresTimeEntryConfig(roleStr);
-  // Para CLIENTE / Administrativo / Financeiro, não exigimos dataInicioAtividades nem limites de apontamento
+  const profileRow = await findTenantUserProfile(authUser.tenantId, roleStr);
+  const needsApontamento =
+    profileRow != null ? profileRow.requiresTimeEntry : roleRequiresTimeEntryConfig(roleStr);
+  const needsClientLink = Boolean(profileRow?.requiresClientLink) || roleStr === "CLIENTE";
+  // Para CLIENTE / perfis sem apontamento, não exigimos dataInicioAtividades nem limites
   if (!email || !name || !password || !roleStr || (needsApontamento && !dataInicioAtividades)) {
     res
       .status(400)
-      .json({ error: "E-mail, nome, senha e tipo são obrigatórios. Para usuários não-Cliente, a data de início das atividades também é obrigatória." });
+      .json({ error: "E-mail, nome, senha e tipo são obrigatórios. Para usuários com apontamento, a data de início das atividades também é obrigatória." });
     return;
   }
 
@@ -640,7 +643,7 @@ usersRouter.post("/", async (req, res) => {
     }
   }
   let clientIdsValid: string[] = [];
-  if (role === "CLIENTE") {
+  if (needsClientLink) {
     const ids = Array.isArray(clientIds) ? clientIds.filter(Boolean) : [];
     if (ids.length === 0) {
       res.status(400).json({
@@ -674,7 +677,7 @@ usersRouter.post("/", async (req, res) => {
     return;
   }
   const passwordHash = await hashPassword(password);
-  const isCliente = roleStr === "CLIENTE";
+  const isCliente = needsClientLink;
   const allowOtherPeriod = needsApontamento && Boolean(permitirOutroPeriodo);
   const parsedHourlyRate = needsApontamento ? parseOptionalHourlyRate(hourlyRate) : null;
   if (parsedHourlyRate === "invalid") {
@@ -760,7 +763,7 @@ usersRouter.post("/", async (req, res) => {
       createdAt: true,
     },
   });
-  if (roleStr === "CLIENTE" && clientIdsValid.length > 0) {
+  if (isCliente && clientIdsValid.length > 0) {
     await replaceClientUserAccess({
       userId: newUser.id,
       tenantId: authUser.tenantId,
@@ -860,7 +863,7 @@ usersRouter.patch("/:id", async (req, res) => {
     }
 
     const newRole = role !== undefined ? String(role).trim() : existing.role;
-    if (role !== undefined && !isKnownRole(newRole)) {
+    if (role !== undefined && !(await isAssignableTenantRole(authUser.tenantId, newRole))) {
       res.status(400).json({ error: "Perfil inválido." });
       return;
     }
@@ -876,7 +879,9 @@ usersRouter.patch("/:id", async (req, res) => {
       });
       return;
     }
-    if (newRole === "CLIENTE") {
+    const newProfile = await findTenantUserProfile(authUser.tenantId, newRole);
+    const newNeedsClientLink = Boolean(newProfile?.requiresClientLink) || newRole === "CLIENTE";
+    if (newNeedsClientLink) {
       if (!authUser.tenantId) {
         res.status(500).json({ error: "Configuração inválida. Faça login novamente." });
         return;

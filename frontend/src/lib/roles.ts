@@ -61,12 +61,25 @@ export function roleRequiresTimeEntryConfig(role: string): boolean {
   return true;
 }
 
-export function resolvePostLoginPath(role: string, hasPortal: boolean): string {
+export function resolvePostLoginPath(
+  role: string,
+  hasPortal: boolean,
+  layoutShell?: string | null,
+): string {
   if (role === "PLATFORM_ADMIN") return "/platform";
-  if (role === "CLIENTE") return "/cliente";
+  const shell = layoutShell || (
+    role === "SUPER_ADMIN"
+      ? "admin"
+      : role === "GESTOR_PROJETOS"
+        ? "gestor"
+        : role === "CLIENTE"
+          ? "cliente"
+          : "consultor"
+  );
+  if (shell === "cliente") return "/cliente";
   if (hasPortal) return "/portal";
-  if (role === "SUPER_ADMIN") return "/admin";
-  if (role === "GESTOR_PROJETOS") return "/gestor";
+  if (shell === "admin") return "/admin";
+  if (shell === "gestor") return "/gestor";
   return "/consultor";
 }
 

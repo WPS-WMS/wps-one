@@ -93,7 +93,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       router.replace("/platform");
       return;
     }
-    if (user.role !== "SUPER_ADMIN") {
+    if (!(user.layoutShell === "admin" || user.role === "SUPER_ADMIN")) {
       router.replace("/");
       return;
     }

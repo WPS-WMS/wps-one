@@ -63,6 +63,7 @@ export const FEATURES = [
   "configuracoes.permissoes",
   "configuracoes.clientes",
   "configuracoes.gestaoPerfis",
+  "configuracoes.perfisUsuario",
   "configuracoes.skills",
   "configuracoes.atividades",
   "configuracoes.emails",
@@ -114,7 +115,7 @@ export const PROJETO_FEATURE_IDS: FeatureId[] = [
   "projeto.excluir",
 ];
 
-export type PermissionsMatrix = Record<FeatureId, Record<RoleId, PermissionState>>;
+export type PermissionsMatrix = Record<FeatureId, Record<string, PermissionState>>;
 
 type ConfigurableRole = Exclude<RoleId, "SUPER_ADMIN" | "PLATFORM_ADMIN">;
 
@@ -284,6 +285,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "configuracoes.usuarios":
       case "configuracoes.clientes":
       case "configuracoes.gestaoPerfis":
+      case "configuracoes.perfisUsuario":
       case "configuracoes.skills":
       case "configuracoes.atividades":
       case "configuracoes.emails":
@@ -360,6 +362,16 @@ export function buildDefaultPermissions(): PermissionsMatrix {
 
 export async function getTenantPermissionsMatrix(tenantId: string): Promise<PermissionsMatrix> {
   const base = buildDefaultPermissions();
+  const { listTenantUserProfiles } = await import("./tenantUserProfiles.js");
+  const profiles = await listTenantUserProfiles(tenantId, { configurableOnly: true });
+  for (const feature of FEATURES) {
+    if (!base[feature]) continue;
+    for (const p of profiles) {
+      if (!(p.code in base[feature])) {
+        base[feature][p.code] = "deny";
+      }
+    }
+  }
   const rows = await prisma.tenantFeaturePermission.findMany({
     where: { tenantId },
     select: { featureId: true, role: true, state: true },
@@ -372,9 +384,9 @@ export async function getTenantPermissionsMatrix(tenantId: string): Promise<Perm
     if (feature === "horas.verTodos") {
       feature = "relatorios.gestaoHorasVerTodos";
     }
-    const role = r.role as RoleId;
+    const role = r.role;
     const state = r.state === "deny" ? "deny" : "allow";
-    if (FEATURES.includes(feature) && base[feature] && role in base[feature]) {
+    if (FEATURES.includes(feature) && base[feature]) {
       base[feature][role] = state;
     }
   }
@@ -390,6 +402,7 @@ export const CONFIG_SCREEN_FEATURE_IDS = [
   "configuracoes.permissoes",
   "configuracoes.clientes",
   "configuracoes.gestaoPerfis",
+  "configuracoes.perfisUsuario",
   "configuracoes.skills",
   "configuracoes.atividades",
   "configuracoes.emails",
@@ -435,7 +448,13 @@ export async function isFeatureAllowed(params: {
 }): Promise<boolean> {
   const { tenantId, role, featureId } = params;
 
-  if (!isKnownRole(role)) return false;
+  if (role === "PLATFORM_ADMIN") return false;
+
+  const { findTenantUserProfile } = await import("./tenantUserProfiles.js");
+  const isSystemKnown = isKnownRole(role);
+  const profile = isSystemKnown ? null : await findTenantUserProfile(tenantId, role);
+  if (!isSystemKnown && !profile) return false;
+  if (profile && !profile.isActive) return false;
 
   const modules = await getTenantModules(tenantId);
   if (!isFeatureAllowedByTenantModules(modules, featureId)) return false;
@@ -445,7 +464,9 @@ export async function isFeatureAllowed(params: {
     return true;
   }
 
-  if (role === "CLIENTE" && featureId === "tarefa.editar") return false;
+  if ((role === "CLIENTE" || profile?.requiresClientLink) && featureId === "tarefa.editar") {
+    return false;
+  }
 
   const rowDb = await prisma.tenantFeaturePermission.findUnique({
     where: { tenantId_featureId_role: { tenantId, featureId, role } },
@@ -470,6 +491,7 @@ export async function isFeatureAllowed(params: {
     if (legacy) return legacy.state !== "deny";
   }
   if (!rowDb) {
+    if (!isSystemKnown) return false;
     const defaults = buildDefaultPermissions();
     return defaults[featureId]?.[role] !== "deny";
   }
@@ -483,7 +505,15 @@ export async function isAnyFeatureAllowed(params: {
   featureIds: FeatureId[];
 }): Promise<boolean> {
   const { tenantId, role, featureIds } = params;
-  if (!featureIds.length || !isKnownRole(role)) return false;
+  if (!featureIds.length) return false;
+  if (role === "PLATFORM_ADMIN") return false;
+
+  const { findTenantUserProfile } = await import("./tenantUserProfiles.js");
+  const isSystemKnown = isKnownRole(role);
+  if (!isSystemKnown) {
+    const profile = await findTenantUserProfile(tenantId, role);
+    if (!profile?.isActive) return false;
+  }
 
   const modules = await getTenantModules(tenantId);
   const gated = filterFeaturesByTenantModules(modules, featureIds);
@@ -514,6 +544,7 @@ export async function isAnyFeatureAllowed(params: {
       if (await isFeatureAllowed({ tenantId, role, featureId })) return true;
       continue;
     }
+    if (!isSystemKnown) continue;
     if (defaults[featureId]?.[role] !== "deny") return true;
   }
   return false;
@@ -521,9 +552,13 @@ export async function isAnyFeatureAllowed(params: {
 
 export async function getAllowedFeaturesForUser(params: { tenantId: string; role: string }): Promise<FeatureId[]> {
   const { tenantId, role } = params;
-  if (!isKnownRole(role)) return [];
   if (role === "PLATFORM_ADMIN") {
     return [];
+  }
+  if (!isKnownRole(role)) {
+    const { findTenantUserProfile } = await import("./tenantUserProfiles.js");
+    const profile = await findTenantUserProfile(tenantId, role);
+    if (!profile?.isActive) return [];
   }
 
   const modules = await getTenantModules(tenantId);

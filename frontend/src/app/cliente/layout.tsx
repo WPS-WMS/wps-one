@@ -44,7 +44,7 @@ export default function ClienteLayout({ children }: { children: React.ReactNode 
       router.replace("/trocar-senha");
       return;
     }
-    if (user.role !== "CLIENTE") {
+    if (!(user.layoutShell === "cliente" || user.role === "CLIENTE")) {
       router.replace("/");
       return;
     }

@@ -93,6 +93,7 @@ model Tenant {
   userHourlyRateHistory UserHourlyRateHistory[]
   userHistory UserHistory[]
   skillProfiles SkillProfile[]
+  userProfiles TenantUserProfile[]
   userNotifications UserNotification[]
   /// Integração Microsoft SharePoint / Teams
   sharePointEnabled            Boolean  @default(false)
@@ -1578,6 +1579,35 @@ model SkillProfile {
   @@unique([tenantId, name], map: "skill_profiles_tenant_name_uq")
   @@index([tenantId, isActive, name], map: "skill_profiles_tenant_active_name_idx")
   @@map("skill_profiles")
+}
+
+/// Perfis de usuário do tenant (atribuíveis em Usuários / Gestão de perfis).
+model TenantUserProfile {
+  id        String   @id @default(cuid())
+  tenantId  String
+  /// Código estável gravado em User.role (ex.: CONSULTOR ou ARQUITETO).
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  /// Perfis do sistema (não podem ser excluídos; código fixo).
+  isSystem  Boolean  @default(false)
+  /// Shell de navegação: admin | gestor | consultor | cliente
+  layoutShell String  @default("consultor")
+  /// Exige vínculo com cliente (comportamento CLIENTE).
+  requiresClientLink Boolean @default(false)
+  /// Exige data de início e limites de apontamento.
+  requiresTimeEntry Boolean @default(true)
+  /// Não entra no seletor/listagem de banco de horas.
+  excludeFromHourBank Boolean @default(false)
+  sortOrder Int      @default(100)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, code], map: "tenant_user_profiles_tenant_code_uq")
+  @@index([tenantId, isActive, sortOrder, name], map: "tenant_user_profiles_tenant_active_idx")
+  @@map("tenant_user_profiles")
 }
 
 model ProjectRevenueVariableEntry {

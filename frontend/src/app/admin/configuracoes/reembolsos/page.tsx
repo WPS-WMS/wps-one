@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
-import { ArrowLeft, ChevronDown, Loader2, Plus, Receipt, X, Pencil, Save } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Receipt, X, Pencil, Save } from "lucide-react";
 import { navigateBack } from "@/lib/navigateBack";
 import {
   formModalBackdropClass,
@@ -17,6 +17,7 @@ import {
   ConfigStatusBadge,
   configEditIconBtnClass,
 } from "@/components/ui/ConfigActiveToggle";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
 type ProjectLite = { id: string; name: string; client?: { id: string; name: string } };
 type TypeLite = {
@@ -100,7 +101,6 @@ export default function ConfigReembolsosPage() {
   const [draftLimits, setDraftLimits] = useState<Record<string, number | null>>({});
   const [initialLimits, setInitialLimits] = useState<Record<string, number | null>>({});
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
-  const [projectOpen, setProjectOpen] = useState(false);
 
   const [typeNameDrafts, setTypeNameDrafts] = useState<Record<string, string>>({});
   const [typeCalcModeDrafts, setTypeCalcModeDrafts] = useState<Record<string, "FIXO" | "POR_UNIDADE">>({});
@@ -365,7 +365,7 @@ export default function ConfigReembolsosPage() {
   if (loading || !user) return null;
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-[color:var(--background)]">
+    <div className="min-h-screen flex flex-col bg-[color:var(--background)]">
       <button
         type="button"
         onClick={() => navigateBack(router, basePath)}
@@ -377,7 +377,7 @@ export default function ConfigReembolsosPage() {
         <ArrowLeft className="h-4 w-4" />
       </button>
 
-      <header className="flex-shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-4">
+      <header className="shrink-0 border-b border-[color:var(--border)] bg-[color:var(--surface)] px-6 py-4">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center gap-2 text-[color:var(--muted-foreground)]">
             <Receipt className="h-5 w-5 shrink-0 text-[color:var(--primary)]" aria-hidden />
@@ -495,10 +495,10 @@ export default function ConfigReembolsosPage() {
         </div>
       )}
 
-      <main className="flex-1 px-4 md:px-6 py-4 min-h-0 overflow-auto">
+      <main className="flex-1 px-4 md:px-6 py-4 pb-16">
         <div className="max-w-6xl mx-auto space-y-4">
           {error && (
-            <div className="rounded-xl border px-4 py-3 text-sm text-red-700 dark:text-red-200" role="alert">
+            <div className="wps-finance-alert-error" role="alert">
               {error}
             </div>
           )}
@@ -668,61 +668,24 @@ export default function ConfigReembolsosPage() {
               </div>
             ) : (
               <div className="mt-4 space-y-3">
-                <label className="block text-xs text-[color:var(--muted-foreground)]">
-                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                <div className="w-full max-w-[560px]">
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
                     Projeto
-                  </span>
-                  <div className="relative w-full max-w-[560px]">
-                    <button
-                      type="button"
-                      onClick={() => setProjectOpen((v) => !v)}
-                      className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 pl-3 pr-10 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
-                      aria-expanded={projectOpen}
-                      title={projectLabel}
-                    >
-                      <span className="truncate">{projectLabel}</span>
-                      <ChevronDown
-                        className={`absolute right-3 h-4 w-4 transition-transform ${projectOpen ? "rotate-180" : ""}`}
-                        style={{ color: "var(--muted-foreground)" }}
-                        aria-hidden
-                      />
-                    </button>
-
-                    {projectOpen && (
-                      <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-2xl" role="listbox">
-                        <button
-                          type="button"
-                          className="w-full px-3 py-2.5 text-left text-sm hover:bg-[color:var(--sidebar-item-hover)]"
-                          onClick={() => {
-                            setSelectedProjectId("");
-                            setProjectOpen(false);
-                          }}
-                        >
-                          Selecione um projeto…
-                        </button>
-                        <div className="max-h-72 overflow-auto">
-                          {projects.map((p) => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              className="w-full px-3 py-2.5 text-left text-sm hover:bg-[color:var(--sidebar-item-hover)]"
-                              onClick={() => {
-                                setSelectedProjectId(p.id);
-                                setProjectOpen(false);
-                              }}
-                              title={p.name}
-                            >
-                              {p.name}
-                              {p.client?.name ? (
-                                <span className="text-[color:var(--muted-foreground)]">{` — ${p.client.name}`}</span>
-                              ) : null}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </label>
+                  </label>
+                  <PopoverSelect
+                    id="config-reembolsos-projeto"
+                    value={selectedProjectId}
+                    onChange={setSelectedProjectId}
+                    placeholder="Selecione um projeto…"
+                    options={[
+                      { value: "", label: "Selecione um projeto…" },
+                      ...projects.map((p) => ({
+                        value: p.id,
+                        label: p.client?.name ? `${p.name} — ${p.client.name}` : p.name,
+                      })),
+                    ]}
+                  />
+                </div>
 
                 {selectedProjectId ? (
                   <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--background)]/10 p-4">

@@ -4,6 +4,7 @@ import { activeTimeEntryWhere } from "../lib/activeTimeEntryWhere.js";
 import { verifyPassword, signToken, hashPassword } from "../lib/auth.js";
 import crypto from "crypto";
 import { getAllowedFeaturesForUser, type RoleId } from "../lib/permissions.js";
+import { findTenantUserProfile } from "../lib/tenantUserProfiles.js";
 import { getTenantModules } from "../lib/tenantModuleGate.js";
 import { sendMail } from "../lib/mailer.js";
 import { renderEmailLayout, escapeHtml } from "../lib/emailTemplate.js";
@@ -155,6 +156,14 @@ authRouter.post("/login", async (req, res) => {
 
     devLog("[AUTH] Login successful");
     const allowedFeatures = await getAllowedFeaturesForUser({ tenantId: user.tenantId, role });
+    let layoutShell: string | null = null;
+    if (role === "SUPER_ADMIN") layoutShell = "admin";
+    else if (role === "GESTOR_PROJETOS") layoutShell = "gestor";
+    else if (role === "CLIENTE") layoutShell = "cliente";
+    else if (role !== "PLATFORM_ADMIN") {
+      const profile = await findTenantUserProfile(user.tenantId, role);
+      layoutShell = profile?.layoutShell ?? "consultor";
+    }
     const token = signToken({
       id: user.id,
       email: user.email,
@@ -178,6 +187,7 @@ authRouter.post("/login", async (req, res) => {
         email: user.email,
         name: user.name,
         role: user.role,
+        layoutShell,
         avatarUrl: (user as { avatarUrl?: string | null }).avatarUrl ?? undefined,
         updatedAt: user.updatedAt,
         tenantId: user.tenantId,
@@ -289,8 +299,17 @@ authRouter.get("/me", async (req, res) => {
       role: user.role,
       tenantId: user.tenantId,
     });
+    let layoutShell: string | null = null;
+    if (role === "SUPER_ADMIN") layoutShell = "admin";
+    else if (role === "GESTOR_PROJETOS") layoutShell = "gestor";
+    else if (role === "CLIENTE") layoutShell = "cliente";
+    else if (role !== "PLATFORM_ADMIN") {
+      const profile = await findTenantUserProfile(user.tenantId, role);
+      layoutShell = profile?.layoutShell ?? "consultor";
+    }
     res.json({
       ...user,
+      layoutShell,
       allowedFeatures,
       platformAdmin,
       tenantModules: tenantModulesPayload,

@@ -105,7 +105,7 @@ function LoginPageInner() {
       } else {
         const allowed: string[] | undefined = data.user.allowedFeatures;
         const hasPortal = Array.isArray(allowed) && allowed.includes("portal.corporativo");
-        const path = resolvePostLoginPath(data.user.role, hasPortal);
+        const path = resolvePostLoginPath(data.user.role, hasPortal, data.user.layoutShell);
 
         const redirectAfter = getSafeInternalRedirect(searchParams.get("redirect"));
         const target = redirectAfter ?? path;

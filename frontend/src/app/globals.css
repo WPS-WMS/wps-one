@@ -322,13 +322,13 @@ select:-webkit-autofill {
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
   line-height: 1.45;
-  color: #450a0a;
+  color: #000000;
 }
 
 [data-theme="dark"] .wps-finance-alert-error {
   border-color: rgba(185, 28, 28, 0.45);
   background: rgba(69, 10, 10, 0.4);
-  color: #fecaca;
+  color: #ffffff;
 }
 
 /* Gestão T&M — badge «Mês atual» (tema via data-theme, não prefers-color-scheme) */

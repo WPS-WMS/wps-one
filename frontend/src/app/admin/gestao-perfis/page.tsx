@@ -5,14 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import { Check, ArrowLeft, Loader2, Search, Shield, X } from "lucide-react";
-import { GESTAO_PERFIS_ROLES, type GestaoPerfisRoleId } from "@/lib/roles";
 import { isFinanceiroFeatureId, isFinanceiroModuleEnabled } from "@/lib/financeiroEnv";
 import { navigateBack } from "@/lib/navigateBack";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
-const ROLES = GESTAO_PERFIS_ROLES;
-
-type RoleId = GestaoPerfisRoleId;
+type RoleOption = { id: string; label: string };
 
 type PermissionState = "allow" | "deny";
 
@@ -106,6 +103,7 @@ const FEATURES: Feature[] = [
   { id: "financeiro.clientesFinanceiros", label: "Configurações \u003e Cadastro \u003e Clientes (dados financeiros)", section: "Configurações — Cadastro" },
   { id: "financeiro.fornecedores", label: "Configurações \u003e Cadastro \u003e Fornecedores", section: "Configurações — Cadastro" },
   { id: "configuracoes.gestaoPerfis", label: "Configurações \u003e Cadastro \u003e Gestão de perfis", section: "Configurações — Cadastro" },
+  { id: "configuracoes.perfisUsuario", label: "Configurações \u003e Cadastro \u003e Perfis de usuário", section: "Configurações — Cadastro" },
   { id: "configuracoes.permissoes", label: "Projetos \u003e Aprovações", section: "Projetos" },
   { id: "configuracoes.financeiro", label: "Configurações \u003e Financeiro", section: "Configurações — Financeiro" },
   { id: "configuracoes.reembolso", label: "Configurações \u003e Financeiro \u003e Reembolsos", section: "Configurações — Financeiro" },
@@ -126,9 +124,9 @@ const FEATURES: Feature[] = [
   },
 ];
 
-type Permissions = Record<string, Partial<Record<RoleId, PermissionState>>>;
+type Permissions = Record<string, Partial<Record<string, PermissionState>>>;
 
-function denyAll(): Record<RoleId, PermissionState> {
+function denyAll(): Record<string, PermissionState> {
   return {
     ADMIN_PORTAL: "deny",
     GESTOR_PROJETOS: "deny",
@@ -264,6 +262,7 @@ function buildDefaultPermissions(): Permissions {
       case "financeiro.fornecedores":
       case "financeiro.clientesFinanceiros":
       case "configuracoes.gestaoPerfis":
+      case "configuracoes.perfisUsuario":
       case "configuracoes.skills":
       case "configuracoes.atividades":
       case "configuracoes.emails":
@@ -344,15 +343,16 @@ export default function GestaoPerfisPage() {
 
   const [initialPermissions, setInitialPermissions] = useState<Permissions>(() => buildDefaultPermissions());
   const [permissions, setPermissions] = useState<Permissions>(() => buildDefaultPermissions());
+  const [roles, setRoles] = useState<RoleOption[]>([]);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
-  const [selectedRoleId, setSelectedRoleId] = useState<RoleId>(ROLES[0]?.id ?? "GESTOR_PROJETOS");
+  const [selectedRoleId, setSelectedRoleId] = useState<string>("GESTOR_PROJETOS");
   const [saving, setSaving] = useState(false);
 
   const selectedRole = useMemo(
-    () => ROLES.find((r) => r.id === selectedRoleId) ?? ROLES[0],
-    [selectedRoleId],
+    () => roles.find((r) => r.id === selectedRoleId) ?? roles[0],
+    [selectedRoleId, roles],
   );
 
   useEffect(() => {
@@ -381,8 +381,23 @@ export default function GestaoPerfisPage() {
       })
       .then((data) => {
         if (!data || typeof data !== "object") return;
-        setInitialPermissions(data);
-        setPermissions(data);
+        const matrix =
+          data.permissions && typeof data.permissions === "object" ? data.permissions : data;
+        const roleRows = Array.isArray(data.roles) ? data.roles : [];
+        const nextRoles: RoleOption[] = roleRows.map(
+          (r: { code?: string; name?: string; id?: string }) => ({
+            id: String(r.code ?? r.id ?? ""),
+            label: String(r.name ?? r.code ?? ""),
+          }),
+        ).filter((r: RoleOption) => r.id);
+        if (nextRoles.length > 0) {
+          setRoles(nextRoles);
+          setSelectedRoleId((prev) =>
+            nextRoles.some((r) => r.id === prev) ? prev : nextRoles[0].id,
+          );
+        }
+        setInitialPermissions(matrix);
+        setPermissions(matrix);
       })
       .catch(() => {
         accessControlLoadedRef.current = false;
@@ -413,7 +428,7 @@ export default function GestaoPerfisPage() {
     for (const feature of FEATURES) {
       const base = initialPermissions[feature.id];
       const current = permissions[feature.id];
-      for (const role of ROLES) {
+      for (const role of roles) {
         const baseState = base?.[role.id] ?? "allow";
         const currentState = current?.[role.id] ?? "allow";
         if (baseState !== currentState) {
@@ -422,7 +437,7 @@ export default function GestaoPerfisPage() {
       }
     }
     return false;
-  }, [initialPermissions, permissions]);
+  }, [initialPermissions, permissions, roles]);
 
   const selectedRoleStats = useMemo(() => {
     const base = isFinanceiroModuleEnabled()
@@ -444,7 +459,7 @@ export default function GestaoPerfisPage() {
     );
   }
 
-  function togglePermission(featureId: string, roleId: RoleId) {
+  function togglePermission(featureId: string, roleId: string) {
     setPermissions((prev) => {
       const current = prev[featureId]?.[roleId] ?? "allow";
       const next: PermissionState = current === "allow" ? "deny" : "allow";
@@ -488,6 +503,15 @@ export default function GestaoPerfisPage() {
         }
         const data = await r.json().catch(() => null);
         const next = data?.permissions ?? permissions;
+        if (Array.isArray(data?.roles)) {
+          const nextRoles: RoleOption[] = data.roles
+            .map((r: { code?: string; name?: string }) => ({
+              id: String(r.code ?? ""),
+              label: String(r.name ?? r.code ?? ""),
+            }))
+            .filter((r: RoleOption) => r.id);
+          if (nextRoles.length > 0) setRoles(nextRoles);
+        }
         setInitialPermissions(next);
         setPermissions(next);
         // Recarrega permissões do usuário atual para refletir imediatamente no sidebar
@@ -551,10 +575,10 @@ export default function GestaoPerfisPage() {
                   <PopoverSelect
                     id="gestao-perfis-role"
                     value={selectedRoleId}
-                    onChange={(v) => setSelectedRoleId(v as RoleId)}
+                    onChange={(v) => setSelectedRoleId(v)}
                     placeholder="Selecione o perfil"
                     checklist={false}
-                    options={ROLES.map((r) => ({ value: r.id, label: r.label }))}
+                    options={roles.map((r) => ({ value: r.id, label: r.label }))}
                   />
                 </div>
                 <div className="relative min-w-0 flex-1 max-w-md">

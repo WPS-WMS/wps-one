@@ -15,6 +15,7 @@ type User = {
   email: string;
   name: string;
   role: string;
+  layoutShell?: string | null;
   avatarUrl?: string;
   updatedAt?: string;
   tenantId?: string;

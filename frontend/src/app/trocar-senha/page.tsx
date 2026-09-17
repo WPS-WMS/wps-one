@@ -22,7 +22,7 @@ export default function TrocarSenhaPage() {
       return;
     }
     if (!user.mustChangePassword) {
-      const path = resolvePostLoginPath(user.role, false);
+      const path = resolvePostLoginPath(user.role, false, user.layoutShell);
       if (typeof window !== "undefined") window.location.replace(window.location.origin + path);
       else router.replace(path);
     }
@@ -54,7 +54,7 @@ export default function TrocarSenhaPage() {
         return;
       }
       setUser({ ...user!, mustChangePassword: false });
-      const path = resolvePostLoginPath(user!.role, false);
+      const path = resolvePostLoginPath(user!.role, false, user!.layoutShell);
       // Recarregamento completo para a home evita que o botão Sair fique inativo até dar F5
       if (typeof window !== "undefined") {
         window.location.replace(window.location.origin + path);

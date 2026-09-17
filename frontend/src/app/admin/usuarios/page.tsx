@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Plus, Pencil, Search, ArrowLeft, ExternalLink } from "lucide-react";
 import { ConfirmarExclusaoModal } from "@/components/ConfirmarExclusaoModal";
 import { FormModalSection } from "@/components/FormModalPrimitives";
-import { ROLE_OPTIONS, roleLabel, roleRequiresTimeEntryConfig } from "@/lib/roles";
+import { roleLabel, roleRequiresTimeEntryConfig } from "@/lib/roles";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { DatePicker } from "@/components/ui/DatePicker";
 import {
@@ -25,7 +25,12 @@ import {
   configEditIconBtnClass,
 } from "@/components/ui/ConfigActiveToggle";
 
-const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }));
+type UserProfileOption = {
+  code: string;
+  name: string;
+  requiresClientLink: boolean;
+  requiresTimeEntry: boolean;
+};
 
 type RecurrenceWarning = {
   count: number;
@@ -271,6 +276,27 @@ export default function UsuariosPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [statusUser, setStatusUser] = useState<UserRow | null>(null);
   const [clientsById, setClientsById] = useState<Record<string, string>>({});
+  const [profiles, setProfiles] = useState<UserProfileOption[]>([]);
+
+  const roleSelectOptions = useMemo(
+    () => profiles.map((p) => ({ value: p.code, label: p.name })),
+    [profiles],
+  );
+  const profileByCode = useMemo(() => new Map(profiles.map((p) => [p.code, p])), [profiles]);
+
+  function needsTimeEntry(role: string) {
+    const p = profileByCode.get(role);
+    if (p) return p.requiresTimeEntry;
+    return roleRequiresTimeEntryConfig(role);
+  }
+  function needsClientLink(role: string) {
+    const p = profileByCode.get(role);
+    if (p) return p.requiresClientLink;
+    return role === "CLIENTE";
+  }
+  function labelForRole(role: string) {
+    return profileByCode.get(role)?.name ?? roleLabel(role);
+  }
 
   function loadUsers() {
     setLoadError(null);
@@ -298,6 +324,17 @@ export default function UsuariosPage() {
   useEffect(() => {
     loadUsers();
   }, [search, statusFilter, roleFilter]);
+
+  useEffect(() => {
+    apiFetch("/api/user-profiles?activeOnly=1&assignableOnly=1")
+      .then(async (r) => {
+        const data = await r.json().catch(() => null);
+        if (!r.ok || !Array.isArray(data)) return [];
+        return data as UserProfileOption[];
+      })
+      .then(setProfiles)
+      .catch(() => setProfiles([]));
+  }, []);
 
   useEffect(() => {
     apiFetch("/api/clients")
@@ -397,7 +434,7 @@ export default function UsuariosPage() {
                     checklist={false}
                     options={[
                       { value: "", label: "Todos os perfis" },
-                      ...ROLE_SELECT_OPTIONS,
+                      ...roleSelectOptions,
                     ]}
                   />
                 </div>
@@ -444,13 +481,13 @@ export default function UsuariosPage() {
                         <div className="text-sm text-[color:var(--muted-foreground)]">{u.email}</div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-sm text-[color:var(--muted-foreground)]">{roleLabel(u.role)}</div>
+                        <div className="text-sm text-[color:var(--muted-foreground)]">{labelForRole(u.role)}</div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-[color:var(--muted-foreground)]">{u.cargo || "—"}</div>
                       </td>
                       <td className="px-6 py-4">
-                        {u.role === "CLIENTE" ? (() => {
+                        {needsClientLink(u.role) ? (() => {
                           const ids = u.clientAccess?.map((a) => a.clientId) ?? [];
                           if (ids.length === 0) return <div className="text-sm text-[color:var(--muted-foreground)]">—</div>;
                           const names = ids.map((id) => clientsById[id]).filter(Boolean);
@@ -505,6 +542,9 @@ export default function UsuariosPage() {
 
       {modalOpen && (
         <NovoUsuarioModal
+          roleSelectOptions={roleSelectOptions}
+          needsTimeEntry={needsTimeEntry}
+          needsClientLink={needsClientLink}
           onClose={() => setModalOpen(false)}
           onSaved={() => {
             setModalOpen(false);
@@ -518,6 +558,9 @@ export default function UsuariosPage() {
           user={editingUser}
           basePath={basePath}
           canFornecedores={canFornecedores}
+          roleSelectOptions={roleSelectOptions}
+          needsTimeEntry={needsTimeEntry}
+          needsClientLink={needsClientLink}
           onClose={() => setEditingUser(null)}
           onSaved={() => {
             setEditingUser(null);
@@ -855,7 +898,19 @@ function InativarUsuarioModal({
   );
 }
 
-function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function NovoUsuarioModal({
+  roleSelectOptions,
+  needsTimeEntry,
+  needsClientLink,
+  onClose,
+  onSaved,
+}: {
+  roleSelectOptions: Array<{ value: string; label: string }>;
+  needsTimeEntry: (role: string) => boolean;
+  needsClientLink: (role: string) => boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const overlayPointerDownRef = useRef(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -893,7 +948,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const [fieldErrors, setFieldErrors] = useState<{ name?: boolean; email?: boolean; password?: boolean; cargo?: boolean; dataInicioAtividades?: boolean }>({});
 
   useEffect(() => {
-    if (role === "CLIENTE") {
+    if (needsClientLink(role)) {
       apiFetch("/api/clients")
         .then((r) => (r.ok ? r.json() : []))
         .then((list: ClientOption[]) => setClients(list))
@@ -929,7 +984,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
     if (!email.trim() || !emailRegex.test(email.trim())) nextFieldErrors.email = true;
     if (!password.trim()) nextFieldErrors.password = true;
     if (!cargo.trim()) nextFieldErrors.cargo = true;
-    const needsApontamento = roleRequiresTimeEntryConfig(role);
+    const needsApontamento = needsTimeEntry(role);
     // Perfis sem apontamento: não exige data de início nem configurações de apontamento
     if (needsApontamento && !dataInicioAtividades) nextFieldErrors.dataInicioAtividades = true;
     // Quando "Permitido apontar em outro período" estiver marcado,
@@ -959,7 +1014,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
       }
       return;
     }
-    if (role === "CLIENTE" && clientIds.length === 0) {
+    if (needsClientLink(role) && clientIds.length === 0) {
       setError("Usuários com perfil Cliente devem estar vinculados a pelo menos uma empresa.");
       return;
     }
@@ -971,7 +1026,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         password,
         role,
         cargo: cargo.trim() || undefined,
-        skillProfileId: role === "CLIENTE" ? null : skillProfileId || null,
+        skillProfileId: needsClientLink(role) ? null : skillProfileId || null,
         emergencyContactName: emergencyContactName.trim() || null,
         emergencyContactPhone: emergencyContactPhone.replace(/\D/g, "") || null,
       };
@@ -1002,7 +1057,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
         body.diasPermitidos = diasPermitidos.trim() ? parseInt(diasPermitidos, 10) : undefined;
         body.dataInicioAtividades = dataInicioAtividades || undefined;
       }
-      if (role === "CLIENTE") {
+      if (needsClientLink(role)) {
         body.clientIds = clientIds;
         body.seeAllProjects = seeAllProjects;
         body.visibleProjectIds = seeAllProjects ? [] : visibleProjectIds;
@@ -1112,12 +1167,12 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                 <PopoverSelect
                   id="usuario-novo-perfil"
                   value={role}
-                  options={ROLE_SELECT_OPTIONS}
+                  options={roleSelectOptions}
                   onChange={setRole}
                   placeholder="Selecione o perfil"
                 />
               </div>
-              {role === "CLIENTE" && (
+              {needsClientLink(role) && (
                 <div>
                   <label className={formLabelClass}>
                     Empresa <span className="text-red-500">*</span>
@@ -1168,7 +1223,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                   />
                 </div>
               )}
-              {role === "CLIENTE" && (
+              {needsClientLink(role) && (
                 <ClientProjectVisibilityField
                   clientId={clientIds[0] ?? ""}
                   seeAllProjects={seeAllProjects}
@@ -1186,11 +1241,12 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                     Data de nascimento{" "}
                     <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
                   </label>
-                  <input
-                    type="date"
+                  <DatePicker
+                    id="novo-usuario-birth-date"
+                    buttonClassName={formInputClass()}
                     value={birthDate}
-                    onChange={(e) => setBirthDate(e.target.value)}
-                    className={formInputClass()}
+                    onChange={setBirthDate}
+                    aria-label="Data de nascimento"
                   />
                 </div>
               </FormModalSection>
@@ -1225,7 +1281,7 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
               </FormModalSection>
             )}
 
-            {roleRequiresTimeEntryConfig(role) && (
+            {needsTimeEntry(role) && (
               <FormModalSection
                 title="Apontamento de horas"
                 description="Regras para registrar horas em projetos e limite por dia da semana (Dom–Sáb), conforme combinado com a gestão."
@@ -1328,14 +1384,16 @@ function NovoUsuarioModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
                   <label className={formLabelClass}>
                     Data de início das atividades <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="date"
+                  <DatePicker
+                    id="novo-usuario-data-inicio"
+                    buttonClassName={formInputClass(!!fieldErrors.dataInicioAtividades)}
                     value={dataInicioAtividades}
-                    onChange={(e) => {
-                      setDataInicioAtividades(e.target.value);
+                    onChange={(v) => {
+                      setDataInicioAtividades(v);
                       setFieldErrors((prev) => ({ ...prev, dataInicioAtividades: false }));
                     }}
-                    className={formInputClass(!!fieldErrors.dataInicioAtividades)}
+                    clearable={false}
+                    aria-label="Data de início das atividades"
                   />
                 </div>
                 <LimitePorDiaGrid limitesPorDia={limitesPorDia} setLimitesPorDia={setLimitesPorDia} />
@@ -1368,12 +1426,18 @@ function EditarUsuarioModal({
   user,
   basePath,
   canFornecedores,
+  roleSelectOptions,
+  needsTimeEntry,
+  needsClientLink,
   onClose,
   onSaved,
 }: {
   user: UserRow;
   basePath: string;
   canFornecedores: boolean;
+  roleSelectOptions: Array<{ value: string; label: string }>;
+  needsTimeEntry: (role: string) => boolean;
+  needsClientLink: (role: string) => boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -1473,7 +1537,7 @@ function EditarUsuarioModal({
   }, []);
 
   useEffect(() => {
-    if (role === "CLIENTE") {
+    if (needsClientLink(role)) {
       apiFetch("/api/clients")
         .then((r) => (r.ok ? r.json() : []))
         .then((list: ClientOption[]) => setClients(list))
@@ -1500,21 +1564,21 @@ function EditarUsuarioModal({
     if (!name.trim()) nextFieldErrors.name = true;
     if (!email.trim() || !emailRegex.test(email.trim())) nextFieldErrors.email = true;
     if (!cargo.trim()) nextFieldErrors.cargo = true;
-    if (roleRequiresTimeEntryConfig(role) && !dataInicioAtividades) nextFieldErrors.dataInicioAtividades = true;
+    if (needsTimeEntry(role) && !dataInicioAtividades) nextFieldErrors.dataInicioAtividades = true;
     setFieldErrors(nextFieldErrors);
     if (Object.keys(nextFieldErrors).length > 0) {
       setError("Preencha todos os campos obrigatórios corretamente.");
       return;
     }
 
-    if (roleRequiresTimeEntryConfig(role)) {
+    if (needsTimeEntry(role)) {
       const limiteErr = validateLimitesPorDia(limitesPorDia);
       if (limiteErr) {
         setError(limiteErr);
         return;
       }
     }
-    if (role === "CLIENTE" && clientIds.length === 0) {
+    if (needsClientLink(role) && clientIds.length === 0) {
       setError("Usuários com perfil Cliente devem estar vinculados a pelo menos uma empresa.");
       return;
     }
@@ -1525,7 +1589,7 @@ function EditarUsuarioModal({
         email: email.trim(),
         role,
         cargo: cargo.trim() || undefined,
-        skillProfileId: role === "CLIENTE" ? null : skillProfileId || null,
+        skillProfileId: needsClientLink(role) ? null : skillProfileId || null,
         emergencyContactName: emergencyContactName.trim() || null,
         emergencyContactPhone: emergencyContactPhone.replace(/\D/g, "") || null,
       };
@@ -1536,7 +1600,7 @@ function EditarUsuarioModal({
         );
         if (hourlyRateChanged) body.hourlyRateEffectiveFrom = hourlyRateEffectiveFrom;
       }
-      if (roleRequiresTimeEntryConfig(role)) {
+      if (needsTimeEntry(role)) {
         body.permitirMaisHoras = permitirMaisHoras;
         body.permitirFimDeSemana = permitirFimDeSemana;
         body.permitirOutroPeriodo = permitirOutroPeriodo;
@@ -1578,7 +1642,7 @@ function EditarUsuarioModal({
         body.violacaoApontamentoModo = "NAO_PERMITIR";
       }
       if (password.trim()) body.password = password;
-      if (role === "CLIENTE") {
+      if (needsClientLink(role)) {
         body.clientIds = clientIds;
         body.seeAllProjects = seeAllProjects;
         body.visibleProjectIds = seeAllProjects ? [] : visibleProjectIds;
@@ -1750,12 +1814,12 @@ function EditarUsuarioModal({
                 <PopoverSelect
                   id="usuario-edit-perfil"
                   value={role}
-                  options={ROLE_SELECT_OPTIONS}
+                  options={roleSelectOptions}
                   onChange={setRole}
                   placeholder="Selecione o perfil"
                 />
               </div>
-              {role === "CLIENTE" && (
+              {needsClientLink(role) && (
                 <div>
                   <label className={formLabelClass}>
                     Empresa <span className="text-red-500">*</span>
@@ -1806,7 +1870,7 @@ function EditarUsuarioModal({
                   />
                 </div>
               )}
-              {role === "CLIENTE" && (
+              {needsClientLink(role) && (
                 <ClientProjectVisibilityField
                   clientId={clientIds[0] ?? ""}
                   seeAllProjects={seeAllProjects}
@@ -1824,11 +1888,12 @@ function EditarUsuarioModal({
                     Data de nascimento{" "}
                     <span className="text-xs text-[color:var(--muted-foreground)]">(opcional)</span>
                   </label>
-                  <input
-                    type="date"
+                  <DatePicker
+                    id={`edit-usuario-birth-date-${user.id}`}
+                    buttonClassName={formInputClass()}
                     value={birthDate}
-                    onChange={(e) => setBirthDate(e.target.value)}
-                    className={formInputClass()}
+                    onChange={setBirthDate}
+                    aria-label="Data de nascimento"
                   />
                 </div>
               </FormModalSection>
@@ -1954,7 +2019,7 @@ function EditarUsuarioModal({
               </FormModalSection>
             )}
 
-            {roleRequiresTimeEntryConfig(role) && (
+            {needsTimeEntry(role) && (
               <FormModalSection
                 title="Apontamento de horas"
                 description="Data a partir da qual pode apontar, permissões e limite diário por dia da semana (Dom–Sáb), conforme combinado com a gestão."
@@ -1963,14 +2028,16 @@ function EditarUsuarioModal({
                   <label className={formLabelClass}>
                     Data de início das atividades <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="date"
+                  <DatePicker
+                    id={`edit-usuario-data-inicio-${user.id}`}
+                    buttonClassName={formInputClass(!!fieldErrors.dataInicioAtividades)}
                     value={dataInicioAtividades}
-                    onChange={(e) => {
-                      setDataInicioAtividades(e.target.value);
+                    onChange={(v) => {
+                      setDataInicioAtividades(v);
                       setFieldErrors((prev) => ({ ...prev, dataInicioAtividades: false }));
                     }}
-                    className={formInputClass(!!fieldErrors.dataInicioAtividades)}
+                    clearable={false}
+                    aria-label="Data de início das atividades"
                   />
                 </div>
                 <p className="text-sm font-medium text-[color:var(--foreground)] pt-1">Permissões</p>

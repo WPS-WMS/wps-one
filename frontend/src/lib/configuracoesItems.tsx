@@ -10,6 +10,7 @@ import {
   Percent,
   Plug,
   Receipt,
+  Shield,
   Sparkles,
   Tags,
   UserCog,
@@ -110,6 +111,14 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       title: "Fornecedores",
       description: "Cadastro e gestão de fornecedores PJ e PF.",
       icon: Truck,
+      section: "cadastro",
+    },
+    {
+      permission: "configuracoes.perfisUsuario",
+      href: `${basePath}/configuracoes/perfis`,
+      title: "Perfis de usuário",
+      description: "Crie tipos de perfil usados no cadastro de usuários e na gestão de permissões.",
+      icon: Shield,
       section: "cadastro",
     },
     {

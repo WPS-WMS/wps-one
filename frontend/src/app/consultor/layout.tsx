@@ -87,7 +87,7 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
       router.replace("/trocar-senha");
       return;
     }
-    if (!isInternalStaffLayoutRole(user.role)) {
+    if (!(user.layoutShell === "consultor" || isInternalStaffLayoutRole(user.role))) {
       router.replace("/");
       return;
     }

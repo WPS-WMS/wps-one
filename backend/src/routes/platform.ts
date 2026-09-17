@@ -17,6 +17,7 @@ import {
   TENANT_SUBSCRIPTION_SELECT,
 } from "../lib/subscriptionHelpers.js";
 import { ensureFinanceDefaults } from "../lib/financeConfigHelpers.js";
+import { ensureTenantUserProfiles } from "../lib/tenantUserProfiles.js";
 import { errorSummary } from "../lib/devLog.js";
 
 export const platformRouter = Router();
@@ -356,6 +357,11 @@ platformRouter.post("/tenants", requirePlatformAdmin, async (req, res) => {
       await ensureFinanceDefaults(created.tenant.id);
     } catch (seedErr) {
       console.error("[platform] finance defaults", errorSummary(seedErr));
+    }
+    try {
+      await ensureTenantUserProfiles(created.tenant.id);
+    } catch (seedErr) {
+      console.error("[platform] user profiles", errorSummary(seedErr));
     }
 
     const usage = await getTenantUsageSnapshot(created.tenant.id);

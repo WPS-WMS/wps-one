@@ -86,7 +86,7 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
       router.replace("/trocar-senha");
       return;
     }
-    if (user.role !== "GESTOR_PROJETOS") {
+    if (!(user.layoutShell === "gestor" || user.role === "GESTOR_PROJETOS")) {
       router.replace("/");
       return;
     }
