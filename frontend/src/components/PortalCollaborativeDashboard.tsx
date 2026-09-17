@@ -30,6 +30,7 @@ import { Avatar } from "@/components/Avatar";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ThemeToggleInline } from "@/components/ThemeToggle";
 import { PortalPdfLibrary } from "@/components/PortalPdfLibrary";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 type PortalSection = {
   id: string;
@@ -741,6 +742,13 @@ export function PortalCollaborativeDashboard() {
     isSelectedCurrentMonth,
     calendarFilterEngaged,
   ]);
+
+  /** Próximos fora do mês filtrado — só listados quando o mês não tem eventos na agenda. */
+  const upcomingEventsOutsideMonth = useMemo(
+    () =>
+      upcomingEvents.filter((ev) => !portalEventInCalendarMonth(ev.date, calYear, calMonth)),
+    [upcomingEvents, calYear, calMonth],
+  );
 
   const [newsPageIndex, setNewsPageIndex] = useState(0);
   const [newsPeriod, setNewsPeriod] = useState<string | null>(null);
@@ -2092,7 +2100,7 @@ function PortalItemImage({
             </section>
 
           {/* Secundário: agenda, aniversariantes e destaques visuais */}
-          <div className="grid gap-4 lg:grid-cols-12">
+          <div className="grid items-start gap-4 lg:grid-cols-12">
           <div className="flex min-w-0 flex-col gap-4 lg:col-span-3">
             <section className="group relative w-full rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm sm:p-5">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -2142,13 +2150,14 @@ function PortalItemImage({
                 </div>
               </div>
 
-              {!isSelectedCurrentMonth && upcomingEvents.length > 0 && (
-                <div className="mb-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-3">
+              <div className="max-h-[min(22rem,50vh)] space-y-4 overflow-y-auto overscroll-contain pr-0.5">
+              {displayedMonthEvents.length === 0 && upcomingEventsOutsideMonth.length > 0 && (
+                <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-2)] p-3">
                   <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]/90">
                     Próximos eventos
                   </p>
                   <ul className="space-y-2">
-                    {upcomingEvents.slice(0, 3).map((ev) => (
+                    {upcomingEventsOutsideMonth.slice(0, 3).map((ev) => (
                       <li key={ev.id} className="flex items-start gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-2)] px-3 py-2">
                         <div className="flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded-lg bg-gradient-to-br from-sky-500/25 to-violet-600/25 text-center">
                           <span className="text-[9px] font-bold uppercase text-sky-800">
@@ -2171,11 +2180,13 @@ function PortalItemImage({
               )}
 
               {displayedMonthEvents.length === 0 ? (
+                upcomingEventsOutsideMonth.length > 0 ? null : (
                 <p className="text-xs text-[color:var(--muted-foreground)]">
                   {isSelectedCurrentMonth && eventsForSelectedMonth.length > 0 && !calendarFilterEngaged
                     ? "Nada agendado daqui pra frente neste mês."
                     : "Nenhum evento neste mês — em breve a agenda se enche."}
                 </p>
+                )
               ) : (
                 <ul className="space-y-3">
                   {displayedMonthEvents.map((ev) => (
@@ -2211,6 +2222,7 @@ function PortalItemImage({
                   ))}
                 </ul>
               )}
+              </div>
             </section>
 
             <section className="w-full rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-4 shadow-sm sm:p-5">
@@ -2261,8 +2273,8 @@ function PortalItemImage({
             </section>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3 lg:col-span-9">
-            <section className="group relative flex flex-col overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-sm sm:col-span-1">
+          <div className="grid items-start gap-4 sm:grid-cols-3 lg:col-span-9">
+            <section className="group relative flex h-fit flex-col overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-sm sm:col-span-1">
               {canEdit && (
                 <div className="absolute right-3 top-3 z-10">
                   <PortalHoverManageButton
@@ -2334,7 +2346,7 @@ function PortalItemImage({
               </h2>
             </section>
 
-            <section className="group relative flex flex-col overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-sm sm:col-span-2">
+            <section className="group relative flex h-fit flex-col overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] p-3 shadow-sm sm:col-span-2">
               <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
                 {awardsGallery.length > 1 ? (
                   <button
@@ -2990,11 +3002,12 @@ function PortalItemImage({
                 placeholder="Título do evento"
                 className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--foreground)]"
               />
-              <input
-                type="date"
+              <DatePicker
+                id="portal-novo-evento-data"
                 value={evDate}
-                onChange={(e) => setEvDate(e.target.value)}
-                className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--foreground)]"
+                onChange={setEvDate}
+                buttonClassName="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--input-bg)] px-3 py-2 text-sm text-[color:var(--foreground)]"
+                aria-label="Data do evento"
               />
               <textarea
                 value={evDesc}
