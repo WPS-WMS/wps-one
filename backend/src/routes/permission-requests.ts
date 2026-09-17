@@ -149,6 +149,7 @@ permissionRequestsRouter.get(
   const scope = req.query.scope as string | undefined;
   const projectId = String(req.query.projectId ?? "").trim();
   const filterUserId = String(req.query.userId ?? "").trim();
+  const responsibleId = String(req.query.responsibleId ?? "").trim();
   const startParts = parseYmdParts(req.query.start);
   const endParts = parseYmdParts(req.query.end);
 
@@ -156,9 +157,14 @@ permissionRequestsRouter.get(
     userId?: string;
     status?: string;
     projectId?: string;
-    project?: { responsibles?: { some: { userId: string } }; id?: string };
+    project?: Record<string, unknown>;
     date?: { gte?: Date; lt?: Date };
   } = {};
+
+  const projectWhere: Record<string, unknown> = {};
+  if (projectId) projectWhere.id = projectId;
+
+  const responsibleClauses: { userId: string }[] = [];
 
   // Escopo "own": sempre retorna apenas solicitações do próprio usuário
   if (scope === "own") {
@@ -174,20 +180,29 @@ permissionRequestsRouter.get(
     if (canManageAll || ["SUPER_ADMIN", "ADMIN_PORTAL"].includes(role)) {
       // Todos do tenant (equivalente a super admin na tela de permissões)
     } else if (role === "GESTOR_PROJETOS") {
-      where.project = {
-        responsibles: { some: { userId: user.id } },
-        ...(projectId ? { id: projectId } : {}),
-      };
+      responsibleClauses.push({ userId: user.id });
     } else {
       where.userId = user.id;
     }
   }
 
+  if (responsibleId) {
+    responsibleClauses.push({ userId: responsibleId });
+  }
+  if (responsibleClauses.length === 1) {
+    projectWhere.responsibles = { some: responsibleClauses[0] };
+  } else if (responsibleClauses.length > 1) {
+    projectWhere.AND = responsibleClauses.map((clause) => ({
+      responsibles: { some: clause },
+    }));
+  }
+
+  if (Object.keys(projectWhere).length > 0) {
+    where.project = projectWhere;
+  }
+
   if (statusFilter && ["PENDING", "APPROVED", "REJECTED"].includes(statusFilter)) {
     where.status = statusFilter;
-  }
-  if (projectId && !where.project) {
-    where.projectId = projectId;
   }
   if (filterUserId && scope !== "own" && (!where.userId || where.userId === filterUserId)) {
     where.userId = filterUserId;
@@ -220,6 +235,13 @@ permissionRequestsRouter.get(
           id: true,
           name: true,
           client: { select: { id: true, name: true } },
+          responsibles: {
+            select: {
+              user: { select: { id: true, name: true } },
+            },
+            take: 1,
+            orderBy: { userId: "asc" },
+          },
         },
       },
       ticket: { select: { id: true, code: true, title: true } },

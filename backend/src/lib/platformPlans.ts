@@ -24,7 +24,6 @@ export type SubscriptionStatus = "active" | "canceling" | "locked" | "none";
 
 export const SUBSCRIPTION_PAYMENT_METHODS = {
   PIX: { id: "PIX" as const, label: "Pix" },
-  BOLETO: { id: "BOLETO" as const, label: "Boleto" },
   CARTAO_CREDITO: { id: "CARTAO_CREDITO" as const, label: "Cartão de crédito" },
 } as const;
 
@@ -33,15 +32,16 @@ export type SubscriptionPaymentMethodId = keyof typeof SUBSCRIPTION_PAYMENT_METH
 export function isSubscriptionPaymentMethodId(
   value: unknown,
 ): value is SubscriptionPaymentMethodId {
-  return value === "PIX" || value === "BOLETO" || value === "CARTAO_CREDITO";
+  return value === "PIX" || value === "CARTAO_CREDITO";
 }
 
 export function subscriptionPaymentMethodLabel(
   method: string | null | undefined,
 ): string | null {
   if (method === "PIX") return SUBSCRIPTION_PAYMENT_METHODS.PIX.label;
-  if (method === "BOLETO") return SUBSCRIPTION_PAYMENT_METHODS.BOLETO.label;
   if (method === "CARTAO_CREDITO") return SUBSCRIPTION_PAYMENT_METHODS.CARTAO_CREDITO.label;
+  // Legado: assinaturas que ainda tenham boleto salvo.
+  if (method === "BOLETO") return "Boleto";
   return null;
 }
 

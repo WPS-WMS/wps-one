@@ -863,8 +863,18 @@ usersRouter.patch("/:id", async (req, res) => {
     }
 
     const newRole = role !== undefined ? String(role).trim() : existing.role;
-    if (role !== undefined && !(await isAssignableTenantRole(authUser.tenantId, newRole))) {
+    if (
+      role !== undefined &&
+      newRole !== existing.role &&
+      !(await isAssignableTenantRole(authUser.tenantId, newRole))
+    ) {
       res.status(400).json({ error: "Perfil inválido." });
+      return;
+    }
+    if (role !== undefined && newRole === "SUPER_ADMIN" && existing.role !== "SUPER_ADMIN") {
+      res.status(400).json({
+        error: "O perfil Super administrador é único por empresa e não pode ser atribuído.",
+      });
       return;
     }
     if (role !== undefined && newRole === "PLATFORM_ADMIN") {

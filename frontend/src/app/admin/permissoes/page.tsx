@@ -25,7 +25,11 @@ type PermissionRequest = {
   ticketId?: string | null;
   createdAt: string;
   user: { id: string; name: string; email: string };
-  project: { id: string; name: string };
+  project: {
+    id: string;
+    name: string;
+    responsibles?: { user: { id: string; name: string } }[];
+  };
   ticket?: { id: string; code: string; title: string } | null;
   rejectionReason?: string | null;
   violationRule?: string | null;
@@ -39,6 +43,7 @@ type ProjectOption = {
   id: string;
   name: string;
   client?: { id: string; name: string };
+  responsibles?: { user?: { id?: string; name?: string } | null }[];
 };
 
 const filterControlClass =
@@ -74,6 +79,9 @@ export default function PermissoesPage() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [userId, setUserId] = useState("");
   const [users, setUsers] = useState<{ id: string; name: string; email?: string }[]>([]);
+  const [responsibleId, setResponsibleId] = useState("");
+  const [responsibleTouched, setResponsibleTouched] = useState(false);
+  const effectiveResponsibleId = responsibleTouched ? responsibleId : user?.id ?? "";
   const [actingId, setActingId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<PermissionRequest | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
@@ -88,6 +96,7 @@ export default function PermissoesPage() {
     if (end) params.set("end", end);
     if (projectId) params.set("projectId", projectId);
     if (userId) params.set("userId", userId);
+    if (effectiveResponsibleId) params.set("responsibleId", effectiveResponsibleId);
     const q = params.toString();
     apiFetch(`/api/permission-requests${q ? `?${q}` : ""}`)
       .then((r) => r.json())
@@ -98,7 +107,7 @@ export default function PermissoesPage() {
 
   useEffect(() => {
     load();
-  }, [filter, start, end, projectId, userId, permissionsReady, can]);
+  }, [filter, start, end, projectId, userId, effectiveResponsibleId, permissionsReady, can]);
 
   useEffect(() => {
     if (!permissionsReady || !can("configuracoes.permissoes")) return;
@@ -271,6 +280,23 @@ export default function PermissoesPage() {
     [users],
   );
 
+  const responsibleOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const p of projects) {
+      const r = p.responsibles?.[0]?.user;
+      if (r?.id && r?.name) byId.set(r.id, r.name);
+    }
+    if (user?.id && user?.name && !byId.has(user.id)) {
+      byId.set(user.id, user.name);
+    }
+    return [
+      { value: "", label: "Todos os responsáveis" },
+      ...Array.from(byId.entries())
+        .map(([id, name]) => ({ value: id, label: name }))
+        .sort((a, b) => a.label.localeCompare(b.label, "pt-BR")),
+    ];
+  }, [projects, user?.id, user?.name]);
+
   // Evita "flicker" e redirecionamentos: só mostra a UI quando a permissão já foi carregada.
   if (authLoading || !permissionsReady) return null;
   if (!can("configuracoes.permissoes")) notFound();
@@ -341,6 +367,21 @@ export default function PermissoesPage() {
                   placeholder="Todos os usuários"
                   buttonClassName={filterControlClass}
                   options={userOptions}
+                  menuMaxHeightClassName="max-h-72"
+                />
+              </div>
+              <div className="flex flex-col gap-1 min-w-[220px]">
+                <label className="text-xs font-semibold text-slate-500">Responsável</label>
+                <PopoverSelect
+                  id="permissoes-responsible-filter"
+                  value={effectiveResponsibleId}
+                  onChange={(v) => {
+                    setResponsibleTouched(true);
+                    setResponsibleId(v);
+                  }}
+                  placeholder="Todos os responsáveis"
+                  buttonClassName={filterControlClass}
+                  options={responsibleOptions}
                   menuMaxHeightClassName="max-h-72"
                 />
               </div>
@@ -440,6 +481,9 @@ export default function PermissoesPage() {
                         {req.ticket ? ` · ${req.ticket.code} ${req.ticket.title}` : ""}
                       </p>
                     )}
+                    <p className="text-sm text-slate-600">
+                      Responsável: {req.project?.responsibles?.[0]?.user?.name ?? "—"}
+                    </p>
                     {req.violationRule && (
                       <p className="text-sm text-amber-700 mt-1">
                         <span className="font-medium">Regra:</span> {getViolationRuleLabel(req.violationRule)}

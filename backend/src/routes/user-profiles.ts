@@ -71,6 +71,13 @@ userProfilesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   if (SYSTEM_USER_PROFILES.some((p) => p.code === code) || code === "PLATFORM_ADMIN") {
     code = `${code}_CUSTOM`;
   }
+  // Super administrador é único por empresa (provisionado); nunca criar como perfil novo.
+  if (code === "SUPER_ADMIN") {
+    res.status(400).json({
+      error: "O perfil Super administrador é único por empresa e não pode ser criado.",
+    });
+    return;
+  }
 
   const existingCode = await prisma.tenantUserProfile.findFirst({
     where: { tenantId: user.tenantId, code },

@@ -58,7 +58,6 @@ type ResponseBody = {
 
 const DEFAULT_PAYMENT_METHODS: PaymentMethodOption[] = [
   { id: "PIX", label: "Pix" },
-  { id: "BOLETO", label: "Boleto" },
   { id: "CARTAO_CREDITO", label: "Cartão de crédito" },
 ];
 
@@ -117,7 +116,8 @@ export function MySubscriptionPageContent() {
       const row = body as ResponseBody;
       setData(row);
       setPlan(row.subscription.planId ?? row.subscription.plan ?? "");
-      setPaymentMethod(row.subscription.paymentMethod ?? "");
+      const method = row.subscription.paymentMethod ?? "";
+      setPaymentMethod(method === "BOLETO" ? "" : method);
       setLoading(false);
     })();
     return () => {
@@ -155,7 +155,8 @@ export function MySubscriptionPageContent() {
         : row,
     );
     setPlan(row.subscription.planId ?? row.subscription.plan ?? "");
-    setPaymentMethod(row.subscription.paymentMethod ?? "");
+    const nextMethod = row.subscription.paymentMethod ?? "";
+    setPaymentMethod(nextMethod === "BOLETO" ? "" : nextMethod);
     setSaveMsg("Assinatura atualizada.");
     await refreshSession?.();
     // Garante menus/rotas com os módulos do novo plano.

@@ -27,7 +27,8 @@ export const SYSTEM_USER_PROFILES: SystemUserProfileSeed[] = [
     excludeFromHourBank: false,
     sortOrder: 10,
     configurable: false,
-    assignable: true,
+    /** Um por empresa (provisionado); não aparece no select de Usuários nem se cria como perfil. */
+    assignable: false,
   },
   {
     code: "ADMIN_PORTAL",
@@ -162,13 +163,20 @@ export async function ensureTenantUserProfiles(tenantId: string): Promise<void> 
 
 export async function listTenantUserProfiles(
   tenantId: string,
-  opts?: { activeOnly?: boolean; assignableOnly?: boolean; configurableOnly?: boolean },
+  opts?: {
+    activeOnly?: boolean;
+    assignableOnly?: boolean;
+    configurableOnly?: boolean;
+    /** Inclui SUPER_ADMIN na lista (padrão: oculto — um por empresa, não gerenciável aqui). */
+    includeSuperAdmin?: boolean;
+  },
 ) {
   await ensureTenantUserProfiles(tenantId);
   const rows = await prisma.tenantUserProfile.findMany({
     where: {
       tenantId,
       ...(opts?.activeOnly ? { isActive: true } : {}),
+      ...(opts?.includeSuperAdmin ? {} : { NOT: { code: "SUPER_ADMIN" } }),
     },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
@@ -209,7 +217,7 @@ export async function findTenantUserProfile(tenantId: string, code: string) {
 }
 
 export async function isAssignableTenantRole(tenantId: string, code: string): Promise<boolean> {
-  if (code === "PLATFORM_ADMIN") return false;
+  if (code === "SUPER_ADMIN" || code === "PLATFORM_ADMIN") return false;
   const profile = await findTenantUserProfile(tenantId, code);
   if (!profile || !profile.isActive) return false;
   const meta = SYSTEM_USER_PROFILES.find((p) => p.code === code);

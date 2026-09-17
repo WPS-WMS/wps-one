@@ -367,7 +367,17 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     if (status === "PREVISTO") {
       return { status: { notIn: ["CANCELADO", "FATURADO", "RECEBIDO"] }, invoice: null };
     }
-    if (status === "RECEBIDO") return { status: "RECEBIDO" };
+    // Lista é por parcela: inclui contas com qualquer parcela recebida (mesmo se o header
+    // ainda estiver FATURADO / parcial), alinhado ao status exibido na tela.
+    if (status === "RECEBIDO") {
+      return {
+        OR: [
+          { status: "RECEBIDO" },
+          { installments: { some: { status: "RECEBIDO" } } },
+          { installments: { some: { receivedAt: { not: null } } } },
+        ],
+      };
+    }
     if (status) return { status };
     return null;
   }
@@ -490,7 +500,8 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
   } else if (dateBounds.length > 1) {
     installmentWhere.AND = [{ OR: dateBounds.map((b) => installmentCompetenceClause(b)) }];
   }
-  if (paidFilter === true) {
+  if (status === "RECEBIDO" || paidFilter === true) {
+    // Só parcelas efetivamente recebidas (não as irmãs ainda abertas da mesma conta).
     installmentWhere.OR = [{ status: "RECEBIDO" }, { receivedAt: { not: null } }];
   } else if (paidFilter === false) {
     installmentWhere.status = { notIn: ["CANCELADO", "RECEBIDO"] };
