@@ -2,7 +2,10 @@ import { join } from "path";
 import { writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import { prisma } from "./prisma.js";
-import { isMicrosoftGraphConfigured } from "./microsoftGraphAuth.js";
+import {
+  isGraphAvailableForWpsTenant,
+  withGraphForWpsTenant,
+} from "./microsoftGraphAuth.js";
 import {
   createChildFolder,
   downloadDriveItemContent,
@@ -114,8 +117,11 @@ export async function getSharePointClientConfig(clientId: string): Promise<Share
   return null;
 }
 
-export function isSharePointIntegrationActive(cfg: SharePointSiteConfig | null): boolean {
-  return !!(cfg?.enabled && cfg.siteUrl && isMicrosoftGraphConfigured());
+export async function isSharePointIntegrationActive(
+  cfg: SharePointSiteConfig | null,
+): Promise<boolean> {
+  if (!cfg?.enabled || !cfg.siteUrl) return false;
+  return isGraphAvailableForWpsTenant(cfg.tenantId);
 }
 
 async function resolveSiteDrive(cfg: SharePointSiteConfig): Promise<{ driveId: string; siteId: string }> {
@@ -208,23 +214,25 @@ export async function provisionProjectSharePointFolder(projectId: string): Promi
     if (project.sharePointFolderId) return;
 
     const cfg = await getSharePointClientConfig(project.client.id);
-    if (!isSharePointIntegrationActive(cfg)) return;
+    if (!(await isSharePointIntegrationActive(cfg))) return;
 
     try {
-      const rootItemId = await ensureProjectsRoot(cfg!);
-      const { driveId } = await resolveSiteDrive(cfg!);
-      const folderName = projectFolderName(cfg!, project.client.name, project.name);
-      const folder = await createChildFolder(driveId, rootItemId, folderName);
-      const { count } = await prisma.project.updateMany({
-        where: { id: projectId, sharePointFolderId: null },
-        data: {
-          sharePointFolderId: folder.id,
-          sharePointFolderUrl: folder.webUrl,
-          sharePointSyncStatus: "OK",
-          sharePointSyncError: null,
-        },
+      await withGraphForWpsTenant(cfg!.tenantId, async () => {
+        const rootItemId = await ensureProjectsRoot(cfg!);
+        const { driveId } = await resolveSiteDrive(cfg!);
+        const folderName = projectFolderName(cfg!, project.client.name, project.name);
+        const folder = await createChildFolder(driveId, rootItemId, folderName);
+        const { count } = await prisma.project.updateMany({
+          where: { id: projectId, sharePointFolderId: null },
+          data: {
+            sharePointFolderId: folder.id,
+            sharePointFolderUrl: folder.webUrl,
+            sharePointSyncStatus: "OK",
+            sharePointSyncError: null,
+          },
+        });
+        if (count === 0) return;
       });
-      if (count === 0) return;
     } catch (err) {
       logSharePointError(`provisionProjectSharePointFolder ${projectId}`, err);
       await prisma.project.update({
@@ -268,7 +276,7 @@ export async function provisionTicketSharePointFolder(ticketId: string): Promise
     if (!clientId) return;
 
     const cfg = await getSharePointClientConfig(clientId);
-    if (!isSharePointIntegrationActive(cfg)) return;
+    if (!(await isSharePointIntegrationActive(cfg))) return;
 
     try {
       if (!ticket.project.sharePointFolderId) {
@@ -282,19 +290,21 @@ export async function provisionTicketSharePointFolder(ticketId: string): Promise
         throw new Error("Pasta SharePoint do projeto indisponível.");
       }
 
-      const { driveId } = await resolveSiteDrive(cfg!);
-      const folderName = ticketSharePointFolderName(ticket.code, ticket.title);
-      const folder = await createChildFolder(driveId, project.sharePointFolderId, folderName);
-      const { count } = await prisma.ticket.updateMany({
-        where: { id: ticketId, sharePointFolderId: null },
-        data: {
-          sharePointFolderId: folder.id,
-          sharePointFolderUrl: folder.webUrl,
-          sharePointSyncStatus: "OK",
-          sharePointSyncError: null,
-        },
+      await withGraphForWpsTenant(cfg!.tenantId, async () => {
+        const { driveId } = await resolveSiteDrive(cfg!);
+        const folderName = ticketSharePointFolderName(ticket.code, ticket.title);
+        const folder = await createChildFolder(driveId, project.sharePointFolderId!, folderName);
+        const { count } = await prisma.ticket.updateMany({
+          where: { id: ticketId, sharePointFolderId: null },
+          data: {
+            sharePointFolderId: folder.id,
+            sharePointFolderUrl: folder.webUrl,
+            sharePointSyncStatus: "OK",
+            sharePointSyncError: null,
+          },
+        });
+        if (count === 0) return;
       });
-      if (count === 0) return;
     } catch (err) {
       logSharePointError(`provisionTicketSharePointFolder ${ticketId}`, err);
       await prisma.ticket.update({
@@ -330,7 +340,7 @@ export async function pushAttachmentToSharePoint(attachmentId: string, buffer: B
   if (attachment.sharePointItemId) return;
 
   const cfg = await getSharePointClientConfig(clientId);
-  if (!isSharePointIntegrationActive(cfg)) return;
+  if (!(await isSharePointIntegrationActive(cfg))) return;
 
   try {
     if (!attachment.ticket.sharePointFolderId) {
@@ -342,29 +352,31 @@ export async function pushAttachmentToSharePoint(attachmentId: string, buffer: B
     });
     if (!ticket?.sharePointFolderId) throw new Error("Pasta SharePoint da tarefa indisponível.");
 
-    const { driveId } = await resolveSiteDrive(cfg!);
-    const folderItem = await getDriveItemById(driveId, ticket.sharePointFolderId);
-    if (!folderItem?.isFolder) {
-      await markTicketSharePointFolderMissing(attachment.ticket.id);
-      throw new Error("Pasta SharePoint da tarefa não encontrada.");
-    }
+    await withGraphForWpsTenant(cfg!.tenantId, async () => {
+      const { driveId } = await resolveSiteDrive(cfg!);
+      const folderItem = await getDriveItemById(driveId, ticket.sharePointFolderId!);
+      if (!folderItem?.isFolder) {
+        await markTicketSharePointFolderMissing(attachment.ticket.id);
+        throw new Error("Pasta SharePoint da tarefa não encontrada.");
+      }
 
-    const item = await uploadFileToFolder(
-      driveId,
-      ticket.sharePointFolderId,
-      attachment.filename,
-      buffer,
-      attachment.fileType,
-    );
-    await prisma.ticketAttachment.update({
-      where: { id: attachmentId },
-      data: {
-        sharePointItemId: item.id,
-        sharePointWebUrl: item.webUrl,
-        sharePointETag: item.eTag,
-        syncSource: "flowa",
-        syncedAt: new Date(),
-      },
+      const item = await uploadFileToFolder(
+        driveId,
+        ticket.sharePointFolderId!,
+        attachment.filename,
+        buffer,
+        attachment.fileType,
+      );
+      await prisma.ticketAttachment.update({
+        where: { id: attachmentId },
+        data: {
+          sharePointItemId: item.id,
+          sharePointWebUrl: item.webUrl,
+          sharePointETag: item.eTag,
+          syncSource: "flowa",
+          syncedAt: new Date(),
+        },
+      });
     });
   } catch (err) {
     logSharePointError(`pushAttachmentToSharePoint ${attachmentId}`, err);
@@ -394,138 +406,143 @@ export async function syncTicketAttachmentsFromSharePoint(ticketId: string): Pro
   if (!ticket?.sharePointFolderId || !clientId) return;
 
   const cfg = await getSharePointClientConfig(clientId);
-  if (!isSharePointIntegrationActive(cfg)) return;
+  if (!(await isSharePointIntegrationActive(cfg))) return;
 
   try {
-    const { driveId } = await resolveSiteDrive(cfg!);
-    const folderItem = await getDriveItemById(driveId, ticket.sharePointFolderId);
-    if (!folderItem?.isFolder) {
-      await markTicketSharePointFolderMissing(ticketId);
-      return;
-    }
-
-    const delta = await listDriveFolderDelta(
-      driveId,
-      ticket.sharePointFolderId,
-      ticket.sharePointDeltaLink,
-    );
-
-    if (delta.deltaLink) {
-      await prisma.ticket.update({
-        where: { id: ticketId },
-        data: { sharePointDeltaLink: delta.deltaLink },
-      });
-    }
-
-    const files = delta.items.filter((i) => !i.isFolder && i.name);
-    if (files.length === 0) return;
-
-    const existing = await prisma.ticketAttachment.findMany({
-      where: { ticketId },
-      select: { id: true, sharePointItemId: true, sharePointETag: true, filename: true },
-    });
-    const byItemId = new Map(existing.filter((e) => e.sharePointItemId).map((e) => [e.sharePointItemId!, e]));
-    const byName = new Map(existing.map((e) => [e.filename.toLowerCase(), e]));
-
-    await ensureUploadsDir();
-    const fallbackUserId = ticket.createdById;
-    const tenantId = ticket.project.client.tenantId;
-
-    for (const file of files) {
-      const known = byItemId.get(file.id);
-      if (known && known.sharePointETag === file.eTag) continue;
-
-      if (known) {
-        await prisma.ticketAttachment.update({
-          where: { id: known.id },
-          data: {
-            sharePointETag: file.eTag,
-            sharePointWebUrl: file.webUrl,
-            syncedAt: new Date(),
-          },
-        });
-        continue;
+    await withGraphForWpsTenant(cfg!.tenantId, async () => {
+      const { driveId } = await resolveSiteDrive(cfg!);
+      const folderItem = await getDriveItemById(driveId, ticket.sharePointFolderId!);
+      if (!folderItem?.isFolder) {
+        await markTicketSharePointFolderMissing(ticketId);
+        return;
       }
 
-      const dupByName = byName.get(file.name.toLowerCase());
-      if (dupByName) {
-        if (dupByName.sharePointItemId) {
-          if (dupByName.sharePointItemId === file.id && dupByName.sharePointETag !== file.eTag) {
-            await prisma.ticketAttachment.update({
-              where: { id: dupByName.id },
-              data: {
-                sharePointETag: file.eTag,
-                sharePointWebUrl: file.webUrl,
-                syncedAt: new Date(),
-              },
-            });
-          }
+      const delta = await listDriveFolderDelta(
+        driveId,
+        ticket.sharePointFolderId!,
+        ticket.sharePointDeltaLink,
+      );
+
+      if (delta.deltaLink) {
+        await prisma.ticket.update({
+          where: { id: ticketId },
+          data: { sharePointDeltaLink: delta.deltaLink },
+        });
+      }
+
+      const files = delta.items.filter((i) => !i.isFolder && i.name);
+      if (files.length === 0) return;
+
+      const existing = await prisma.ticketAttachment.findMany({
+        where: { ticketId },
+        select: { id: true, sharePointItemId: true, sharePointETag: true, filename: true },
+      });
+      const byItemId = new Map(
+        existing.filter((e) => e.sharePointItemId).map((e) => [e.sharePointItemId!, e]),
+      );
+      const byName = new Map(existing.map((e) => [e.filename.toLowerCase(), e]));
+
+      await ensureUploadsDir();
+      const fallbackUserId = ticket.createdById;
+      const tenantId = ticket.project.client.tenantId;
+
+      for (const file of files) {
+        const known = byItemId.get(file.id);
+        if (known && known.sharePointETag === file.eTag) continue;
+
+        if (known) {
+          await prisma.ticketAttachment.update({
+            where: { id: known.id },
+            data: {
+              sharePointETag: file.eTag,
+              sharePointWebUrl: file.webUrl,
+              syncedAt: new Date(),
+            },
+          });
           continue;
         }
 
-        // Upload feito no FLOWA ainda sem vínculo SP: associa metadados sem duplicar nem trocar o autor.
-        await prisma.ticketAttachment.update({
-          where: { id: dupByName.id },
+        const dupByName = byName.get(file.name.toLowerCase());
+        if (dupByName) {
+          if (dupByName.sharePointItemId) {
+            if (dupByName.sharePointItemId === file.id && dupByName.sharePointETag !== file.eTag) {
+              await prisma.ticketAttachment.update({
+                where: { id: dupByName.id },
+                data: {
+                  sharePointETag: file.eTag,
+                  sharePointWebUrl: file.webUrl,
+                  syncedAt: new Date(),
+                },
+              });
+            }
+            continue;
+          }
+
+          await prisma.ticketAttachment.update({
+            where: { id: dupByName.id },
+            data: {
+              sharePointItemId: file.id,
+              sharePointWebUrl: file.webUrl,
+              sharePointETag: file.eTag,
+              syncedAt: new Date(),
+              ...(file.size != null ? { fileSize: file.size } : {}),
+            },
+          });
+          byItemId.set(file.id, {
+            ...dupByName,
+            sharePointItemId: file.id,
+            sharePointETag: file.eTag ?? null,
+          });
+          continue;
+        }
+
+        const buffer = await downloadDriveItemContent(driveId, file.id);
+        const timestamp = Date.now();
+        const sanitized = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const uniqueFileName = `${ticketId}-sp-${timestamp}-${sanitized}`;
+        await writeFile(join(uploadsTicketsDir, uniqueFileName), buffer);
+
+        const userId =
+          fallbackUserId ??
+          (
+            await prisma.user.findFirst({
+              where: { tenantId, role: "SUPER_ADMIN" },
+              select: { id: true },
+            })
+          )?.id;
+        if (!userId) continue;
+
+        await prisma.ticketAttachment.create({
           data: {
+            ticketId,
+            userId,
+            filename: file.name,
+            fileUrl: `/uploads/tickets/${uniqueFileName}`,
+            fileType: file.fileMime || "application/octet-stream",
+            fileSize: file.size ?? buffer.length,
             sharePointItemId: file.id,
             sharePointWebUrl: file.webUrl,
             sharePointETag: file.eTag,
+            syncSource: "sharepoint",
             syncedAt: new Date(),
-            ...(file.size != null ? { fileSize: file.size } : {}),
           },
         });
-        byItemId.set(file.id, {
-          ...dupByName,
-          sharePointItemId: file.id,
-          sharePointETag: file.eTag ?? null,
-        });
-        continue;
-      }
 
-      const buffer = await downloadDriveItemContent(driveId, file.id);
-      const timestamp = Date.now();
-      const sanitized = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const uniqueFileName = `${ticketId}-sp-${timestamp}-${sanitized}`;
-      await writeFile(join(uploadsTicketsDir, uniqueFileName), buffer);
-
-      const userId =
-        fallbackUserId ??
-        (
-          await prisma.user.findFirst({
-            where: { tenantId, role: "SUPER_ADMIN" },
-            select: { id: true },
+        await prisma.ticketHistory
+          .create({
+            data: {
+              ticketId,
+              userId,
+              action: "ATTACHMENT_ADDED",
+              field: null,
+              oldValue: null,
+              newValue: file.name,
+              details: `Anexo "${file.name}" sincronizado do SharePoint`,
+            },
           })
-        )?.id;
-      if (!userId) continue;
-
-      await prisma.ticketAttachment.create({
-        data: {
-          ticketId,
-          userId,
-          filename: file.name,
-          fileUrl: `/uploads/tickets/${uniqueFileName}`,
-          fileType: file.fileMime || "application/octet-stream",
-          fileSize: file.size ?? buffer.length,
-          sharePointItemId: file.id,
-          sharePointWebUrl: file.webUrl,
-          sharePointETag: file.eTag,
-          syncSource: "sharepoint",
-          syncedAt: new Date(),
-        },
-      });
-
-      await prisma.ticketHistory.create({
-        data: {
-          ticketId,
-          userId,
-          action: "ATTACHMENT_ADDED",
-          field: null,
-          oldValue: null,
-          newValue: file.name,
-          details: `Anexo "${file.name}" sincronizado do SharePoint`,
-        },
-      }).catch(() => undefined);
-    }
+          .catch(() => undefined);
+      }
+    });
   } catch (err) {
     if (isSharePointNotFoundError(err)) {
       await markTicketSharePointFolderMissing(ticketId);
@@ -540,8 +557,6 @@ export function scheduleSharePointJob(fn: () => Promise<void>): void {
 }
 
 export async function runSharePointPollingCycle(): Promise<void> {
-  if (!isMicrosoftGraphConfigured()) return;
-
   const tenants = await prisma.tenant.findMany({
     where: { sharePointEnabled: true },
     select: { id: true },
@@ -549,6 +564,8 @@ export async function runSharePointPollingCycle(): Promise<void> {
   if (tenants.length === 0) return;
 
   for (const t of tenants) {
+    if (!(await isGraphAvailableForWpsTenant(t.id))) continue;
+
     const tickets = await prisma.ticket.findMany({
       where: {
         sharePointFolderId: { not: null },

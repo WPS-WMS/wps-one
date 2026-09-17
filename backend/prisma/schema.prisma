@@ -107,6 +107,12 @@ model Tenant {
   sharePointDriveId            String?
   sharePointRootFolderPath     String?  @default("Projetos WPSone")
   sharePointRootFolderItemId   String?
+  /// OAuth Microsoft do próprio cliente (tenant Azure AD conectado).
+  microsoftOauthTenantId       String?
+  microsoftOauthAccountEmail   String?
+  /// Refresh token criptografado (AES-GCM).
+  microsoftOauthRefreshToken   String?
+  microsoftOauthConnectedAt    DateTime?
 }
 
 /// Configuração Focus NFe (NFSe Nacional) por tenant.
