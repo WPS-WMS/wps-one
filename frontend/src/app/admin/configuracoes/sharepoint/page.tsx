@@ -219,7 +219,7 @@ export default function ConfiguracoesSharePointPage() {
                     <p className="font-medium">Conectado</p>
                     <p className="mt-1">
                       {microsoft.accountEmail || "Conta Microsoft"}
-                      {microsoft.azureTenantId ? (
+                      {user?.role === "SUPER_ADMIN" && microsoft.azureTenantId ? (
                         <span className="block text-xs mt-0.5 opacity-80">
                           Tenant Azure: {microsoft.azureTenantId}
                         </span>
