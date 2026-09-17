@@ -33,6 +33,77 @@ function mapDriveItem(row: GraphDriveItem): DriveItemRef {
   };
 }
 
+/**
+ * Converte erro bruto do Graph em mensagem clara para a tela (sem JSON).
+ */
+export function formatSharePointUserError(
+  status: number,
+  bodyText: string,
+  fallback: string,
+): string {
+  let code = "";
+  let message = "";
+  try {
+    const parsed = JSON.parse(bodyText) as { error?: { code?: string; message?: string } };
+    code = String(parsed?.error?.code ?? "");
+    message = String(parsed?.error?.message ?? "");
+  } catch {
+    // corpo não-JSON
+  }
+
+  const blob = `${code} ${message} ${bodyText}`.toLowerCase();
+
+  if (blob.includes("invalid hostname") || blob.includes("invalidhostname")) {
+    return (
+      "A URL do SharePoint não pertence à Microsoft conectada nesta empresa. " +
+      "Copie o endereço exatamente como no navegador (hostname correto), só até /sites/NomeDaEquipe."
+    );
+  }
+  if (
+    status === 403 ||
+    blob.includes("accessdenied") ||
+    blob.includes("access denied") ||
+    blob.includes("forbidden")
+  ) {
+    return (
+      "Acesso negado a este site. A conta Microsoft conectada em Integrações precisa ser membro " +
+      "(ou ter permissão) nesta equipe/site SharePoint."
+    );
+  }
+  if (
+    status === 404 ||
+    blob.includes("itemnotfound") ||
+    blob.includes("not found") ||
+    blob.includes("site not found")
+  ) {
+    return (
+      "Site ou pasta SharePoint não encontrado. Verifique a URL (até /sites/NomeDaEquipe) " +
+      "e se a pasta raiz existe."
+    );
+  }
+  if (blob.includes("invalid client secret") || blob.includes("aadsts7000215")) {
+    return (
+      "Credencial Microsoft inválida no servidor (CLIENT_SECRET). " +
+      "Peça ao time de plataforma para revisar as variáveis no Render."
+    );
+  }
+  if (
+    status === 401 ||
+    blob.includes("unauthenticated") ||
+    blob.includes("unauthorized") ||
+    blob.includes("invalidauthenticationtoken")
+  ) {
+    return (
+      "Sessão Microsoft inválida ou expirada. Desconecte e conecte novamente em Integrações."
+    );
+  }
+
+  if (message && message.length < 180 && !message.trim().startsWith("{")) {
+    return `${fallback}: ${message}`;
+  }
+  return `${fallback}. Confira a URL do site e as permissões da conta conectada em Integrações.`;
+}
+
 export async function resolveSiteAndDrive(siteUrl: string, driveIdOverride?: string | null): Promise<{
   siteId: string;
   driveId: string;
@@ -52,11 +123,13 @@ export async function resolveSiteAndDrive(siteUrl: string, driveIdOverride?: str
 
   if (!siteResp.ok) {
     const text = await siteResp.text().catch(() => "");
-    throw new Error(`Site SharePoint não encontrado (${siteResp.status}): ${text || siteResp.statusText}`);
+    throw new Error(
+      formatSharePointUserError(siteResp.status, text, "Não foi possível acessar o site SharePoint"),
+    );
   }
   const site = (await siteResp.json()) as { id?: string };
   const siteId = String(site.id ?? "");
-  if (!siteId) throw new Error("Resposta do Graph sem site id.");
+  if (!siteId) throw new Error("Não foi possível identificar o site SharePoint.");
 
   if (driveIdOverride) {
     return { siteId, driveId: driveIdOverride };
@@ -65,11 +138,13 @@ export async function resolveSiteAndDrive(siteUrl: string, driveIdOverride?: str
   const driveResp = await graphFetch(`/sites/${siteId}/drive`);
   if (!driveResp.ok) {
     const text = await driveResp.text().catch(() => "");
-    throw new Error(`Drive do site não encontrado (${driveResp.status}): ${text || driveResp.statusText}`);
+    throw new Error(
+      formatSharePointUserError(driveResp.status, text, "Não foi possível acessar a biblioteca de arquivos do site"),
+    );
   }
   const drive = (await driveResp.json()) as { id?: string };
   const driveId = String(drive.id ?? "");
-  if (!driveId) throw new Error("Resposta do Graph sem drive id.");
+  if (!driveId) throw new Error("Não foi possível identificar a biblioteca de arquivos do site.");
   return { siteId, driveId };
 }
 

@@ -98,7 +98,7 @@ export function ClientSharePointConfig({ clientId }: Props) {
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data?.error ?? "Falha na conexão");
-      setSuccess(`Conexão OK. Drive: ${data.driveId?.slice(0, 12) ?? "—"}…`);
+      setSuccess("Conexão OK. Site e biblioteca de arquivos acessíveis.");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Falha ao testar conexão");
     } finally {
@@ -175,7 +175,7 @@ export function ClientSharePointConfig({ clientId }: Props) {
         />
         <p className="text-xs text-slate-500 mt-1">
           No Teams: abra a equipe do cliente → Arquivos → Abrir no SharePoint → copie a URL até{" "}
-          <code className="text-xs">/sites/NomeDaEquipe</code>.
+          <code className="text-xs">/sites/NomeDaEquipe</code> (hostname igual ao do navegador).
         </p>
       </div>
 
