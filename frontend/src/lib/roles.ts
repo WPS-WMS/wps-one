@@ -55,7 +55,7 @@ export function isConsultantLikeRole(role: string | undefined | null): boolean {
 
 /** Perfis que precisam de data de início e limites de apontamento no cadastro. */
 export function roleRequiresTimeEntryConfig(role: string): boolean {
-  if (role === "CLIENTE" || role === "DIRETORIA" || role === "PLATFORM_ADMIN") {
+  if (role === "CLIENTE" || role === "PLATFORM_ADMIN") {
     return false;
   }
   return true;
