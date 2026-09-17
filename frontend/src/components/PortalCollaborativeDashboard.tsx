@@ -2039,54 +2039,6 @@ function PortalItemImage({
                         ))}
                       </div>
                     )}
-
-                    {newsImageItems.length > 1 && (
-                      <div className="border-t border-[color:var(--border)] px-4 py-3 sm:px-5">
-                        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-                          Histórico de notícias
-                        </p>
-                        <ul className="max-h-40 space-y-1.5 overflow-y-auto pr-1">
-                          {newsImageItems.map((item, idx) => {
-                            const inCarousel = newsCarousel.some((n) => n.id === item.id);
-                            const carouselIdx = newsCarousel.findIndex((n) => n.id === item.id);
-                            const active = inCarousel && carouselIdx === newsPageIndex;
-                            const when = item.createdAt
-                              ? new Date(item.createdAt).toLocaleString("pt-BR", {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })
-                              : newsPeriodLabel(newsPeriodKey(item));
-                            return (
-                              <li key={item.id}>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (newsPeriod !== NEWS_ALL_PERIODS) setNewsPeriod(NEWS_ALL_PERIODS);
-                                    window.setTimeout(() => {
-                                      const allIdx = newsImageItems.findIndex((n) => n.id === item.id);
-                                      if (allIdx >= 0) setNewsPageIndex(allIdx);
-                                    }, 0);
-                                  }}
-                                  className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-xs transition ${
-                                    active
-                                      ? "bg-fuchsia-500/15 text-[color:var(--foreground)] ring-1 ring-fuchsia-400/50"
-                                      : "bg-[color:var(--surface)] text-[color:var(--muted-foreground)] hover:bg-[color:var(--surface-2)]"
-                                  }`}
-                                >
-                                  <span className="min-w-0 truncate font-medium text-[color:var(--foreground)]">
-                                    {newsDisplayCaption(item) || `Notícia ${idx + 1}`}
-                                  </span>
-                                  <span className="shrink-0 text-[10px] text-[color:var(--muted-foreground)]">{when}</span>
-                                </button>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <div className="flex h-full min-h-[360px] flex-col items-center justify-center gap-2 px-6 text-center text-[color:var(--muted-foreground)] sm:min-h-[480px]">
