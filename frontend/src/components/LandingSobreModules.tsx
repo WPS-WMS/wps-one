@@ -128,6 +128,22 @@ const MODULES: ModuleTab[] = [
     ],
   },
   {
+    id: "portal",
+    label: "Portal Colaborativo",
+    blurb:
+      "Intranet da empresa: comunicação interna, agenda, pessoas e documentos em um só lugar.",
+    features: [
+      {
+        id: "portal-empresa",
+        title: "Portal da empresa",
+        description:
+          "Tela interna da organização para publicar notícias e imagens, acompanhar atualizações do WPS One, ver aniversariantes do mês e eventos importantes, além de anexar documentos e manuais internos — tudo centralizado para o time.",
+        imageSrc: "/landing/portal-colaborativo.jpg",
+        imageAlt: "Tela Portal Colaborativo do WPS One",
+      },
+    ],
+  },
+  {
     id: "relatorios",
     label: "Relatórios",
     blurb: "Indicadores de horas e utilização para gestão e faturamento.",
