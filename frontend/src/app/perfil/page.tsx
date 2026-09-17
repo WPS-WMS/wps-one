@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch, publicFileUrl } from "@/lib/api";
 import { ArrowLeft, Camera, CloudUpload } from "lucide-react";
 import { Avatar } from "@/components/Avatar";
+import { PASSWORD_POLICY_HINT, validatePasswordPolicy } from "@/lib/passwordPolicy";
 
 type AvatarPreview = {
   url: string;
@@ -26,6 +27,9 @@ export default function PerfilPage() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [currentPasswordError, setCurrentPasswordError] = useState<string | null>(null);
+  const [newPasswordError, setNewPasswordError] = useState<string | null>(null);
+  const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -73,17 +77,22 @@ export default function PerfilPage() {
   async function handleChangePassword(e: FormEvent) {
     e.preventDefault();
     if (!user) return;
-    if (newPassword !== confirmPassword) {
-      setError("A nova senha e a confirmação não coincidem.");
+    setError(null);
+    setSuccess(null);
+    setCurrentPasswordError(null);
+    setNewPasswordError(null);
+    setConfirmPasswordError(null);
+
+    const policyError = validatePasswordPolicy(newPassword);
+    if (policyError) {
+      setNewPasswordError(policyError);
       return;
     }
-    if (newPassword.length < 6) {
-      setError("A nova senha deve ter no mínimo 6 caracteres.");
+    if (newPassword !== confirmPassword) {
+      setConfirmPasswordError("Senhas não coincidem");
       return;
     }
     try {
-      setError(null);
-      setSuccess(null);
       setSavingPassword(true);
       const res = await apiFetch("/api/users/me/password", {
         method: "PATCH",
@@ -92,7 +101,14 @@ export default function PerfilPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Erro ao trocar senha");
+        const apiError = String(data.error || "Erro ao trocar senha");
+        if (/senha atual/i.test(apiError)) {
+          setCurrentPasswordError("Senha atual incorreta");
+        } else if (/maiúscula|mínimo 8|caractere especial|número/i.test(apiError)) {
+          setNewPasswordError(apiError);
+        } else {
+          setError(apiError);
+        }
         return;
       }
       setSuccess("Senha alterada com sucesso.");
@@ -369,14 +385,21 @@ export default function PerfilPage() {
                 <input
                   type="password"
                   value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  onChange={(e) => {
+                    setCurrentPassword(e.target.value);
+                    if (currentPasswordError) setCurrentPasswordError(null);
+                  }}
                   className="h-11 w-full rounded-xl border px-3 text-sm outline-none transition focus:ring-2 focus:ring-[color:var(--primary)]/35"
                   style={{
-                    borderColor: "var(--border)",
+                    borderColor: currentPasswordError ? "#ef4444" : "var(--border)",
                     background: "var(--input-bg)",
                     color: "var(--input-fg)",
                   }}
+                  aria-invalid={Boolean(currentPasswordError)}
                 />
+                {currentPasswordError && (
+                  <p className="text-xs text-red-600">{currentPasswordError}</p>
+                )}
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -384,14 +407,23 @@ export default function PerfilPage() {
                   <input
                     type="password"
                     value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      if (newPasswordError) setNewPasswordError(null);
+                    }}
                     className="h-11 w-full rounded-xl border px-3 text-sm outline-none transition focus:ring-2 focus:ring-[color:var(--primary)]/35"
                     style={{
-                      borderColor: "var(--border)",
+                      borderColor: newPasswordError ? "#ef4444" : "var(--border)",
                       background: "var(--input-bg)",
                       color: "var(--input-fg)",
                     }}
+                    aria-invalid={Boolean(newPasswordError)}
                   />
+                  {newPasswordError ? (
+                    <p className="text-xs text-red-600">{newPasswordError}</p>
+                  ) : (
+                    <p className="text-[11px] text-[color:var(--muted-foreground)]">{PASSWORD_POLICY_HINT}</p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <label className="block text-xs font-medium text-[color:var(--muted-foreground)]">
@@ -400,14 +432,21 @@ export default function PerfilPage() {
                   <input
                     type="password"
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      if (confirmPasswordError) setConfirmPasswordError(null);
+                    }}
                     className="h-11 w-full rounded-xl border px-3 text-sm outline-none transition focus:ring-2 focus:ring-[color:var(--primary)]/35"
                     style={{
-                      borderColor: "var(--border)",
+                      borderColor: confirmPasswordError ? "#ef4444" : "var(--border)",
                       background: "var(--input-bg)",
                       color: "var(--input-fg)",
                     }}
+                    aria-invalid={Boolean(confirmPasswordError)}
                   />
+                  {confirmPasswordError && (
+                    <p className="text-xs text-red-600">{confirmPasswordError}</p>
+                  )}
                 </div>
               </div>
 

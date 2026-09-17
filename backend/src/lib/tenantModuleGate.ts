@@ -42,16 +42,25 @@ export const PORTAL_MODULE_FEATURE_IDS: FeatureId[] = [
   "portal.corporativo.editar",
 ];
 
+export const SHAREPOINT_MODULE_FEATURE_IDS: FeatureId[] = ["configuracoes.sharepoint"];
+
 const PROJETOS_SET = new Set<string>(PROJETOS_MODULE_FEATURE_IDS);
 const FINANCEIRO_SET = new Set<string>(FINANCEIRO_MODULE_FEATURE_IDS);
 const PORTAL_SET = new Set<string>(PORTAL_MODULE_FEATURE_IDS);
+const SHAREPOINT_SET = new Set<string>(SHAREPOINT_MODULE_FEATURE_IDS);
 
 export function featureModule(featureId: string): PlanModuleId | null {
   if (PROJETOS_SET.has(featureId) || featureId.startsWith("projeto.")) return "projetos";
-  if (FINANCEIRO_SET.has(featureId) || featureId.startsWith("financeiro.") || featureId.startsWith("relatorios.financeiro") || featureId.startsWith("configuracoes.financeiro")) {
+  if (
+    FINANCEIRO_SET.has(featureId) ||
+    featureId.startsWith("financeiro.") ||
+    featureId.startsWith("relatorios.financeiro") ||
+    featureId.startsWith("configuracoes.financeiro")
+  ) {
     return "financeiro";
   }
   if (PORTAL_SET.has(featureId) || featureId.startsWith("portal.")) return "portal";
+  if (SHAREPOINT_SET.has(featureId) || featureId === "configuracoes.sharepoint") return "sharepoint";
   return null;
 }
 
@@ -59,6 +68,7 @@ export type TenantModules = {
   projetos: boolean;
   financeiro: boolean;
   portal: boolean;
+  sharepoint: boolean;
   /** Assinatura encerrada — bloqueia o tenant inteiro. */
   locked: boolean;
   status: string;
@@ -72,6 +82,7 @@ function endOfUtcDay(d: Date): Date {
 
 /**
  * Resolve módulos do plano do tenant e aplica lockout após cancelamento.
+ * Portal/SharePoint também exigem chave de ativação no tenant (painel da plataforma).
  * Lazy: se canceling e já passou accessUntil, marca locked no banco.
  */
 export async function getTenantModules(tenantId: string): Promise<TenantModules> {
@@ -83,6 +94,8 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
       subscriptionPlanId: true,
       subscriptionPlan: true,
       platformPlan: true,
+      portalModuleEnabled: true,
+      sharepointModuleEnabled: true,
     },
   });
 
@@ -91,6 +104,7 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
       projetos: false,
       financeiro: false,
       portal: false,
+      sharepoint: false,
       locked: true,
       status: "locked",
       accessUntil: null,
@@ -137,6 +151,7 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
       projetos: false,
       financeiro: false,
       portal: false,
+      sharepoint: false,
       locked: true,
       status: "locked",
       accessUntil: accessUntil ? accessUntil.toISOString() : null,
@@ -155,11 +170,15 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
   const modules = hasSubscription
     ? plan
       ? planModulesFromRecord(plan)
-      : { projetos: false, financeiro: false, portal: false }
+      : { projetos: false, financeiro: false, portal: false, sharepoint: false }
     : planModulesFromRecord(null);
 
   return {
-    ...modules,
+    projetos: modules.projetos,
+    financeiro: modules.financeiro,
+    // Addon: plano inclui + chave ligada no cadastro da empresa.
+    portal: modules.portal && tenant.portalModuleEnabled !== false,
+    sharepoint: modules.sharepoint && tenant.sharepointModuleEnabled === true,
     locked: false,
     status,
     accessUntil: accessUntil ? accessUntil.toISOString() : null,

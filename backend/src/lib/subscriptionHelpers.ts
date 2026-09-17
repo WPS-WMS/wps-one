@@ -17,6 +17,8 @@ export const TENANT_SUBSCRIPTION_SELECT = {
   subscriptionCanceledAt: true,
   subscriptionAccessUntil: true,
   platformPlan: true,
+  portalModuleEnabled: true,
+  sharepointModuleEnabled: true,
 } as const;
 
 export type TenantSubscriptionRow = {
@@ -32,6 +34,8 @@ export type TenantSubscriptionRow = {
   subscriptionCanceledAt: Date | null;
   subscriptionAccessUntil: Date | null;
   platformPlan: PlatformPlanRecord | null;
+  portalModuleEnabled: boolean;
+  sharepointModuleEnabled: boolean;
 };
 
 export async function listPlatformPlans(params?: { activeOnly?: boolean }) {

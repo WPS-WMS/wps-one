@@ -1,11 +1,12 @@
 /** Módulos comerciais do plano WPS One. */
-export const PLAN_MODULES = ["projetos", "financeiro", "portal"] as const;
+export const PLAN_MODULES = ["projetos", "financeiro", "portal", "sharepoint"] as const;
 export type PlanModuleId = (typeof PLAN_MODULES)[number];
 
 export const PLAN_MODULE_LABELS: Record<PlanModuleId, string> = {
   projetos: "Gestão de projetos",
   financeiro: "Financeiro",
   portal: "Portal Colaborativo",
+  sharepoint: "SharePoint",
 };
 
 export type PlatformPlanRecord = {
@@ -16,6 +17,7 @@ export type PlatformPlanRecord = {
   moduleProjetos: boolean;
   moduleFinanceiro: boolean;
   modulePortal: boolean;
+  moduleSharepoint: boolean;
   active: boolean;
   sortOrder: number;
 };
@@ -104,19 +106,24 @@ export function formatBrlFromCents(cents: number): string {
   });
 }
 
-export function planModulesFromRecord(plan: PlatformPlanRecord | null | undefined): {
+export type PlanModulesState = {
   projetos: boolean;
   financeiro: boolean;
   portal: boolean;
-} {
+  sharepoint: boolean;
+};
+
+export function planModulesFromRecord(plan: PlatformPlanRecord | null | undefined): PlanModulesState {
   if (!plan) {
-    // Sem plano configurado: não restringe módulos (legado / pré-assinatura).
-    return { projetos: true, financeiro: true, portal: true };
+    // Sem plano configurado: não restringe módulos principais (legado / pré-assinatura).
+    // SharePoint permanece opt-in.
+    return { projetos: true, financeiro: true, portal: true, sharepoint: false };
   }
   return {
     projetos: !!plan.moduleProjetos,
     financeiro: !!plan.moduleFinanceiro,
     portal: !!plan.modulePortal,
+    sharepoint: !!plan.moduleSharepoint,
   };
 }
 

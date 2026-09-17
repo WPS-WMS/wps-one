@@ -125,6 +125,7 @@ platformRouter.post("/plans", requirePlatformAdmin, async (req, res) => {
         moduleProjetos: body.moduleProjetos !== false,
         moduleFinanceiro: body.moduleFinanceiro !== false,
         modulePortal: body.modulePortal !== false,
+        moduleSharepoint: body.moduleSharepoint === true,
         active: body.active !== false,
         sortOrder: Number.isFinite(Number(body.sortOrder))
           ? Math.round(Number(body.sortOrder))
@@ -158,6 +159,7 @@ platformRouter.patch("/plans/:id", requirePlatformAdmin, async (req, res) => {
       moduleProjetos?: boolean;
       moduleFinanceiro?: boolean;
       modulePortal?: boolean;
+      moduleSharepoint?: boolean;
       active?: boolean;
       sortOrder?: number;
     } = {};
@@ -194,6 +196,7 @@ platformRouter.patch("/plans/:id", requirePlatformAdmin, async (req, res) => {
     if (body.moduleProjetos !== undefined) data.moduleProjetos = !!body.moduleProjetos;
     if (body.moduleFinanceiro !== undefined) data.moduleFinanceiro = !!body.moduleFinanceiro;
     if (body.modulePortal !== undefined) data.modulePortal = !!body.modulePortal;
+    if (body.moduleSharepoint !== undefined) data.moduleSharepoint = !!body.moduleSharepoint;
     if (body.active !== undefined) data.active = !!body.active;
     if (body.sortOrder !== undefined && Number.isFinite(Number(body.sortOrder))) {
       data.sortOrder = Math.round(Number(body.sortOrder));
@@ -294,6 +297,15 @@ platformRouter.post("/tenants", requirePlatformAdmin, async (req, res) => {
     const startedAt = new Date();
     const nextPaymentAt = computeNextSubscriptionPaymentAt(startedAt);
 
+    const portalModuleEnabled =
+      body.portalModuleEnabled !== undefined
+        ? body.portalModuleEnabled === true
+        : !!planRecord.modulePortal;
+    const sharepointModuleEnabled =
+      body.sharepointModuleEnabled !== undefined
+        ? body.sharepointModuleEnabled === true
+        : !!planRecord.moduleSharepoint;
+
     const created = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
@@ -304,6 +316,8 @@ platformRouter.post("/tenants", requirePlatformAdmin, async (req, res) => {
           subscriptionStartedAt: startedAt,
           subscriptionNextPaymentAt: nextPaymentAt,
           subscriptionStatus: "active",
+          portalModuleEnabled,
+          sharepointModuleEnabled,
         },
       });
 
@@ -523,6 +537,12 @@ platformRouter.get("/tenants/:id", requirePlatformAdmin, async (req, res) => {
       slug: tenant.slug,
       createdAt: tenant.createdAt.toISOString(),
       updatedAt: tenant.updatedAt.toISOString(),
+      portalModuleEnabled: tenant.portalModuleEnabled !== false,
+      sharepointModuleEnabled: tenant.sharepointModuleEnabled === true,
+      planModules: {
+        portal: !!tenant.platformPlan?.modulePortal,
+        sharepoint: !!tenant.platformPlan?.moduleSharepoint,
+      },
       usage: {
         ...usage,
         storageFormatted: formatStorageBytes(usage.storageBytes),
@@ -566,6 +586,8 @@ platformRouter.patch("/tenants/:id", requirePlatformAdmin, async (req, res) => {
   const companyNameRaw = body.companyName ?? body.name;
   const adminEmailRaw = body.adminEmail ?? body.email;
   const adminNameRaw = body.adminName;
+  const portalModuleEnabledRaw = body.portalModuleEnabled;
+  const sharepointModuleEnabledRaw = body.sharepointModuleEnabled;
 
   const companyName =
     companyNameRaw !== undefined ? String(companyNameRaw ?? "").trim() : undefined;
@@ -577,6 +599,10 @@ platformRouter.patch("/tenants/:id", requirePlatformAdmin, async (req, res) => {
       : undefined;
   const adminName =
     adminNameRaw !== undefined ? String(adminNameRaw ?? "").trim() : undefined;
+  const portalModuleEnabled =
+    portalModuleEnabledRaw !== undefined ? portalModuleEnabledRaw === true : undefined;
+  const sharepointModuleEnabled =
+    sharepointModuleEnabledRaw !== undefined ? sharepointModuleEnabledRaw === true : undefined;
 
   if (companyName !== undefined && !companyName) {
     res.status(400).json({ error: "Nome da empresa é obrigatório." });
@@ -592,7 +618,13 @@ platformRouter.patch("/tenants/:id", requirePlatformAdmin, async (req, res) => {
     res.status(400).json({ error: "Nome do administrador é obrigatório." });
     return;
   }
-  if (companyName === undefined && adminEmail === undefined && adminName === undefined) {
+  if (
+    companyName === undefined &&
+    adminEmail === undefined &&
+    adminName === undefined &&
+    portalModuleEnabled === undefined &&
+    sharepointModuleEnabled === undefined
+  ) {
     res.status(400).json({ error: "Nenhum campo para atualizar." });
     return;
   }
@@ -632,10 +664,18 @@ platformRouter.patch("/tenants/:id", requirePlatformAdmin, async (req, res) => {
     }
 
     await prisma.$transaction(async (tx) => {
-      if (companyName !== undefined) {
+      if (
+        companyName !== undefined ||
+        portalModuleEnabled !== undefined ||
+        sharepointModuleEnabled !== undefined
+      ) {
         await tx.tenant.update({
           where: { id },
-          data: { name: companyName },
+          data: {
+            ...(companyName !== undefined ? { name: companyName } : {}),
+            ...(portalModuleEnabled !== undefined ? { portalModuleEnabled } : {}),
+            ...(sharepointModuleEnabled !== undefined ? { sharepointModuleEnabled } : {}),
+          },
         });
       }
 
@@ -684,6 +724,12 @@ platformRouter.patch("/tenants/:id", requirePlatformAdmin, async (req, res) => {
       slug: updatedTenant.slug,
       createdAt: updatedTenant.createdAt.toISOString(),
       updatedAt: updatedTenant.updatedAt.toISOString(),
+      portalModuleEnabled: updatedTenant.portalModuleEnabled !== false,
+      sharepointModuleEnabled: updatedTenant.sharepointModuleEnabled === true,
+      planModules: {
+        portal: !!updatedTenant.platformPlan?.modulePortal,
+        sharepoint: !!updatedTenant.platformPlan?.moduleSharepoint,
+      },
       usage: {
         ...usage,
         storageFormatted: formatStorageBytes(usage.storageBytes),

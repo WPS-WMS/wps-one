@@ -10,6 +10,7 @@ import { sendMail } from "../lib/mailer.js";
 import { renderEmailLayout, escapeHtml } from "../lib/emailTemplate.js";
 import { devLog, errorSummary } from "../lib/devLog.js";
 import { clientProjectVisibilityWhere } from "../lib/projectVisibility.js";
+import { validatePasswordPolicy } from "../lib/passwordPolicy.js";
 
 export const authRouter = Router();
 const TOKEN_COOKIE_NAME = "wps_token";
@@ -132,6 +133,7 @@ authRouter.post("/login", async (req, res) => {
       projetos: boolean;
       financeiro: boolean;
       portal: boolean;
+      sharepoint: boolean;
       locked: boolean;
       status: string;
     } | null = null;
@@ -149,6 +151,7 @@ authRouter.post("/login", async (req, res) => {
         projetos: modules.projetos,
         financeiro: modules.financeiro,
         portal: modules.portal,
+        sharepoint: modules.sharepoint,
         locked: modules.locked,
         status: modules.status,
       };
@@ -271,6 +274,7 @@ authRouter.get("/me", async (req, res) => {
       projetos: boolean;
       financeiro: boolean;
       portal: boolean;
+      sharepoint: boolean;
       locked: boolean;
       status: string;
     } | null = null;
@@ -288,6 +292,7 @@ authRouter.get("/me", async (req, res) => {
         projetos: modules.projetos,
         financeiro: modules.financeiro,
         portal: modules.portal,
+        sharepoint: modules.sharepoint,
         locked: modules.locked,
         status: modules.status,
       };
@@ -547,8 +552,9 @@ authRouter.post("/reset-password", async (req, res) => {
       res.status(400).json({ error: "Token e nova senha são obrigatórios" });
       return;
     }
-    if (String(newPassword).length < 6) {
-      res.status(400).json({ error: "A nova senha deve ter no mínimo 6 caracteres" });
+    const passwordError = validatePasswordPolicy(newPassword);
+    if (passwordError) {
+      res.status(400).json({ error: passwordError });
       return;
     }
 

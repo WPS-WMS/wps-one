@@ -9,6 +9,7 @@ type PlanModules = {
   projetos: boolean;
   financeiro: boolean;
   portal: boolean;
+  sharepoint: boolean;
 };
 
 type PlatformPlan = {
@@ -31,6 +32,7 @@ type PlanForm = {
   moduleProjetos: boolean;
   moduleFinanceiro: boolean;
   modulePortal: boolean;
+  moduleSharepoint: boolean;
   active: boolean;
 };
 
@@ -41,6 +43,7 @@ const EMPTY_FORM: PlanForm = {
   moduleProjetos: true,
   moduleFinanceiro: true,
   modulePortal: true,
+  moduleSharepoint: false,
   active: true,
 };
 
@@ -106,6 +109,7 @@ export default function PlatformPlansPage() {
       moduleProjetos: plan.modules.projetos,
       moduleFinanceiro: plan.modules.financeiro,
       modulePortal: plan.modules.portal,
+      moduleSharepoint: plan.modules.sharepoint,
       active: plan.active,
     });
     setFormError(null);
@@ -124,7 +128,7 @@ export default function PlatformPlansPage() {
       setFormError("Informe um preço válido por usuário.");
       return;
     }
-    if (!form.moduleProjetos && !form.moduleFinanceiro && !form.modulePortal) {
+    if (!form.moduleProjetos && !form.moduleFinanceiro && !form.modulePortal && !form.moduleSharepoint) {
       setFormError("Selecione ao menos um módulo.");
       return;
     }
@@ -138,6 +142,7 @@ export default function PlatformPlansPage() {
       moduleProjetos: form.moduleProjetos,
       moduleFinanceiro: form.moduleFinanceiro,
       modulePortal: form.modulePortal,
+      moduleSharepoint: form.moduleSharepoint,
       active: form.active,
     };
     const r = await apiFetch(editing ? `/api/platform/plans/${editing.id}` : "/api/platform/plans", {
@@ -361,6 +366,7 @@ export default function PlatformPlansPage() {
                       ["moduleProjetos", "Gestão de projetos"],
                       ["moduleFinanceiro", "Financeiro"],
                       ["modulePortal", "Portal Colaborativo"],
+                      ["moduleSharepoint", "SharePoint"],
                     ] as const
                   ).map(([key, label]) => (
                     <label

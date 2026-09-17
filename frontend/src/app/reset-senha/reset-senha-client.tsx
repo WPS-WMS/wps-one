@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { PASSWORD_POLICY_HINT, validatePasswordPolicy } from "@/lib/passwordPolicy";
 
 export function ResetSenhaClient() {
   const router = useRouter();
@@ -12,6 +13,8 @@ export function ResetSenhaClient() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [newPasswordError, setNewPasswordError] = useState<string | null>(null);
+  const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -19,17 +22,20 @@ export function ResetSenhaClient() {
     e.preventDefault();
     setError("");
     setMessage("");
+    setNewPasswordError(null);
+    setConfirmPasswordError(null);
 
     if (!token) {
       setError("Link inválido. Solicite novamente a recuperação de senha.");
       return;
     }
-    if (newPassword.length < 6) {
-      setError("A nova senha deve ter no mínimo 6 caracteres.");
+    const policyError = validatePasswordPolicy(newPassword);
+    if (policyError) {
+      setNewPasswordError(policyError);
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("A nova senha e a confirmação não coincidem.");
+      setConfirmPasswordError("Senhas não coincidem");
       return;
     }
 
@@ -41,7 +47,12 @@ export function ResetSenhaClient() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || "Não foi possível redefinir a senha.");
+        const apiError = String(data.error || "Não foi possível redefinir a senha.");
+        if (/maiúscula|mínimo 8|caractere especial|número/i.test(apiError)) {
+          setNewPasswordError(apiError);
+        } else {
+          setError(apiError);
+        }
         return;
       }
       setMessage("Senha alterada com sucesso. Você já pode entrar com a nova senha.");
@@ -81,12 +92,23 @@ export function ResetSenhaClient() {
             <input
               type="password"
               value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg bg-gray-50 border border-blue-200 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+              onChange={(e) => {
+                setNewPassword(e.target.value);
+                if (newPasswordError) setNewPasswordError(null);
+              }}
+              className={`w-full px-4 py-2.5 rounded-lg bg-gray-50 border text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition ${
+                newPasswordError ? "border-red-500" : "border-blue-200"
+              }`}
               placeholder="••••••••"
-              minLength={6}
+              minLength={8}
               required
+              aria-invalid={Boolean(newPasswordError)}
             />
+            {newPasswordError ? (
+              <p className="mt-1 text-xs text-red-600">{newPasswordError}</p>
+            ) : (
+              <p className="mt-1 text-xs text-gray-500">{PASSWORD_POLICY_HINT}</p>
+            )}
           </div>
 
           <div>
@@ -94,12 +116,21 @@ export function ResetSenhaClient() {
             <input
               type="password"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg bg-gray-50 border border-blue-200 text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+              onChange={(e) => {
+                setConfirmPassword(e.target.value);
+                if (confirmPasswordError) setConfirmPasswordError(null);
+              }}
+              className={`w-full px-4 py-2.5 rounded-lg bg-gray-50 border text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition ${
+                confirmPasswordError ? "border-red-500" : "border-blue-200"
+              }`}
               placeholder="••••••••"
-              minLength={6}
+              minLength={8}
               required
+              aria-invalid={Boolean(confirmPasswordError)}
             />
+            {confirmPasswordError && (
+              <p className="mt-1 text-xs text-red-600">{confirmPasswordError}</p>
+            )}
           </div>
 
           <button
@@ -123,4 +154,3 @@ export function ResetSenhaClient() {
     </div>
   );
 }
-

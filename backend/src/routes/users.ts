@@ -19,6 +19,7 @@ import {
   USER_FIELD_LABELS,
   buildUserHistoryEntries,
 } from "../lib/userHistoryHelpers.js";
+import { validatePasswordPolicy } from "../lib/passwordPolicy.js";
 
 function parseOptionalHourlyRate(raw: unknown): number | null | "invalid" | undefined {
   if (raw === undefined) return undefined;
@@ -336,8 +337,9 @@ usersRouter.patch("/me/password", async (req, res) => {
     res.status(400).json({ error: "Senha atual e nova senha são obrigatórias" });
     return;
   }
-  if (newPassword.length < 6) {
-    res.status(400).json({ error: "A nova senha deve ter no mínimo 6 caracteres" });
+  const passwordError = validatePasswordPolicy(newPassword);
+  if (passwordError) {
+    res.status(400).json({ error: passwordError });
     return;
   }
   const user = await prisma.user.findUnique({

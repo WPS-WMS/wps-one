@@ -19,6 +19,8 @@ model PlatformPlan {
   moduleProjetos    Boolean  @default(true)
   moduleFinanceiro  Boolean  @default(true)
   modulePortal      Boolean  @default(true)
+  /// Addon: Integrações SharePoint / Teams
+  moduleSharepoint  Boolean  @default(false)
   active            Boolean  @default(true)
   sortOrder         Int      @default(0)
   createdAt         DateTime @default(now())
@@ -95,7 +97,11 @@ model Tenant {
   skillProfiles SkillProfile[]
   userProfiles TenantUserProfile[]
   userNotifications UserNotification[]
-  /// Integração Microsoft SharePoint / Teams
+  /// Chave de ativação (plataforma): libera a tela/módulo Portal Colaborativo neste tenant.
+  portalModuleEnabled          Boolean  @default(true)
+  /// Chave de ativação (plataforma): libera a tela Integrações SharePoint neste tenant.
+  sharepointModuleEnabled      Boolean  @default(false)
+  /// Integração Microsoft SharePoint / Teams (operacional — sync ligado/desligado pelo cliente)
   sharePointEnabled            Boolean  @default(false)
   sharePointSiteUrl            String?
   sharePointDriveId            String?

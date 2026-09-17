@@ -12,6 +12,12 @@ type Detail = {
   slug: string;
   createdAt: string;
   updatedAt?: string;
+  portalModuleEnabled?: boolean;
+  sharepointModuleEnabled?: boolean;
+  planModules?: {
+    portal?: boolean;
+    sharepoint?: boolean;
+  };
   usage: {
     usersTotal: number;
     usersActive: number;
@@ -93,6 +99,8 @@ export default function PlatformTenantDetailPage() {
   const [companyName, setCompanyName] = useState("");
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
+  const [portalModuleEnabled, setPortalModuleEnabled] = useState(true);
+  const [sharepointModuleEnabled, setSharepointModuleEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveOk, setSaveOk] = useState(false);
@@ -119,6 +127,8 @@ export default function PlatformTenantDetailPage() {
       setCompanyName(next.name ?? "");
       setAdminName(next.primaryAdmin?.name ?? "");
       setAdminEmail(next.primaryAdmin?.email ?? "");
+      setPortalModuleEnabled(next.portalModuleEnabled !== false);
+      setSharepointModuleEnabled(next.sharepointModuleEnabled === true);
       setLoading(false);
     })();
     return () => {
@@ -132,8 +142,10 @@ export default function PlatformTenantDetailPage() {
     setSaving(true);
     setSaveError(null);
     setSaveOk(false);
-    const payload: Record<string, string> = {
+    const payload: Record<string, string | boolean> = {
       companyName: companyName.trim(),
+      portalModuleEnabled,
+      sharepointModuleEnabled,
     };
     if (detail?.primaryAdmin) {
       payload.adminName = adminName.trim();
@@ -158,6 +170,9 @@ export default function PlatformTenantDetailPage() {
             name: next.name,
             slug: next.slug,
             updatedAt: next.updatedAt,
+            portalModuleEnabled: next.portalModuleEnabled,
+            sharepointModuleEnabled: next.sharepointModuleEnabled,
+            planModules: next.planModules ?? prev.planModules,
             primaryAdmin: next.primaryAdmin ?? prev.primaryAdmin,
             usage: next.usage ?? prev.usage,
             subscription: next.subscription ?? prev.subscription,
@@ -167,6 +182,8 @@ export default function PlatformTenantDetailPage() {
     setCompanyName(next.name ?? companyName);
     setAdminName(next.primaryAdmin?.name ?? adminName);
     setAdminEmail(next.primaryAdmin?.email ?? adminEmail);
+    setPortalModuleEnabled(next.portalModuleEnabled !== false);
+    setSharepointModuleEnabled(next.sharepointModuleEnabled === true);
     setSaveOk(true);
   }
 
@@ -200,6 +217,8 @@ export default function PlatformTenantDetailPage() {
 
   const dirty =
     companyName.trim() !== detail.name ||
+    portalModuleEnabled !== (detail.portalModuleEnabled !== false) ||
+    sharepointModuleEnabled !== (detail.sharepointModuleEnabled === true) ||
     (detail.primaryAdmin
       ? adminName.trim() !== detail.primaryAdmin.name ||
         adminEmail.trim().toLowerCase() !== detail.primaryAdmin.email
@@ -293,6 +312,54 @@ export default function PlatformTenantDetailPage() {
               Nenhum SUPER_ADMIN provisionado pela plataforma encontrado neste tenant.
             </p>
           )}
+
+          <div className="sm:col-span-2 space-y-2 rounded-xl border px-3 py-3" style={{ borderColor: "var(--border)" }}>
+            <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">
+              Módulos adicionais (ativação por empresa)
+            </p>
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-[color:var(--primary)]"
+                checked={portalModuleEnabled}
+                onChange={(e) => {
+                  setPortalModuleEnabled(e.target.checked);
+                  setSaveOk(false);
+                }}
+              />
+              <span>
+                <span className="font-medium">Portal Colaborativo</span>
+                <span className="mt-0.5 block text-xs text-[color:var(--muted-foreground)]">
+                  Libera a tela do portal nesta empresa
+                  {detail.planModules?.portal === false
+                    ? " (o plano atual não inclui este módulo)"
+                    : ""}
+                  .
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-[color:var(--primary)]"
+                checked={sharepointModuleEnabled}
+                onChange={(e) => {
+                  setSharepointModuleEnabled(e.target.checked);
+                  setSaveOk(false);
+                }}
+              />
+              <span>
+                <span className="font-medium">SharePoint / Integrações</span>
+                <span className="mt-0.5 block text-xs text-[color:var(--muted-foreground)]">
+                  Libera a tela de Integrações (SharePoint/Teams)
+                  {detail.planModules?.sharepoint === false
+                    ? " (o plano atual não inclui este módulo)"
+                    : ""}
+                  .
+                </span>
+              </span>
+            </label>
+          </div>
 
           <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
             <button

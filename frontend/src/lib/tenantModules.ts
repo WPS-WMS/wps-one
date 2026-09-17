@@ -4,13 +4,14 @@ export type TenantModulesState = {
   projetos: boolean;
   financeiro: boolean;
   portal: boolean;
+  sharepoint: boolean;
   locked?: boolean;
   status?: string;
 };
 
 export function featurePlanModule(
   featureId: string,
-): "projetos" | "financeiro" | "portal" | null {
+): "projetos" | "financeiro" | "portal" | "sharepoint" | null {
   if (
     featureId === "projeto" ||
     featureId.startsWith("projeto.") ||
@@ -37,6 +38,7 @@ export function featurePlanModule(
     return "financeiro";
   }
   if (featureId.startsWith("portal.")) return "portal";
+  if (featureId === "configuracoes.sharepoint") return "sharepoint";
   return null;
 }
 

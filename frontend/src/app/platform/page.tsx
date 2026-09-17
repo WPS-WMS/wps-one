@@ -66,9 +66,17 @@ export default function PlatformHomePage() {
     phone: "",
     email: "",
     planId: "",
+    portalModuleEnabled: true,
+    sharepointModuleEnabled: false,
   });
   const [plans, setPlans] = useState<
-    { id: string; label: string; pricePerUserFormatted: string; moduleLabels?: string[] }[]
+    {
+      id: string;
+      label: string;
+      pricePerUserFormatted: string;
+      moduleLabels?: string[];
+      modules?: { portal?: boolean; sharepoint?: boolean };
+    }[]
   >([]);
 
   const loadTenants = useCallback(async () => {
@@ -94,12 +102,22 @@ export default function PlatformHomePage() {
     );
     const planList = Array.isArray(body?.plans) ? body.plans : [];
     setPlans(
-      planList.map((p: { id: string; label?: string; name?: string; pricePerUserFormatted?: string; moduleLabels?: string[] }) => ({
-        id: p.id,
-        label: p.label || p.name || p.id,
-        pricePerUserFormatted: p.pricePerUserFormatted || "—",
-        moduleLabels: p.moduleLabels,
-      })),
+      planList.map(
+        (p: {
+          id: string;
+          label?: string;
+          name?: string;
+          pricePerUserFormatted?: string;
+          moduleLabels?: string[];
+          modules?: { portal?: boolean; sharepoint?: boolean };
+        }) => ({
+          id: p.id,
+          label: p.label || p.name || p.id,
+          pricePerUserFormatted: p.pricePerUserFormatted || "—",
+          moduleLabels: p.moduleLabels,
+          modules: p.modules,
+        }),
+      ),
     );
     setLoading(false);
   }, []);
@@ -118,21 +136,34 @@ export default function PlatformHomePage() {
       if (r.ok && Array.isArray(body?.plans)) {
         available = body.plans
           .filter((p: { active?: boolean }) => p.active !== false)
-          .map((p: { id: string; label?: string; name?: string; pricePerUserFormatted?: string; moduleLabels?: string[] }) => ({
-            id: p.id,
-            label: p.label || p.name || p.id,
-            pricePerUserFormatted: p.pricePerUserFormatted || "—",
-            moduleLabels: p.moduleLabels,
-          }));
+          .map(
+            (p: {
+              id: string;
+              label?: string;
+              name?: string;
+              pricePerUserFormatted?: string;
+              moduleLabels?: string[];
+              modules?: { portal?: boolean; sharepoint?: boolean };
+            }) => ({
+              id: p.id,
+              label: p.label || p.name || p.id,
+              pricePerUserFormatted: p.pricePerUserFormatted || "—",
+              moduleLabels: p.moduleLabels,
+              modules: p.modules,
+            }),
+          );
         setPlans(available);
       }
     }
+    const first = available[0];
     setForm({
       companyName: "",
       cnpj: "",
       phone: "",
       email: "",
-      planId: available[0]?.id ?? "",
+      planId: first?.id ?? "",
+      portalModuleEnabled: first?.modules?.portal !== false,
+      sharepointModuleEnabled: first?.modules?.sharepoint === true,
     });
     setModalOpen(true);
   }
@@ -154,6 +185,8 @@ export default function PlatformHomePage() {
         phone: form.phone,
         email: form.email.trim(),
         planId: form.planId,
+        portalModuleEnabled: form.portalModuleEnabled,
+        sharepointModuleEnabled: form.sharepointModuleEnabled,
       }),
     });
     const body = await r.json().catch(() => null);
@@ -477,7 +510,15 @@ export default function PlatformHomePage() {
                   <PopoverSelect
                     id="platform-create-tenant-plan"
                     value={form.planId}
-                    onChange={(planId) => setForm((f) => ({ ...f, planId }))}
+                    onChange={(planId) => {
+                      const selected = plans.find((p) => p.id === planId);
+                      setForm((f) => ({
+                        ...f,
+                        planId,
+                        portalModuleEnabled: selected?.modules?.portal !== false,
+                        sharepointModuleEnabled: selected?.modules?.sharepoint === true,
+                      }));
+                    }}
                     placeholder="Selecione um plano"
                     options={[
                       { value: "", label: "Selecione um plano" },
@@ -498,6 +539,37 @@ export default function PlatformHomePage() {
                       O cliente já entra com os módulos deste plano liberados.
                     </p>
                   )}
+                </div>
+
+                <div
+                  className="space-y-2 rounded-lg border px-3 py-3"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">
+                    Ativar nesta empresa
+                  </p>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="accent-[color:var(--primary)]"
+                      checked={form.portalModuleEnabled}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, portalModuleEnabled: e.target.checked }))
+                      }
+                    />
+                    Portal Colaborativo
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="accent-[color:var(--primary)]"
+                      checked={form.sharepointModuleEnabled}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, sharepointModuleEnabled: e.target.checked }))
+                      }
+                    />
+                    SharePoint / Integrações
+                  </label>
                 </div>
 
                 {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
