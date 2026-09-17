@@ -2107,29 +2107,39 @@ export function PayablesPageContent() {
         }
       />
 
-      <div className="flex gap-1 rounded-lg border p-1 w-fit" style={{ borderColor: "var(--border)" }}>
-        <button
-          type="button"
-          className={`rounded-md px-3.5 py-1.5 text-sm font-medium transition ${
-            viewTab === "contas"
-              ? "bg-[color:var(--primary)] text-white"
-              : "text-[color:var(--muted-foreground)] hover:bg-black/5"
-          }`}
-          onClick={() => setViewTab("contas")}
-        >
-          Contas
-        </button>
-        <button
-          type="button"
-          className={`rounded-md px-3.5 py-1.5 text-sm font-medium transition ${
-            viewTab === "recorrencia"
-              ? "bg-[color:var(--primary)] text-white"
-              : "text-[color:var(--muted-foreground)] hover:bg-black/5"
-          }`}
-          onClick={() => setViewTab("recorrencia")}
-        >
-          Recorrências
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-1 rounded-lg border p-1 w-fit" style={{ borderColor: "var(--border)" }}>
+          <button
+            type="button"
+            className={`rounded-md px-3.5 py-1.5 text-sm font-medium transition ${
+              viewTab === "contas"
+                ? "bg-[color:var(--primary)] text-white"
+                : "text-[color:var(--muted-foreground)] hover:bg-black/5"
+            }`}
+            onClick={() => setViewTab("contas")}
+          >
+            Contas
+          </button>
+          <button
+            type="button"
+            className={`rounded-md px-3.5 py-1.5 text-sm font-medium transition ${
+              viewTab === "recorrencia"
+                ? "bg-[color:var(--primary)] text-white"
+                : "text-[color:var(--muted-foreground)] hover:bg-black/5"
+            }`}
+            onClick={() => setViewTab("recorrencia")}
+          >
+            Recorrências
+          </button>
+        </div>
+        {viewTab === "contas" ? (
+          <FinancePageSizeSelect
+            id="payables-page-size"
+            value={listLimit}
+            disabled={loading}
+            onChange={setListLimit}
+          />
+        ) : null}
       </div>
 
       {error && <div className="wps-finance-alert-error rounded-lg border px-4 py-3 text-sm">{error}</div>}
@@ -2144,12 +2154,6 @@ export function PayablesPageContent() {
               buckets={aging.buckets}
             />
           )}
-          <FinancePageSizeSelect
-            id="payables-page-size"
-            value={listLimit}
-            disabled={loading}
-            onChange={setListLimit}
-          />
 
           <FinanceCollapsibleFilters activeCount={activeFilterCount} onClear={clearFilters}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
