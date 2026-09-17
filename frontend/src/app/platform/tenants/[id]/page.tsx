@@ -14,6 +14,7 @@ type Detail = {
   updatedAt?: string;
   portalModuleEnabled?: boolean;
   sharepointModuleEnabled?: boolean;
+  hasSubscriptionPlan?: boolean;
   planModules?: {
     portal?: boolean;
     sharepoint?: boolean;
@@ -172,6 +173,7 @@ export default function PlatformTenantDetailPage() {
             updatedAt: next.updatedAt,
             portalModuleEnabled: next.portalModuleEnabled,
             sharepointModuleEnabled: next.sharepointModuleEnabled,
+            hasSubscriptionPlan: next.hasSubscriptionPlan ?? prev.hasSubscriptionPlan,
             planModules: next.planModules ?? prev.planModules,
             primaryAdmin: next.primaryAdmin ?? prev.primaryAdmin,
             usage: next.usage ?? prev.usage,
@@ -331,9 +333,11 @@ export default function PlatformTenantDetailPage() {
                 <span className="font-medium">Portal Colaborativo</span>
                 <span className="mt-0.5 block text-xs text-[color:var(--muted-foreground)]">
                   Libera a tela do portal nesta empresa
-                  {detail.planModules?.portal === false
+                  {detail.hasSubscriptionPlan && detail.planModules?.portal === false
                     ? " (o plano atual não inclui este módulo)"
-                    : ""}
+                    : !detail.hasSubscriptionPlan
+                      ? " (empresa sem plano: basta esta chave)"
+                      : ""}
                   .
                 </span>
               </span>
@@ -352,9 +356,11 @@ export default function PlatformTenantDetailPage() {
                 <span className="font-medium">SharePoint / Integrações</span>
                 <span className="mt-0.5 block text-xs text-[color:var(--muted-foreground)]">
                   Libera a tela de Integrações (SharePoint/Teams)
-                  {detail.planModules?.sharepoint === false
+                  {detail.hasSubscriptionPlan && detail.planModules?.sharepoint === false
                     ? " (o plano atual não inclui este módulo)"
-                    : ""}
+                    : !detail.hasSubscriptionPlan
+                      ? " (empresa sem plano: basta esta chave)"
+                      : ""}
                   .
                 </span>
               </span>

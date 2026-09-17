@@ -539,6 +539,7 @@ platformRouter.get("/tenants/:id", requirePlatformAdmin, async (req, res) => {
       updatedAt: tenant.updatedAt.toISOString(),
       portalModuleEnabled: tenant.portalModuleEnabled !== false,
       sharepointModuleEnabled: tenant.sharepointModuleEnabled === true,
+      hasSubscriptionPlan: !!tenant.subscriptionPlanId || !!tenant.platformPlan,
       planModules: {
         portal: !!tenant.platformPlan?.modulePortal,
         sharepoint: !!tenant.platformPlan?.moduleSharepoint,
@@ -726,6 +727,7 @@ platformRouter.patch("/tenants/:id", requirePlatformAdmin, async (req, res) => {
       updatedAt: updatedTenant.updatedAt.toISOString(),
       portalModuleEnabled: updatedTenant.portalModuleEnabled !== false,
       sharepointModuleEnabled: updatedTenant.sharepointModuleEnabled === true,
+      hasSubscriptionPlan: !!updatedTenant.subscriptionPlanId || !!updatedTenant.platformPlan,
       planModules: {
         portal: !!updatedTenant.platformPlan?.modulePortal,
         sharepoint: !!updatedTenant.platformPlan?.moduleSharepoint,

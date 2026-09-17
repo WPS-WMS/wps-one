@@ -173,12 +173,17 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
       : { projetos: false, financeiro: false, portal: false, sharepoint: false }
     : planModulesFromRecord(null);
 
+  // Addon (Portal / SharePoint):
+  // - Com assinatura: precisa do módulo no plano E da chave no cadastro da empresa.
+  // - Sem assinatura (legado / WPSConsult): só a chave da empresa.
+  const portalEnabled = tenant.portalModuleEnabled !== false;
+  const sharepointEnabled = tenant.sharepointModuleEnabled === true;
+
   return {
     projetos: modules.projetos,
     financeiro: modules.financeiro,
-    // Addon: plano inclui + chave ligada no cadastro da empresa.
-    portal: modules.portal && tenant.portalModuleEnabled !== false,
-    sharepoint: modules.sharepoint && tenant.sharepointModuleEnabled === true,
+    portal: hasSubscription ? modules.portal && portalEnabled : portalEnabled,
+    sharepoint: hasSubscription ? modules.sharepoint && sharepointEnabled : sharepointEnabled,
     locked: false,
     status,
     accessUntil: accessUntil ? accessUntil.toISOString() : null,
