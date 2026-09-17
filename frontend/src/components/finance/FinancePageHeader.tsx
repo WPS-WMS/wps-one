@@ -65,7 +65,7 @@ type FinancePageSizeSelectProps = {
   disabled?: boolean;
 };
 
-/** Seletor de itens por página, fora do painel de filtros. */
+/** Seletor de itens por página (acima do painel de filtros). */
 export function FinancePageSizeSelect({
   id,
   value,

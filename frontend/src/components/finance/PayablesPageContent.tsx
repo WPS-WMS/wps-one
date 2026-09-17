@@ -2144,6 +2144,13 @@ export function PayablesPageContent() {
               buckets={aging.buckets}
             />
           )}
+          <FinancePageSizeSelect
+            id="payables-page-size"
+            value={listLimit}
+            disabled={loading}
+            onChange={setListLimit}
+          />
+
           <FinanceCollapsibleFilters activeCount={activeFilterCount} onClear={clearFilters}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               <div>
@@ -2269,13 +2276,6 @@ export function PayablesPageContent() {
               </div>
             </div>
           </FinanceCollapsibleFilters>
-
-          <FinancePageSizeSelect
-            id="payables-page-size"
-            value={listLimit}
-            disabled={loading}
-            onChange={setListLimit}
-          />
 
           {loading ? (
             <p className="text-sm text-[color:var(--muted-foreground)]">Carregando...</p>
