@@ -398,7 +398,7 @@ export default function LandingPage() {
       <main className="flex-1 flex flex-col">
         <section
           id="home"
-          className="scroll-mt-24 relative overflow-hidden pb-16 pt-8 md:pb-24 md:pt-10"
+          className="scroll-mt-24 relative overflow-hidden pb-6 pt-6 md:pb-8 md:pt-8"
         >
           <div
             className="pointer-events-none absolute inset-0 -z-10"
@@ -529,9 +529,9 @@ export default function LandingPage() {
                 aria-hidden
               />
               <img
-                src="/landing/financeiro-dashboard.png"
-                alt="Painel financeiro e operacional do WPS One"
-                className="w-full max-w-none select-none object-cover object-left-top shadow-[0_28px_80px_rgba(17,24,39,0.18)] lg:min-h-[420px] lg:translate-x-4 xl:translate-x-10"
+                src="/landing/projetos-lista.png"
+                alt="Lista de projetos do WPS One — gerenciamento de projetos, status e tarefas"
+                className="w-full max-w-none select-none object-cover object-left-top shadow-[0_28px_80px_rgba(17,24,39,0.18)] lg:translate-x-4 xl:translate-x-10"
                 style={{
                   borderRadius: "1.25rem 0 0 1.25rem",
                   border: `1px solid ${isDark ? "rgba(255,255,255,0.10)" : "rgba(17,24,39,0.10)"}`,
@@ -544,7 +544,7 @@ export default function LandingPage() {
 
         <section
           id="sobre"
-          className="scroll-mt-24 mx-auto w-full max-w-[1400px] px-6 py-14 md:py-20"
+          className="scroll-mt-24 mx-auto w-full max-w-[1400px] px-6 py-8 md:py-10"
           aria-labelledby="sobre-heading"
         >
             <div
@@ -582,7 +582,7 @@ export default function LandingPage() {
 
         <section
           id="contato"
-          className="scroll-mt-24 mx-auto w-full max-w-6xl px-6 py-14 md:py-20"
+          className="scroll-mt-24 mx-auto w-full max-w-6xl px-6 py-8 md:py-10"
         >
             <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: PURPLE }}>
               Contato

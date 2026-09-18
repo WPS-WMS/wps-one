@@ -73,7 +73,7 @@ export function LandingPlansSection({
   return (
     <section
       id="planos"
-      className="scroll-mt-24 mx-auto w-full max-w-6xl px-6 py-14 md:py-20"
+      className="scroll-mt-24 mx-auto w-full max-w-6xl px-6 py-8 md:py-10"
       aria-labelledby="planos-heading"
     >
       <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: PURPLE }}>
