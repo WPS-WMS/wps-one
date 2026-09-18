@@ -216,8 +216,8 @@ usersRouter.get(
 
   const roleFilter: Prisma.UserWhereInput =
     scope === "banco-horas"
-      ? { role: { notIn: [...HOUR_BANK_EXCLUDED_ROLES] } }
-      : { role: { not: "CLIENTE" } };
+      ? { role: { notIn: [...HOUR_BANK_EXCLUDED_ROLES, "PLATFORM_ADMIN"] } }
+      : { role: { notIn: ["CLIENTE", "PLATFORM_ADMIN"] } };
 
   const users = await prisma.user.findMany({
     where: { tenantId: authUser.tenantId, ...roleFilter, ...ativoFilter },
@@ -262,7 +262,11 @@ usersRouter.get(
   async (req, res) => {
   const authUser = req.user;
   const users = await prisma.user.findMany({
-    where: { tenantId: authUser.tenantId, ativo: true },
+    where: {
+      tenantId: authUser.tenantId,
+      ativo: true,
+      role: { notIn: ["PLATFORM_ADMIN", "CLIENTE"] },
+    },
     select: {
       id: true,
       name: true,
@@ -367,7 +371,6 @@ usersRouter.get("/", async (req, res) => {
   const q = String(req.query.q || "");
   const status = String(req.query.status ?? "todos").trim().toLowerCase();
   const roleRaw = String(req.query.role ?? "").trim();
-  const roleFilter = roleRaw ? { role: roleRaw } : {};
   const ativoFilter: Prisma.UserWhereInput =
     status === "inativos"
       ? { ativo: false }
@@ -379,7 +382,10 @@ usersRouter.get("/", async (req, res) => {
       tenantId,
       isPrimaryAdmin: false,
       ...ativoFilter,
-      ...roleFilter,
+      AND: [
+        { role: { not: "PLATFORM_ADMIN" } },
+        ...(roleRaw && roleRaw !== "PLATFORM_ADMIN" ? [{ role: roleRaw }] : []),
+      ],
       ...(q
         ? {
             OR: [
