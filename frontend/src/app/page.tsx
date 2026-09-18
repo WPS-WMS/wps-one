@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE_URL } from "@/lib/api";
 import { LandingSobreModules } from "@/components/LandingSobreModules";
 import { LandingPlansSection } from "@/components/LandingPlansSection";
-import { Mail, MapPin } from "lucide-react";
+import { Check, Mail, MapPin } from "lucide-react";
 
 const PURPLE = "#5c00e1";
 
@@ -70,6 +70,25 @@ function WhatsAppIcon({ className }: { className?: string }) {
 
 const LANDING_SECTIONS = ["home", "sobre", "planos", "contato"] as const;
 type LandingSection = (typeof LANDING_SECTIONS)[number];
+
+const HERO_PROBLEMS = [
+  {
+    pain: "Horas espalhadas em planilha",
+    result: "Apontamento e aprovação no projeto, com visão de margem",
+  },
+  {
+    pain: "SLA e tarefas sem dono claro",
+    result: "Kanban, daily e lista de tarefas com status em tempo real",
+  },
+  {
+    pain: "Financeiro separado da operação",
+    result: "Receita, despesa, imposto e resultado por projeto",
+  },
+  {
+    pain: "Cliente sem visibilidade",
+    result: "Portal colaborativo e acompanhamento compartilhado",
+  },
+] as const;
 
 function readSectionFromLocation(): LandingSection {
   if (typeof window === "undefined") return "home";
@@ -424,16 +443,39 @@ export default function LandingPage() {
                   fontFamily: "var(--font-montserrat), system-ui, sans-serif",
                 }}
               >
-                Operação de serviços sem planilha: projetos, horas e margem no mesmo lugar.
+                Se a operação vive em planilha, a margem some no caminho.
               </h1>
 
               <p
                 className="mx-auto max-w-xl text-base leading-relaxed sm:mx-0 md:text-lg"
                 style={{ color: isDark ? "rgba(255,255,255,0.84)" : "rgba(17,24,39,0.74)" }}
               >
-                Feito para consultoria e times de serviço: SLA, apontamento, financeiro de projeto,
-                reembolso e portal do cliente — com suporte em português e planos em reais.
+                O WPS One une projetos, horas, financeiro e portal do cliente — para consultoria e
+                times de serviço terem previsibilidade, SLA sob controle e resultado por projeto.
               </p>
+
+              <ul className="mx-auto w-full max-w-xl space-y-3 text-left sm:mx-0">
+                {HERO_PROBLEMS.map((item) => (
+                  <li key={item.pain} className="flex gap-3">
+                    <span
+                      className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
+                      style={{ background: `${PURPLE}18`, color: PURPLE }}
+                      aria-hidden
+                    >
+                      <Check className="h-3 w-3" strokeWidth={3} />
+                    </span>
+                    <p className="text-sm leading-snug md:text-[15px]">
+                      <span
+                        className="font-semibold"
+                        style={{ color: isDark ? "#fff" : "#0b0b12" }}
+                      >
+                        {item.pain}
+                      </span>
+                      <span style={{ color: mutedBody }}> — {item.result}</span>
+                    </p>
+                  </li>
+                ))}
+              </ul>
 
               <div className="flex flex-wrap justify-center gap-3 sm:justify-start">
                 <button
@@ -458,13 +500,24 @@ export default function LandingPage() {
                 </button>
               </div>
 
-              <p
-                className="mx-auto max-w-xl text-sm italic leading-relaxed sm:mx-0"
-                style={{ color: isDark ? "rgba(244,242,255,0.62)" : "rgba(17,24,39,0.58)" }}
+              <figure
+                className="mx-auto max-w-xl border-l-2 pl-4 text-left sm:mx-0"
+                style={{ borderColor: PURPLE }}
               >
-                “Antes cada um tinha a própria visão do projeto. Com o WPS One passamos a decidir com dados —
-                horas, custo e entrega no mesmo painel.”
-              </p>
+                <blockquote
+                  className="text-sm italic leading-relaxed md:text-[15px]"
+                  style={{ color: isDark ? "rgba(244,242,255,0.82)" : "rgba(17,24,39,0.72)" }}
+                >
+                  “Parávamos a semana inteira para fechar horas e status. Com o WPS One, apontamento,
+                  custo e entrega ficam no mesmo fluxo — a gestão finalmente enxerga a margem em tempo real.”
+                </blockquote>
+                <figcaption
+                  className="mt-2 text-xs font-medium not-italic"
+                  style={{ color: mutedBody }}
+                >
+                  Camila Ribeiro · Coordenadora de Operações · consultoria de TI
+                </figcaption>
+              </figure>
             </div>
 
             <div className="relative order-2 lg:order-2 [animation:wpsHeroFadeIn_0.9s_ease-out_0.15s_both]">
@@ -509,11 +562,11 @@ export default function LandingPage() {
                 className="mt-3 max-w-3xl text-2xl font-bold leading-tight md:text-3xl"
                 style={{ color: isDark ? "#fff" : "#0b0b12" }}
               >
-                Controle total da operação de serviços — com visão executiva, foco no SLA e rentabilidade no dia a dia.
+                Do caos da operação ao controle: o que cada módulo resolve no dia a dia.
               </h2>
               <p className="mt-4 max-w-3xl text-sm leading-relaxed md:text-base" style={{ color: mutedBody }}>
-                O WPS One centraliza projetos, chamados, horas, financeiro e indicadores. Explore cada módulo abaixo
-                como no menu do sistema — com prévia da tela e o que ela resolve no dia a dia.
+                Em vez de planilhas paralelas, o WPS One concentra projetos, horas, financeiro e portal.
+                Abaixo, cada área do sistema com a prévia da tela e o problema que ela elimina.
               </p>
 
               <LandingSobreModules isDark={isDark} />
