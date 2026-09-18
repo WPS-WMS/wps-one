@@ -109,7 +109,7 @@ export function ClientSharePointConfig({ clientId }: Props) {
   if (loading) {
     return (
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-        <p className="text-sm text-slate-500">Carregando SharePoint…</p>
+        <p className="text-sm text-slate-500">Carregando Sincronizador Cloud2Cloud…</p>
       </div>
     );
   }
@@ -121,7 +121,7 @@ export function ClientSharePointConfig({ clientId }: Props) {
   if (!cfg) {
     return (
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-        <p className="text-sm text-red-600">{error ?? "Não foi possível carregar SharePoint."}</p>
+        <p className="text-sm text-red-600">{error ?? "Não foi possível carregar Sincronizador Cloud2Cloud."}</p>
       </div>
     );
   }
@@ -131,7 +131,7 @@ export function ClientSharePointConfig({ clientId }: Props) {
       <div>
         <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
           <Cloud className="h-5 w-5 text-blue-600" />
-          SharePoint / Teams
+          Sincronizador Cloud2Cloud / Teams
         </h2>
         <p className="text-sm text-slate-500 mt-1">
           Projetos e tarefas deste cliente serão criados na equipe Teams informada abaixo.

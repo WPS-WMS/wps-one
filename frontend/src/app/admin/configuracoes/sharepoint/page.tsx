@@ -279,7 +279,7 @@ export default function ConfiguracoesSharePointPage() {
                     onChange={(e) => setCfg({ ...cfg, sharePointEnabled: e.target.checked })}
                     className="h-4 w-4 rounded border-slate-300"
                   />
-                  <span className="text-sm font-medium text-slate-800">Ativar integração SharePoint</span>
+                  <span className="text-sm font-medium text-slate-800">Ativar integração Sincronizador Cloud2Cloud</span>
                 </label>
                 {!canEnable ? (
                   <p className="text-xs text-slate-500">

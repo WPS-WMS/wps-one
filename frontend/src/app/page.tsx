@@ -7,6 +7,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE_URL } from "@/lib/api";
 import { LandingSobreModules } from "@/components/LandingSobreModules";
 import { LandingPlansSection } from "@/components/LandingPlansSection";
+import { LandingDemoModal } from "@/components/LandingDemoModal";
+import { LandingCreateAccountModal } from "@/components/LandingCreateAccountModal";
 import { Check, Mail, MapPin } from "lucide-react";
 
 const PURPLE = "#5c00e1";
@@ -138,6 +140,8 @@ export default function LandingPage() {
   const [contactMessage, setContactMessage] = useState("");
   const [contactSubmitting, setContactSubmitting] = useState(false);
   const [contactFeedback, setContactFeedback] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [demoModalOpen, setDemoModalOpen] = useState(false);
+  const [createAccountModalOpen, setCreateAccountModalOpen] = useState(false);
 
   useEffect(() => {
     const el = document.documentElement;
@@ -365,10 +369,22 @@ export default function LandingPage() {
                   onClick={() => navigateSection("contato")}
                 />
               </nav>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCreateAccountModalOpen(true)}
+                  className="inline-flex items-center justify-center rounded-full px-4 py-2.5 text-sm font-semibold transition-opacity hover:opacity-95 sm:px-5"
+                  style={{
+                    color: isDark ? "#fff" : "#0b0b12",
+                    background: isDark ? "rgba(255,255,255,0.06)" : "rgba(17,24,39,0.04)",
+                    border: `1px solid ${isDark ? "rgba(255,255,255,0.14)" : "rgba(17,24,39,0.14)"}`,
+                  }}
+                >
+                  Criar conta
+                </button>
                 <Link
                   href="/login"
-                  className="inline-flex items-center justify-center rounded-full px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-95 transition-opacity"
+                  className="inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-95 sm:px-6"
                   style={{ background: PURPLE }}
                 >
                   Entrar
@@ -480,7 +496,7 @@ export default function LandingPage() {
               <div className="flex flex-wrap justify-center gap-3 sm:justify-start">
                 <button
                   type="button"
-                  onClick={() => navigateSection("contato")}
+                  onClick={() => setDemoModalOpen(true)}
                   className="inline-flex items-center justify-center rounded-full px-8 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-95"
                   style={{ background: PURPLE }}
                 >
@@ -872,6 +888,17 @@ export default function LandingPage() {
           © {new Date().getFullYear()} WPS One. Todos os direitos reservados.
         </div>
       </footer>
+
+      <LandingDemoModal
+        open={demoModalOpen}
+        onClose={() => setDemoModalOpen(false)}
+        isDark={isDark}
+      />
+      <LandingCreateAccountModal
+        open={createAccountModalOpen}
+        onClose={() => setCreateAccountModalOpen(false)}
+        isDark={isDark}
+      />
     </div>
   );
 }

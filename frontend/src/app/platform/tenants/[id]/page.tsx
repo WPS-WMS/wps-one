@@ -353,9 +353,9 @@ export default function PlatformTenantDetailPage() {
                 }}
               />
               <span>
-                <span className="font-medium">SharePoint / Integrações</span>
+                <span className="font-medium">Sincronizador Cloud2Cloud / Integrações</span>
                 <span className="mt-0.5 block text-xs text-[color:var(--muted-foreground)]">
-                  Libera a tela de Integrações (SharePoint/Teams)
+                  Libera a tela de Integrações (Sincronizador Cloud2Cloud/Teams)
                   {detail.hasSubscriptionPlan && detail.planModules?.sharepoint === false
                     ? " (o plano atual não inclui este módulo)"
                     : !detail.hasSubscriptionPlan

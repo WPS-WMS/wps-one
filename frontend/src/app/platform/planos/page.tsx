@@ -366,7 +366,7 @@ export default function PlatformPlansPage() {
                       ["moduleProjetos", "Gestão de projetos"],
                       ["moduleFinanceiro", "Financeiro"],
                       ["modulePortal", "Portal Colaborativo"],
-                      ["moduleSharepoint", "SharePoint"],
+                      ["moduleSharepoint", "Sincronizador Cloud2Cloud"],
                     ] as const
                   ).map(([key, label]) => (
                     <label

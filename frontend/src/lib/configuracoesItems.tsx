@@ -76,7 +76,7 @@ export function getConfiguracoesItems(basePath: "/admin" | "/gestor" | "/consult
       permission: "configuracoes.sharepoint",
       href: `${basePath}/configuracoes/sharepoint`,
       title: "Integrações",
-      description: "SharePoint, Teams e sincronização de arquivos com projetos.",
+      description: "Sincronizador Cloud2Cloud, Teams e sincronização de arquivos com projetos.",
       icon: Plug,
       section: "geral",
     },

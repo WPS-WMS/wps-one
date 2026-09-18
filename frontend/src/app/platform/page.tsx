@@ -568,7 +568,7 @@ export default function PlatformHomePage() {
                         setForm((f) => ({ ...f, sharepointModuleEnabled: e.target.checked }))
                       }
                     />
-                    SharePoint / Integrações
+                    Sincronizador Cloud2Cloud / Integrações
                   </label>
                 </div>
 
