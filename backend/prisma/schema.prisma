@@ -1110,6 +1110,7 @@ model ReimbursementType {
   tenant        Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   reimbursements Reimbursement[]
   projectLimits  ReimbursementProjectLimit[]
+  revenueCostLines ProjectRevenueCostLine[]
 
   @@unique([tenantId, name], map: "reimbursement_types_tenant_name_uq")
   @@index([tenantId, isActive, name], map: "reimbursement_types_tenant_active_name_idx")
@@ -1685,17 +1686,25 @@ model ProjectRevenueHistory {
 model ProjectRevenueCostLine {
   id         String   @id @default(cuid())
   revenueId  String
+  /// Skill (linha de custo) ou descrição (linha de despesa embutida na receita).
   skill      String
+  /// Taxa hora (skill) ou valor unitário (despesa).
   hourlyRate Float
+  /// Quantidade de horas (skill) ou quantidade (despesa).
   hours      Float
   isDiscount Boolean  @default(false)
+  /// Despesa embutida no valor da receita (tipos de Configuração > Reembolso).
+  isExpense  Boolean  @default(false)
+  reimbursementTypeId String?
   sortOrder  Int      @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   revenue ProjectRevenue @relation(fields: [revenueId], references: [id], onDelete: Cascade)
+  reimbursementType ReimbursementType? @relation(fields: [reimbursementTypeId], references: [id], onDelete: SetNull)
 
   @@index([revenueId, sortOrder], map: "project_revenue_cost_lines_revenue_sort_idx")
+  @@index([reimbursementTypeId], map: "project_revenue_cost_lines_reimbursement_type_idx")
   @@map("project_revenue_cost_lines")
 }
 

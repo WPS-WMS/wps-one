@@ -136,6 +136,7 @@ export async function computeProjectFinancialResult(
   const costHoursAgg = await prisma.projectRevenueCostLine.aggregate({
     where: {
       isDiscount: false,
+      isExpense: false,
       revenue: {
         tenantId,
         projectId: { in: projectIds },

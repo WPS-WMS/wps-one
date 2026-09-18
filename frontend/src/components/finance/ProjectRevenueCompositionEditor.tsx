@@ -15,6 +15,7 @@ import {
   defaultBillingLines,
   defaultCostLine,
   defaultDiscountLine,
+  defaultExpenseLine,
   isPastBillingDate,
   netCostTotal,
   newClientId,
@@ -23,10 +24,10 @@ import {
   renumberBillingInstallments,
   sumBillingLines,
   sumCostLines,
-  sumDiscountLines,
   todayLocalIso,
   type BillingLineDraft,
   type CostLineDraft,
+  type ExpenseTypeOption,
 } from "@/components/finance/projectRevenueCompositionUtils";
 
 const cellInputClass =
@@ -51,12 +52,14 @@ type ProjectRevenueCompositionEditorProps = {
   paymentMethod?: RevenuePaymentMethod;
   taxTypeId: string;
   taxTypes: TaxTypeOption[];
+  expenseTypes?: ExpenseTypeOption[];
   onCostLinesChange: (lines: CostLineDraft[]) => void;
   onBillingLinesChange: (lines: BillingLineDraft[]) => void;
   onAutoBillingChange: (value: boolean) => void;
   onPaymentMethodChange?: (value: RevenuePaymentMethod) => void;
   onTaxTypeChange: (value: string) => void;
   impostosConfigHref?: string;
+  reembolsosConfigHref?: string;
   disabled?: boolean;
   headerActions?: ReactNode;
   compact?: boolean;
@@ -70,23 +73,40 @@ export function ProjectRevenueCompositionEditor({
   paymentMethod = "",
   taxTypeId,
   taxTypes,
+  expenseTypes = [],
   onCostLinesChange,
   onBillingLinesChange,
   onAutoBillingChange,
   onPaymentMethodChange,
   onTaxTypeChange,
   impostosConfigHref,
+  reembolsosConfigHref,
   disabled = false,
   headerActions,
   compact = false,
   hidePaymentMethod = false,
 }: ProjectRevenueCompositionEditorProps) {
   const costTotal = useMemo(() => sumCostLines(costLines), [costLines]);
-  const discountTotal = useMemo(() => sumDiscountLines(costLines), [costLines]);
   const netTotal = useMemo(() => netCostTotal(costLines), [costLines]);
   const hasDiscount = useMemo(() => costLines.some((line) => line.isDiscount), [costLines]);
+  const skillAndDiscountLines = useMemo(
+    () => costLines.filter((line) => !line.isExpense),
+    [costLines],
+  );
+  const expenseLines = useMemo(() => costLines.filter((line) => line.isExpense), [costLines]);
   const billingTotal = useMemo(() => sumBillingLines(billingLines), [billingLines]);
   const totalsMismatch = costLines.length > 0 && billingLines.length > 0 && netTotal !== billingTotal;
+
+  const expenseTypeOptions = useMemo(() => {
+    const byId = new Map(expenseTypes.map((t) => [t.id, t]));
+    for (const line of expenseLines) {
+      const id = String(line.reimbursementTypeId ?? "").trim();
+      if (id && !byId.has(id)) {
+        byId.set(id, { id, name: "Tipo removido do projeto" });
+      }
+    }
+    return Array.from(byId.values());
+  }, [expenseTypes, expenseLines]);
 
   function updateCostLines(next: CostLineDraft[]) {
     onCostLinesChange(next);
@@ -178,7 +198,7 @@ export function ProjectRevenueCompositionEditor({
             </h3>
             {!compact && (
               <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-                Skills, taxa hora e quantidade de horas para calcular o valor total do projeto.
+                Skills, despesas do projeto e descontos para calcular o valor total da receita.
               </p>
             )}
           </div>
@@ -205,7 +225,7 @@ export function ProjectRevenueCompositionEditor({
               </tr>
             </thead>
             <tbody>
-              {costLines.map((line) =>
+              {skillAndDiscountLines.map((line) =>
                 line.isDiscount ? (
                   <tr key={line.clientId} className="border-t" style={{ borderColor: "var(--border)" }}>
                     <td className="px-2 py-1.5">
@@ -347,6 +367,131 @@ export function ProjectRevenueCompositionEditor({
             </tbody>
           </table>
         </div>
+        {expenseLines.length > 0 && (
+          <div className="overflow-x-auto">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+              Despesas
+            </p>
+            <table className={tableClass} style={{ borderColor: "var(--border)" }}>
+              <thead style={{ background: "rgba(0,0,0,0.04)" }}>
+                <tr>
+                  <th className={thClass}>Descrição</th>
+                  <th className={thClass}>Tipo</th>
+                  <th className={thClass}>Quantidade</th>
+                  <th className={thClass}>Valor unitário</th>
+                  <th className={`${thClass} text-right`}>Total</th>
+                  <th className={`${thClass} w-10`} />
+                </tr>
+              </thead>
+              <tbody>
+                {expenseLines.map((line) => (
+                  <tr key={line.clientId} className="border-t" style={{ borderColor: "var(--border)" }}>
+                    <td className="px-2 py-1.5">
+                      <input
+                        className={cellInputClass}
+                        style={{ borderColor: "var(--border)" }}
+                        value={line.skill}
+                        disabled={disabled}
+                        placeholder="Ex.: Deslocamento Yazaki"
+                        onChange={(e) =>
+                          updateCostLines(
+                            costLines.map((row) =>
+                              row.clientId === line.clientId ? { ...row, skill: e.target.value } : row,
+                            ),
+                          )
+                        }
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 min-w-[160px]">
+                      <PopoverSelect
+                        id={`revenue-expense-type-${line.clientId}`}
+                        value={String(line.reimbursementTypeId ?? "")}
+                        disabled={disabled}
+                        placeholder="Selecione..."
+                        options={expenseTypeOptions.map((t) => ({ value: t.id, label: t.name }))}
+                        onChange={(value) =>
+                          updateCostLines(
+                            costLines.map((row) =>
+                              row.clientId === line.clientId
+                                ? { ...row, reimbursementTypeId: value }
+                                : row,
+                            ),
+                          )
+                        }
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className={cellInputClass}
+                        style={{ borderColor: "var(--border)" }}
+                        value={line.hours}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          updateCostLines(
+                            costLines.map((row) =>
+                              row.clientId === line.clientId ? { ...row, hours: e.target.value } : row,
+                            ),
+                          )
+                        }
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={cellInputClass}
+                        style={{ borderColor: "var(--border)" }}
+                        value={formatarMoedaInput(line.hourlyRate)}
+                        placeholder="R$ 0,00"
+                        disabled={disabled}
+                        onChange={(e) =>
+                          updateCostLines(
+                            costLines.map((row) =>
+                              row.clientId === line.clientId
+                                ? { ...row, hourlyRate: parseMoedaInputToString(e.target.value) }
+                                : row,
+                            ),
+                          )
+                        }
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium">{formatarMoeda(costLineValue(line))}</td>
+                    <td className="px-2 py-1.5 text-center">
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        className="text-red-600 disabled:opacity-40"
+                        onClick={() => updateCostLines(costLines.filter((row) => row.clientId !== line.clientId))}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 inline" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {expenseTypeOptions.length === 0 && (
+              <p className="mt-2 text-[11px] text-[color:var(--muted-foreground)]">
+                Nenhum tipo de despesa configurado para este projeto.
+                {reembolsosConfigHref ? (
+                  <>
+                    {" "}
+                    Configure em{" "}
+                    <a href={reembolsosConfigHref} className="underline text-[color:var(--primary)]">
+                      Configuração → Financeiro → Reembolso
+                    </a>
+                    .
+                  </>
+                ) : (
+                  " Configure em Configuração → Financeiro → Reembolso."
+                )}
+              </p>
+            )}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -367,6 +512,16 @@ export function ProjectRevenueCompositionEditor({
           >
             <Plus className="h-3.5 w-3.5" />
             Adicionar desconto
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => updateCostLines([...costLines, defaultExpenseLine()])}
+            className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-60"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Adicionar despesa
           </button>
         </div>
       </section>
@@ -574,7 +729,15 @@ export function emptyCompositionState() {
 }
 
 export function mapApiToDraft(revenue: {
-  costLines?: Array<{ id: string; skill: string; hourlyRate: number; hours: number; isDiscount?: boolean }>;
+  costLines?: Array<{
+    id: string;
+    skill: string;
+    hourlyRate: number;
+    hours: number;
+    isDiscount?: boolean;
+    isExpense?: boolean;
+    reimbursementTypeId?: string | null;
+  }>;
   billingLines?: Array<{
     id: string;
     milestone: string | null;
@@ -594,6 +757,8 @@ export function mapApiToDraft(revenue: {
           hourlyRate: String(line.hourlyRate),
           hours: String(line.hours),
           isDiscount: line.isDiscount === true,
+          isExpense: line.isExpense === true,
+          reimbursementTypeId: line.reimbursementTypeId ?? "",
         }))
       : [defaultCostLine()];
 
@@ -627,12 +792,26 @@ export function draftToPayload(
     autoBillingCalculation,
     taxTypeId: taxTypeId?.trim() || null,
     costLines: costLines
-      .filter((line) => (line.isDiscount ? Number(line.hourlyRate) > 0 : line.skill.trim()))
+      .filter((line) => {
+        if (line.isExpense) {
+          return (
+            line.skill.trim().length > 0 ||
+            String(line.reimbursementTypeId ?? "").trim().length > 0 ||
+            Number(line.hourlyRate) > 0 ||
+            Number(line.hours) > 0
+          );
+        }
+        return line.isDiscount ? Number(line.hourlyRate) > 0 : line.skill.trim();
+      })
       .map((line, index) => ({
         skill: line.skill.trim() || (line.isDiscount ? "Desconto" : ""),
         hourlyRate: Number(line.hourlyRate) || 0,
         hours: line.isDiscount ? 1 : Number(line.hours) || 0,
         isDiscount: line.isDiscount === true,
+        isExpense: line.isExpense === true,
+        reimbursementTypeId: line.isExpense
+          ? String(line.reimbursementTypeId ?? "").trim() || null
+          : null,
         sortOrder: index,
       })),
     billingLines: billingLines

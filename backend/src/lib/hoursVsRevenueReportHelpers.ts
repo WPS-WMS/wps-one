@@ -82,6 +82,7 @@ export async function listHoursVsRevenueReport(
       prisma.projectRevenueCostLine.findMany({
         where: {
           isDiscount: false,
+          isExpense: false,
           revenue: {
             tenantId,
             projectId: { in: allProjectIds },

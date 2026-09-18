@@ -85,6 +85,8 @@ function mapCostLineRow(line: {
   hourlyRate: number;
   hours: number;
   isDiscount: boolean;
+  isExpense?: boolean;
+  reimbursementTypeId?: string | null;
   sortOrder: number;
 }) {
   return {
@@ -93,9 +95,49 @@ function mapCostLineRow(line: {
     hourlyRate: line.hourlyRate,
     hours: line.hours,
     isDiscount: line.isDiscount,
+    isExpense: line.isExpense === true,
+    reimbursementTypeId: line.reimbursementTypeId ?? null,
     totalValue: costLineTotal(line),
     sortOrder: line.sortOrder,
   };
+}
+
+async function assertExpenseTypesForProject(
+  tenantId: string,
+  projectId: string,
+  costLines: CostLineInput[],
+): Promise<string | null> {
+  const typeIds = [
+    ...new Set(
+      costLines
+        .filter((line) => line.isExpense)
+        .map((line) => String(line.reimbursementTypeId ?? "").trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (typeIds.length === 0) return null;
+
+  const [types, limits] = await Promise.all([
+    prisma.reimbursementType.findMany({
+      where: { tenantId, id: { in: typeIds }, isActive: true },
+      select: { id: true },
+    }),
+    prisma.reimbursementProjectLimit.findMany({
+      where: { tenantId, projectId, typeId: { in: typeIds } },
+      select: { typeId: true },
+    }),
+  ]);
+  const validTypeIds = new Set(types.map((t) => t.id));
+  const configuredTypeIds = new Set(limits.map((l) => l.typeId));
+  for (const typeId of typeIds) {
+    if (!validTypeIds.has(typeId)) {
+      return "Tipo de despesa inválido ou inativo.";
+    }
+    if (!configuredTypeIds.has(typeId)) {
+      return "Tipo de despesa não configurado para este projeto. Configure em Configuração > Financeiro > Reembolso.";
+    }
+  }
+  return null;
 }
 
 function mapBillingLineRow(line: {
@@ -157,6 +199,8 @@ function mapRevenueRow(row: {
     hourlyRate: number;
     hours: number;
     isDiscount: boolean;
+    isExpense?: boolean;
+    reimbursementTypeId?: string | null;
     sortOrder: number;
   }>;
   billingLines?: Array<{
@@ -350,6 +394,8 @@ async function replaceRevenueComposition(
         hourlyRate: line.hourlyRate,
         hours: line.hours,
         isDiscount: line.isDiscount === true,
+        isExpense: line.isExpense === true,
+        reimbursementTypeId: line.isExpense ? line.reimbursementTypeId ?? null : null,
         sortOrder: line.sortOrder ?? index,
       })),
     });
@@ -733,6 +779,42 @@ projectRevenuesRouter.get(
   res.json(payload);
 });
 
+/** Tipos de despesa configurados para o projeto (Configuração > Financeiro > Reembolso). */
+projectRevenuesRouter.get("/expense-types", requireFeature(FEATURE), async (req, res) => {
+  const user = (req as Request & { user: AuthUser }).user;
+  const projectId = String(req.query.projectId ?? "").trim();
+  if (!projectId) {
+    res.status(400).json({ error: "projectId é obrigatório." });
+    return;
+  }
+  if (!(await assertProjectAccess(user, projectId))) {
+    res.status(404).json({ error: "Projeto não encontrado." });
+    return;
+  }
+  const limits = await prisma.reimbursementProjectLimit.findMany({
+    where: { tenantId: user.tenantId, projectId },
+    select: {
+      type: {
+        select: { id: true, name: true, isActive: true, calcMode: true, unit: true },
+      },
+    },
+  });
+  const seen = new Set<string>();
+  const types: Array<{ id: string; name: string; calcMode: string; unit: string | null }> = [];
+  for (const row of limits) {
+    if (!row.type?.isActive || seen.has(row.type.id)) continue;
+    seen.add(row.type.id);
+    types.push({
+      id: row.type.id,
+      name: row.type.name,
+      calcMode: row.type.calcMode,
+      unit: row.type.unit,
+    });
+  }
+  types.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  res.json(types);
+});
+
 projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
   const user = (req as Request & { user: AuthUser }).user;
   const projectId = String(req.body?.projectId ?? "").trim();
@@ -786,6 +868,11 @@ projectRevenuesRouter.post("/", requireFeature(FEATURE), async (req, res) => {
       ? (compositionParsed.data.autoBillingCalculation ?? true)
       : false;
   const costLines = compositionParsed.data.costLines ?? [];
+  const expenseTypeError = await assertExpenseTypesForProject(user.tenantId, projectId, costLines);
+  if (expenseTypeError) {
+    res.status(400).json({ error: expenseTypeError });
+    return;
+  }
   const billingLines = compositionParsed.data.billingLines ?? defaultBillingLines();
   const variableBillingLines = buildVariableBillingLines(variableEntries);
   const compositionTotals =
@@ -1335,6 +1422,17 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
     res.status(400).json({ error: taxCheck.error });
     return;
   }
+  if (compositionParsed.data.costLines !== undefined) {
+    const expenseTypeError = await assertExpenseTypesForProject(
+      user.tenantId,
+      existing.projectId,
+      compositionParsed.data.costLines,
+    );
+    if (expenseTypeError) {
+      res.status(400).json({ error: expenseTypeError });
+      return;
+    }
+  }
   const existingByEntryId = new Map(
     existing.variableEntries.map((entry) => [entry.id, entry]),
   );
@@ -1497,6 +1595,8 @@ projectRevenuesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) =>
           hourlyRate: line.hourlyRate,
           hours: line.hours,
           isDiscount: line.isDiscount,
+          isExpense: line.isExpense === true,
+          reimbursementTypeId: line.reimbursementTypeId ?? null,
           sortOrder: line.sortOrder,
         }));
       const billingLines =

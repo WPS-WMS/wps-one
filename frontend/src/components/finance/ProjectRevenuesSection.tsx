@@ -25,6 +25,7 @@ import {
   sumBillingLines,
   type BillingLineDraft,
   type CostLineDraft,
+  type ExpenseTypeOption,
 } from "@/components/finance/projectRevenueCompositionUtils";
 import { ProjectRevenueTaxSelector } from "@/components/finance/ProjectRevenueTaxSelector";
 import { ProjectRevenueHistoryModal } from "@/components/finance/ProjectRevenueHistoryModal";
@@ -68,7 +69,16 @@ type RevenueRow = {
   taxTypeId: string | null;
   taxTypeName: string | null;
   taxRatePercent: number | null;
-  costLines: Array<{ id: string; skill: string; hourlyRate: number; hours: number; totalValue: number; isDiscount?: boolean }>;
+  costLines: Array<{
+    id: string;
+    skill: string;
+    hourlyRate: number;
+    hours: number;
+    totalValue: number;
+    isDiscount?: boolean;
+    isExpense?: boolean;
+    reimbursementTypeId?: string | null;
+  }>;
   billingLines: Array<{
     id: string;
     milestone: string | null;
@@ -238,6 +248,7 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
     emptyVariableRevenueEntry(),
   ]);
   const [taxTypes, setTaxTypes] = useState<TaxTypeOption[]>([]);
+  const [expenseTypes, setExpenseTypes] = useState<ExpenseTypeOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [crModalOpen, setCrModalOpen] = useState(false);
@@ -419,6 +430,28 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
       );
     })();
   }, [permissionsReady, canAccess]);
+
+  useEffect(() => {
+    if (!permissionsReady || !canAccess || !projectId) return;
+    void (async () => {
+      const r = await apiFetch(
+        `/api/project-revenues/expense-types?projectId=${encodeURIComponent(projectId)}`,
+      );
+      const body = await r.json().catch(() => null);
+      if (!r.ok || !Array.isArray(body)) {
+        setExpenseTypes([]);
+        return;
+      }
+      setExpenseTypes(
+        body.map((row: { id: string; name: string; calcMode?: string; unit?: string | null }) => ({
+          id: row.id,
+          name: row.name,
+          calcMode: row.calcMode,
+          unit: row.unit,
+        })),
+      );
+    })();
+  }, [permissionsReady, canAccess, projectId]);
 
   useEffect(() => {
     if (!permissionsReady || !canAccess) return;
@@ -1151,7 +1184,9 @@ export function ProjectRevenuesSection({ projectId, financeContext = false }: Pr
                     paymentMethod={meta.paymentMethod}
                     taxTypeId={taxTypeId}
                     taxTypes={taxTypes}
+                    expenseTypes={expenseTypes}
                     impostosConfigHref={`${basePath}/configuracoes/financeiro/impostos`}
+                    reembolsosConfigHref={`${basePath}/configuracoes/reembolsos`}
                     onCostLinesChange={setCostLines}
                     onBillingLinesChange={setBillingLines}
                     onAutoBillingChange={setAutoBillingCalculation}

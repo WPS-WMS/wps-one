@@ -461,6 +461,7 @@ export async function computeProjectFinancialDashboard(
       hourlyRate: line.hourlyRate,
       hours: line.hours,
       isDiscount: line.isDiscount,
+      isExpense: (line as { isExpense?: boolean }).isExpense === true,
     })),
   );
 
@@ -692,7 +693,9 @@ export async function computeProjectFinancialDashboard(
     hoursByUser.set(entry.userId, current);
   }
 
-  const plannedHours = allCostLines.reduce((sum, line) => sum + line.hours, 0);
+  const plannedHours = allCostLines
+    .filter((line) => !line.isDiscount && !line.isExpense)
+    .reduce((sum, line) => sum + line.hours, 0);
   const blendedHourlyRate =
     plannedHours > 0 && valorTotalBase > 0 ? valorTotalBase / plannedHours : null;
 

@@ -5,6 +5,8 @@ export type CostLineDraft = {
   hourlyRate: string;
   hours: string;
   isDiscount?: boolean;
+  isExpense?: boolean;
+  reimbursementTypeId?: string | null;
 };
 
 export type BillingLineDraft = {
@@ -14,6 +16,13 @@ export type BillingLineDraft = {
   dueDate: string;
   expectedPaymentDate: string;
   amount: string;
+};
+
+export type ExpenseTypeOption = {
+  id: string;
+  name: string;
+  calcMode?: string;
+  unit?: string | null;
 };
 
 export function newClientId(): string {
@@ -247,6 +256,17 @@ export function defaultDiscountLine(): CostLineDraft {
     hourlyRate: "",
     hours: "1",
     isDiscount: true,
+  };
+}
+
+export function defaultExpenseLine(): CostLineDraft {
+  return {
+    clientId: newClientId(),
+    skill: "",
+    hourlyRate: "",
+    hours: "",
+    isExpense: true,
+    reimbursementTypeId: "",
   };
 }
 
