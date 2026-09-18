@@ -3,6 +3,8 @@ import rateLimit from "express-rate-limit";
 import { sendMail } from "../lib/mailer.js";
 import { renderEmailLayout, escapeHtml as escapeHtmlTemplate } from "../lib/emailTemplate.js";
 import { errorSummary } from "../lib/devLog.js";
+import { serializePlan } from "../lib/platformPlans.js";
+import { listPlatformPlans } from "../lib/subscriptionHelpers.js";
 
 const CONTACT_TO = "contato@wpsconsult.com.br";
 
@@ -14,11 +16,35 @@ const limiter = rateLimit({
   message: { error: "Muitas mensagens. Tente novamente em alguns minutos." },
 });
 
+const plansLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Muitas requisições. Tente novamente em instantes." },
+});
+
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 export const publicContactRouter = Router();
+
+/** Planos ativos para a landing (sem autenticação). */
+publicContactRouter.get("/plans", plansLimiter, async (_req, res) => {
+  try {
+    const plans = await listPlatformPlans({ activeOnly: true });
+    res.json({
+      plans: plans
+        .map(serializePlan)
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "pt-BR")),
+    });
+  } catch (err) {
+    console.error("[public-plans]", errorSummary(err));
+    res.status(500).json({ error: "Erro ao listar planos." });
+  }
+});
+
 publicContactRouter.use(limiter);
 
 publicContactRouter.post("/contact", async (req, res) => {

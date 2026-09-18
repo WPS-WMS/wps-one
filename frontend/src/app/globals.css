@@ -5,6 +5,28 @@ html {
   scroll-behavior: smooth;
 }
 
+@keyframes wpsHeroFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes wpsHeroFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .font-quantify {
   font-family: "Quantify", var(--font-dm-sans), system-ui, sans-serif;
   font-synthesis: none;

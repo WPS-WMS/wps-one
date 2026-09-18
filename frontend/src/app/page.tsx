@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { API_BASE_URL } from "@/lib/api";
 import { LandingSobreModules } from "@/components/LandingSobreModules";
+import { LandingPlansSection } from "@/components/LandingPlansSection";
 import { Mail, MapPin } from "lucide-react";
 
 const PURPLE = "#5c00e1";
@@ -67,13 +68,13 @@ function WhatsAppIcon({ className }: { className?: string }) {
   );
 }
 
-type LandingSection = "home" | "sobre" | "contato";
+const LANDING_SECTIONS = ["home", "sobre", "planos", "contato"] as const;
+type LandingSection = (typeof LANDING_SECTIONS)[number];
 
 function readSectionFromLocation(): LandingSection {
   if (typeof window === "undefined") return "home";
   const raw = window.location.hash.replace(/^#/, "").toLowerCase();
-  if (raw === "sobre") return "sobre";
-  if (raw === "contato") return "contato";
+  if ((LANDING_SECTIONS as readonly string[]).includes(raw)) return raw as LandingSection;
   return "home";
 }
 
@@ -143,8 +144,24 @@ export default function LandingPage() {
     const base = `${window.location.pathname}${window.location.search}`;
     const url = next === "home" ? base : `${base}#${next}`;
     window.history.pushState(null, "", url);
-    window.scrollTo({ top: 0, behavior: "auto" });
+    const el = document.getElementById(next);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
+
+  const talkAboutPlan = useCallback(
+    (planName: string) => {
+      setContactMessage(
+        `Olá! Tenho interesse no plano "${planName}" do WPS One. Gostaria de mais informações sobre implantação e valores.`,
+      );
+      setContactFeedback(null);
+      navigateSection("contato");
+    },
+    [navigateSection],
+  );
 
   const submitContactForm = useCallback(
     async (e: FormEvent<HTMLFormElement>) => {
@@ -196,6 +213,49 @@ export default function LandingPage() {
   }, []);
 
   useEffect(() => {
+    const initial = readSectionFromLocation();
+    if (initial !== "home") {
+      requestAnimationFrame(() => {
+        document.getElementById(initial)?.scrollIntoView({ behavior: "auto", block: "start" });
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    const nodes = LANDING_SECTIONS.map((id) => document.getElementById(id)).filter(
+      (el): el is HTMLElement => Boolean(el),
+    );
+    if (nodes.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+        const top = visible[0];
+        if (!top?.target?.id) return;
+        const id = top.target.id as LandingSection;
+        if (!(LANDING_SECTIONS as readonly string[]).includes(id)) return;
+        setSection((current) => {
+          if (current === id) return current;
+          const base = `${window.location.pathname}${window.location.search}`;
+          const url = id === "home" ? base : `${base}#${id}`;
+          window.history.replaceState(null, "", url);
+          return id;
+        });
+      },
+      {
+        root: null,
+        rootMargin: "-20% 0px -55% 0px",
+        threshold: [0.15, 0.35, 0.55],
+      },
+    );
+
+    for (const node of nodes) observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     if (loading) return;
     if (!user) return;
     const allowed = user.allowedFeatures;
@@ -212,11 +272,17 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: bg, color: isDark ? "#ffffff" : "#0b0b12" }}>
-      <header className="w-full shrink-0">
-        <div className="mx-auto max-w-6xl px-6 pt-7">
+      <header
+        className="sticky top-0 z-40 w-full shrink-0 backdrop-blur-md"
+        style={{
+          background: isDark ? "rgba(0,0,0,0.72)" : "rgba(247,247,251,0.82)",
+          borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(17,24,39,0.08)"}`,
+        }}
+      >
+        <div className="mx-auto max-w-6xl px-6 py-4">
           <div className="relative flex min-h-[40px] items-center justify-end">
             <nav
-              className="absolute left-1/2 top-1/2 hidden w-[90%] max-w-xl -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-16 font-medium md:flex"
+              className="absolute left-1/2 top-1/2 hidden w-[94%] max-w-2xl -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-10 font-medium md:flex lg:gap-14"
               style={{ color: navText }}
             >
               <NavLink
@@ -234,6 +300,13 @@ export default function LandingPage() {
                 onClick={() => navigateSection("sobre")}
               />
               <NavLink
+                label="Planos"
+                active={section === "planos"}
+                activeColor={navActive}
+                inactiveColor={navText}
+                onClick={() => navigateSection("planos")}
+              />
+              <NavLink
                 label="Contato"
                 active={section === "contato"}
                 activeColor={navActive}
@@ -243,7 +316,7 @@ export default function LandingPage() {
             </nav>
 
             <div className="flex w-full items-center justify-between gap-3 md:w-auto md:justify-end">
-              <nav className="flex items-center gap-5 font-medium md:hidden" style={{ color: navText }}>
+              <nav className="flex flex-wrap items-center gap-3 font-medium md:hidden" style={{ color: navText }}>
                 <NavLink
                   label="Home"
                   active={section === "home"}
@@ -257,6 +330,13 @@ export default function LandingPage() {
                   activeColor={navActive}
                   inactiveColor={navText}
                   onClick={() => navigateSection("sobre")}
+                />
+                <NavLink
+                  label="Planos"
+                  active={section === "planos"}
+                  activeColor={navActive}
+                  inactiveColor={navText}
+                  onClick={() => navigateSection("planos")}
                 />
                 <NavLink
                   label="Contato"
@@ -297,94 +377,123 @@ export default function LandingPage() {
       </header>
 
       <main className="flex-1 flex flex-col">
-        {section === "home" && (
-          <div className="mx-auto w-full max-w-6xl flex-1 px-6 pt-10 pb-14 md:pt-14">
-            <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-10">
-              <div className="relative order-2 flex justify-center lg:order-1 lg:justify-start">
-                <div
-                  className="pointer-events-none absolute inset-0 -z-10"
-                  style={{
-                    background: isDark
-                      ? "radial-gradient(720px 400px at 40% 45%, rgba(92,0,225,0.22), transparent 65%)"
-                      : "radial-gradient(720px 400px at 40% 45%, rgba(92,0,225,0.12), transparent 68%)",
-                  }}
-                  aria-hidden
-                />
-                <img
-                  src="/WPS One seta.png"
-                  alt=""
-                  className="w-full max-w-[min(100%,520px)] select-none lg:max-w-none"
-                  style={{
-                    filter: isDark
-                      ? "drop-shadow(0 24px 70px rgba(92,0,225,0.35))"
-                      : "drop-shadow(0 24px 60px rgba(17,24,39,0.15))",
-                  }}
-                  draggable={false}
-                />
-              </div>
+        <section
+          id="home"
+          className="scroll-mt-24 relative overflow-hidden pb-16 pt-8 md:pb-24 md:pt-10"
+        >
+          <div
+            className="pointer-events-none absolute inset-0 -z-10"
+            style={{
+              background: isDark
+                ? "radial-gradient(900px 520px at 78% 40%, rgba(92,0,225,0.22), transparent 62%), linear-gradient(180deg, rgba(0,0,0,0.2), transparent 40%)"
+                : "radial-gradient(900px 520px at 78% 40%, rgba(92,0,225,0.10), transparent 65%), linear-gradient(180deg, #f7f7fb, #eef0f7 100%)",
+            }}
+            aria-hidden
+          />
 
-              <div className="order-1 flex flex-col gap-8 text-center sm:text-left lg:order-2">
-                <div className="space-y-2 md:space-y-2">
-                  <div className="mx-auto w-fit text-left sm:mx-0">
-                    <p
-                      className="font-medium leading-[1.08] tracking-tight"
-                      style={{
-                        fontFamily: "var(--font-montserrat), system-ui, sans-serif",
-                        fontSize: "clamp(2rem, 5.5vw + 0.5rem, 6.0125rem)",
-                        color: isDark ? "rgba(255,255,255,0.92)" : "rgba(17,24,39,0.85)",
-                      }}
-                    >
-                      Bem-vindo
-                    </p>
-
-                    <div className="inline-flex items-baseline whitespace-nowrap">
-                      <span
-                        className="font-quantify leading-none tracking-tight text-5xl md:text-7xl"
-                        style={{ color: isDark ? "#ffffff" : "#0b0b12" }}
-                      >
-                        WPS
-                      </span>
-                      <span className="ml-[0.07em] inline-flex items-baseline leading-none">
-                        <img
-                          src={ONE_LOGO_SVG_SRC}
-                          alt="One"
-                          className="block h-[5.6em] md:h-[6.2em] w-auto max-w-[min(100%,820px)] shrink-0 select-none translate-y-[0.44em] md:translate-y-[0.425em]"
-                          style={{
-                            filter: isDark
-                              ? "drop-shadow(0 10px 28px rgba(92,0,225,0.28))"
-                              : "drop-shadow(0 8px 22px rgba(17,24,39,0.12))",
-                          }}
-                          draggable={false}
-                        />
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <p
-                  className="mx-auto max-w-lg text-base leading-relaxed sm:mx-0 md:text-lg"
-                  style={{ color: isDark ? "rgba(255,255,255,0.88)" : "rgba(17,24,39,0.78)" }}
-                >
-                  O sistema que transforma operação de serviços em margem e previsibilidade.
-                </p>
-
-                <div className="flex justify-center sm:justify-start">
-                  <button
-                    type="button"
-                    onClick={() => navigateSection("sobre")}
-                    className="inline-flex items-center justify-center rounded-full px-8 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-95 transition-opacity"
-                    style={{ background: PURPLE }}
+          <div className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-10 px-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)] lg:gap-8">
+            <div className="order-1 flex flex-col gap-6 text-center sm:text-left lg:order-1 [animation:wpsHeroFadeUp_0.7s_ease-out_both]">
+              <div className="mx-auto w-fit text-left sm:mx-0">
+                <div className="inline-flex items-baseline whitespace-nowrap">
+                  <span
+                    className="font-quantify leading-none tracking-tight text-5xl md:text-7xl"
+                    style={{ color: isDark ? "#ffffff" : "#0b0b12" }}
                   >
-                    Próximo
-                  </button>
+                    WPS
+                  </span>
+                  <span className="ml-[0.07em] inline-flex items-baseline leading-none">
+                    <img
+                      src={ONE_LOGO_SVG_SRC}
+                      alt="One"
+                      className="block h-[4.4em] md:h-[5em] w-auto max-w-[min(100%,640px)] shrink-0 select-none translate-y-[0.36em]"
+                      style={{
+                        filter: isDark
+                          ? "drop-shadow(0 10px 28px rgba(92,0,225,0.28))"
+                          : "drop-shadow(0 8px 22px rgba(17,24,39,0.12))",
+                      }}
+                      draggable={false}
+                    />
+                  </span>
                 </div>
               </div>
+
+              <h1
+                className="mx-auto max-w-xl text-2xl font-bold leading-[1.15] tracking-tight sm:mx-0 md:text-4xl"
+                style={{
+                  color: isDark ? "#fff" : "#0b0b12",
+                  fontFamily: "var(--font-montserrat), system-ui, sans-serif",
+                }}
+              >
+                Operação de serviços sem planilha: projetos, horas e margem no mesmo lugar.
+              </h1>
+
+              <p
+                className="mx-auto max-w-xl text-base leading-relaxed sm:mx-0 md:text-lg"
+                style={{ color: isDark ? "rgba(255,255,255,0.84)" : "rgba(17,24,39,0.74)" }}
+              >
+                Feito para consultoria e times de serviço: SLA, apontamento, financeiro de projeto,
+                reembolso e portal do cliente — com suporte em português e planos em reais.
+              </p>
+
+              <div className="flex flex-wrap justify-center gap-3 sm:justify-start">
+                <button
+                  type="button"
+                  onClick={() => navigateSection("contato")}
+                  className="inline-flex items-center justify-center rounded-full px-8 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-95"
+                  style={{ background: PURPLE }}
+                >
+                  Agendar demonstração
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigateSection("planos")}
+                  className="inline-flex items-center justify-center rounded-full px-8 py-2.5 text-sm font-semibold transition-opacity hover:opacity-95"
+                  style={{
+                    background: isDark ? "rgba(255,255,255,0.06)" : "rgba(17,24,39,0.04)",
+                    color: isDark ? "#fff" : "#0b0b12",
+                    border: `1px solid ${isDark ? "rgba(255,255,255,0.14)" : "rgba(17,24,39,0.14)"}`,
+                  }}
+                >
+                  Ver planos
+                </button>
+              </div>
+
+              <p
+                className="mx-auto max-w-xl text-sm italic leading-relaxed sm:mx-0"
+                style={{ color: isDark ? "rgba(244,242,255,0.62)" : "rgba(17,24,39,0.58)" }}
+              >
+                “Antes cada um tinha a própria visão do projeto. Com o WPS One passamos a decidir com dados —
+                horas, custo e entrega no mesmo painel.”
+              </p>
+            </div>
+
+            <div className="relative order-2 lg:order-2 [animation:wpsHeroFadeIn_0.9s_ease-out_0.15s_both]">
+              <div
+                className="pointer-events-none absolute -inset-6 -z-10 rounded-full blur-3xl md:-inset-10"
+                style={{
+                  background: isDark ? "rgba(92,0,225,0.18)" : "rgba(92,0,225,0.10)",
+                }}
+                aria-hidden
+              />
+              <img
+                src="/landing/financeiro-dashboard.png"
+                alt="Painel financeiro e operacional do WPS One"
+                className="w-full max-w-none select-none object-cover object-left-top shadow-[0_28px_80px_rgba(17,24,39,0.18)] lg:min-h-[420px] lg:translate-x-4 xl:translate-x-10"
+                style={{
+                  borderRadius: "1.25rem 0 0 1.25rem",
+                  border: `1px solid ${isDark ? "rgba(255,255,255,0.10)" : "rgba(17,24,39,0.10)"}`,
+                }}
+                draggable={false}
+              />
             </div>
           </div>
-        )}
+        </section>
 
-        {section === "sobre" && (
-          <div className="mx-auto w-full max-w-[1400px] flex-1 px-6 py-10 md:py-14" aria-labelledby="sobre-heading">
+        <section
+          id="sobre"
+          className="scroll-mt-24 mx-auto w-full max-w-[1400px] px-6 py-14 md:py-20"
+          aria-labelledby="sobre-heading"
+        >
             <div
               className="rounded-3xl px-6 py-10 md:px-10 md:py-12"
               style={{
@@ -409,11 +518,19 @@ export default function LandingPage() {
 
               <LandingSobreModules isDark={isDark} />
             </div>
-          </div>
-        )}
+        </section>
 
-        {section === "contato" && (
-          <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-10 md:py-14">
+        <LandingPlansSection
+          isDark={isDark}
+          surface={surface}
+          mutedBody={mutedBody}
+          onTalkAboutPlan={talkAboutPlan}
+        />
+
+        <section
+          id="contato"
+          className="scroll-mt-24 mx-auto w-full max-w-6xl px-6 py-14 md:py-20"
+        >
             <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: PURPLE }}>
               Contato
             </p>
@@ -691,8 +808,7 @@ export default function LandingPage() {
                 </button>
               </form>
             </div>
-          </div>
-        )}
+        </section>
       </main>
 
       <footer className="shrink-0 border-t" style={{ borderColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(17,24,39,0.12)" }}>
