@@ -16,6 +16,24 @@ export type DashboardDetailRow = {
   amount: number;
 };
 
+/** Linha de despesa embutida na composição da receita. */
+export type DashboardExpenseDetailRow = {
+  id: string;
+  description: string;
+  typeName: string;
+  quantity: number;
+  unitValue: number;
+  amount: number;
+};
+
+export type DashboardExpenseRow = {
+  id: string;
+  label: string;
+  amount: number;
+  expandable: boolean;
+  children: DashboardExpenseDetailRow[];
+};
+
 export type DashboardExpandableRow = {
   id: string;
   label: string;
@@ -35,6 +53,8 @@ export type ProjectFinancialDashboard = {
     valorTotal: DashboardExpandableRow;
     parcelas: number;
     valorParcela: number | null;
+    /** Despesas cadastradas na composição das receitas do projeto. */
+    despesas: DashboardExpenseRow;
     reembolsoProjeto: DashboardExpandableRow;
     /** Outras receitas agrupadas pela conta financeira do plano de contas. */
     outrasReceitasPorConta: DashboardExpandableRow[];
@@ -295,7 +315,12 @@ export async function computeProjectFinancialDashboard(
           status: { not: "CANCELADO" },
         },
         include: {
-          costLines: { orderBy: { sortOrder: "asc" } },
+          costLines: {
+            orderBy: { sortOrder: "asc" },
+            include: {
+              reimbursementType: { select: { id: true, name: true } },
+            },
+          },
           billingLines: { orderBy: { sortOrder: "asc" } },
           taxType: { select: { id: true, name: true, ratePercent: true } },
           receivable: {
@@ -461,8 +486,24 @@ export async function computeProjectFinancialDashboard(
       hourlyRate: line.hourlyRate,
       hours: line.hours,
       isDiscount: line.isDiscount,
-      isExpense: (line as { isExpense?: boolean }).isExpense === true,
+      isExpense: line.isExpense === true,
+      reimbursementTypeName: line.reimbursementType?.name ?? null,
     })),
+  );
+
+  const expenseChildren: DashboardExpenseDetailRow[] = allCostLines
+    .filter((line) => line.isExpense)
+    .map((line) => ({
+      id: `expense-${line.id}`,
+      description: line.skill?.trim() || "—",
+      typeName: line.reimbursementTypeName?.trim() || "—",
+      quantity: roundMoney(line.hours),
+      unitValue: roundMoney(line.hourlyRate),
+      amount: roundMoney(costLineTotal(line)),
+    }))
+    .sort((a, b) => a.description.localeCompare(b.description, "pt-BR"));
+  const despesasAmount = roundMoney(
+    expenseChildren.reduce((sum, row) => sum + row.amount, 0),
   );
 
   const isFaturamentoRevenue = (revenue: (typeof revenues)[number]) => {
@@ -869,6 +910,13 @@ export async function computeProjectFinancialDashboard(
       },
       parcelas,
       valorParcela,
+      despesas: {
+        id: "despesas-receita",
+        label: "Despesas",
+        amount: despesasAmount,
+        expandable: expenseChildren.length > 0,
+        children: expenseChildren,
+      },
       reembolsoProjeto: {
         id: "reembolso-projeto",
         label: "Reembolso de projeto",

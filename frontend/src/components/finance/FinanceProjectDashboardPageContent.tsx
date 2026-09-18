@@ -19,6 +19,23 @@ type DashboardDetailRow = {
   amount: number;
 };
 
+type DashboardExpenseDetailRow = {
+  id: string;
+  description: string;
+  typeName: string;
+  quantity: number;
+  unitValue: number;
+  amount: number;
+};
+
+type DashboardExpenseRow = {
+  id: string;
+  label: string;
+  amount: number;
+  expandable: boolean;
+  children: DashboardExpenseDetailRow[];
+};
+
 type DashboardExpandableRow = {
   id: string;
   label: string;
@@ -38,6 +55,7 @@ type ProjectFinancialDashboard = {
     valorTotal: DashboardExpandableRow;
     parcelas: number;
     valorParcela: number | null;
+    despesas?: DashboardExpenseRow;
     reembolsoProjeto: DashboardExpandableRow;
     outrasReceitasPorConta?: DashboardExpandableRow[];
     /** @deprecated mantido para payloads antigos */
@@ -164,6 +182,69 @@ function ExpandableRow({
             <td className={`${tdClass} text-right tabular-nums`}>{formatarMoeda(child.amount)}</td>
           </tr>
         ))}
+    </>
+  );
+}
+
+function ExpenseExpandableRow({
+  row,
+  expanded,
+  onToggle,
+}: {
+  row: DashboardExpenseRow;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <>
+      <tr className="border-t" style={rowBorder}>
+        <td className={tdClass}>
+          <RowLabel
+            label={row.label}
+            expandable={row.expandable}
+            expanded={expanded}
+            onToggle={onToggle}
+          />
+        </td>
+        <td className={`${tdClass} text-right tabular-nums text-[color:var(--muted-foreground)]`}>—</td>
+        <td className={`${tdClass} text-right font-semibold tabular-nums`}>{formatarMoeda(row.amount)}</td>
+      </tr>
+      {expanded && row.children.length > 0 && (
+        <tr style={{ background: "rgba(0,0,0,0.02)" }}>
+          <td className={tdClass} colSpan={3}>
+            <div className="pl-7 overflow-x-auto">
+              <table className="min-w-full text-[11px]">
+                <thead>
+                  <tr className="text-[color:var(--muted-foreground)]">
+                    <th className="py-1.5 pr-3 text-left font-semibold">Descrição</th>
+                    <th className="py-1.5 pr-3 text-left font-semibold">Tipo</th>
+                    <th className="py-1.5 pr-3 text-right font-semibold">Quantidade</th>
+                    <th className="py-1.5 pr-3 text-right font-semibold">Valor unitário</th>
+                    <th className="py-1.5 text-right font-semibold">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {row.children.map((child) => (
+                    <tr key={child.id} className="border-t" style={rowBorder}>
+                      <td className="py-1.5 pr-3 text-[color:var(--foreground)]">{child.description}</td>
+                      <td className="py-1.5 pr-3 text-[color:var(--muted-foreground)]">{child.typeName}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums text-[color:var(--muted-foreground)]">
+                        {formatHours(child.quantity)}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums text-[color:var(--muted-foreground)]">
+                        {formatarMoeda(child.unitValue)}
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums font-medium">
+                        {formatarMoeda(child.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </td>
+        </tr>
+      )}
     </>
   );
 }
@@ -441,6 +522,13 @@ export function FinanceProjectDashboardPageContent({
                   label="Valor parcela"
                   value={data.receita.valorParcela != null ? formatarMoeda(data.receita.valorParcela) : "—"}
                 />
+                {data.receita.despesas ? (
+                  <ExpenseExpandableRow
+                    row={data.receita.despesas}
+                    expanded={!!expanded[data.receita.despesas.id]}
+                    onToggle={() => toggleExpanded(data.receita.despesas!.id)}
+                  />
+                ) : null}
                 <ExpandableRow
                   row={data.receita.reembolsoProjeto}
                   expanded={!!expanded[data.receita.reembolsoProjeto.id]}

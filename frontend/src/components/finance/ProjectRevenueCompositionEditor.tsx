@@ -348,22 +348,6 @@ export function ProjectRevenueCompositionEditor({
                   </tr>
                 ),
               )}
-              <tr className="border-t font-semibold" style={{ borderColor: "var(--border)" }}>
-                <td className="px-3 py-2" colSpan={3}>
-                  TOTAL
-                </td>
-                <td className="px-3 py-2 text-right">{formatarMoeda(costTotal)}</td>
-                <td />
-              </tr>
-              {hasDiscount && (
-                <tr className="border-t font-semibold" style={{ borderColor: "var(--border)" }}>
-                  <td className="px-3 py-2" colSpan={3}>
-                    TOTAL COM DESCONTO
-                  </td>
-                  <td className="px-3 py-2 text-right">{formatarMoeda(netTotal)}</td>
-                  <td />
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
@@ -492,6 +476,24 @@ export function ProjectRevenueCompositionEditor({
             )}
           </div>
         )}
+        <div
+          className="rounded-xl border px-3 py-2 text-xs font-semibold"
+          style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)" }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <span>TOTAL</span>
+            <span className="tabular-nums">{formatarMoeda(costTotal)}</span>
+          </div>
+          {hasDiscount && (
+            <div
+              className="mt-2 flex items-center justify-between gap-3 border-t pt-2"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <span>TOTAL COM DESCONTO</span>
+              <span className="tabular-nums">{formatarMoeda(netTotal)}</span>
+            </div>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
