@@ -19,6 +19,15 @@ type ModuleTab = {
   features: FeatureItem[];
 };
 
+type CapabilityCard = {
+  id: string;
+  title: string;
+  benefit: string;
+  imageSrc: string;
+  moduleId: string;
+  featureId: string;
+};
+
 const MODULES: ModuleTab[] = [
   {
     id: "home",
@@ -63,6 +72,14 @@ const MODULES: ModuleTab[] = [
           "Visão consolidada de tarefas para acompanhamento, cobrança e planejamento, com filtros por status, cliente e membro.",
         imageSrc: "/landing/projetos-tarefas.png",
         imageAlt: "Tela Lista de Tarefas do WPS One",
+      },
+      {
+        id: "tarefa-detalhe",
+        title: "Detalhe da tarefa",
+        description:
+          "Título, tópico, datas, membros, horas, status, prioridade e progresso — com abas de apontamentos, histórico, orçamento e anexos no mesmo fluxo.",
+        imageSrc: "/landing/tarefa-detalhe.png",
+        imageAlt: "Tela Detalhe da tarefa do WPS One",
       },
       {
         id: "gestao-tm",
@@ -169,8 +186,16 @@ const MODULES: ModuleTab[] = [
   {
     id: "financeiro",
     label: "Financeiro",
-    blurb: "Contas a pagar/receber, dashboard executivo e aprovação de reembolsos.",
+    blurb: "Contas a pagar/receber, resultado por projeto, dashboard e aprovação de reembolsos.",
     features: [
+      {
+        id: "fin-resultado",
+        title: "Resultado de projeto",
+        description:
+          "Receita, despesa, impostos e margem por projeto — visão completa ou mensal, com composição detalhada para a gestão enxergar o resultado em tempo real.",
+        imageSrc: "/landing/financeiro-resultado-projeto.png",
+        imageAlt: "Tela Resultado de projeto do WPS One",
+      },
       {
         id: "fin-cr",
         title: "Contas a receber",
@@ -238,6 +263,74 @@ const MODULES: ModuleTab[] = [
   },
 ];
 
+/** Grade de capacidades no topo do Sobre — clique abre a aba/feature correspondente. */
+const CAPABILITIES: CapabilityCard[] = [
+  {
+    id: "cap-projetos",
+    title: "Projetos",
+    benefit: "Portfólio, status e progresso em um só lugar",
+    imageSrc: "/landing/projetos-lista.png",
+    moduleId: "projetos",
+    featureId: "lista-projetos",
+  },
+  {
+    id: "cap-kanban",
+    title: "Kanban / Daily",
+    benefit: "Fluxo do time na daily, sem planilha",
+    imageSrc: "/landing/projetos-daily.png",
+    moduleId: "projetos",
+    featureId: "dashboard-daily",
+  },
+  {
+    id: "cap-tarefa",
+    title: "Detalhe da tarefa",
+    benefit: "SLA, membros, horas e anexos no mesmo card",
+    imageSrc: "/landing/tarefa-detalhe.png",
+    moduleId: "projetos",
+    featureId: "tarefa-detalhe",
+  },
+  {
+    id: "cap-apontamento",
+    title: "Apontamento",
+    benefit: "Horas no projeto, prontas para cobrança",
+    imageSrc: "/landing/apontamento.png",
+    moduleId: "apontamento",
+    featureId: "apontamento",
+  },
+  {
+    id: "cap-tm",
+    title: "Gestão T&M",
+    benefit: "Planejado × executado por contrato",
+    imageSrc: "/landing/projetos-tm.png",
+    moduleId: "projetos",
+    featureId: "gestao-tm",
+  },
+  {
+    id: "cap-resultado",
+    title: "Resultado de projeto",
+    benefit: "Receita, despesa e margem em tempo real",
+    imageSrc: "/landing/financeiro-resultado-projeto.png",
+    moduleId: "financeiro",
+    featureId: "fin-resultado",
+  },
+  {
+    id: "cap-portal",
+    title: "Portal",
+    benefit: "Comunicação e documentos do time",
+    imageSrc: "/landing/portal-colaborativo.jpg",
+    moduleId: "portal",
+    featureId: "portal-empresa",
+  },
+  {
+    id: "cap-relatorios",
+    title: "Relatórios",
+    benefit: "Horas e utilização para a gestão",
+    imageSrc: "/landing/relatorios-horas.png",
+    moduleId: "relatorios",
+    featureId: "horas",
+  },
+];
+
 function ScreenshotFrame({
   src,
   alt,
@@ -281,74 +374,145 @@ export function LandingSobreModules({ isDark }: { isDark: boolean }) {
   const chipBorder = isDark ? "rgba(255,255,255,0.14)" : "rgba(17,24,39,0.12)";
   const surface = isDark ? "rgba(12,8,18,0.55)" : "rgba(255,255,255,0.8)";
 
+  function selectCapability(card: CapabilityCard) {
+    setModuleId(card.moduleId);
+    setFeatureId(card.featureId);
+    requestAnimationFrame(() => {
+      document.getElementById("sobre-tour")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   return (
     <div className="mt-10">
-      <div className="flex flex-wrap gap-2">
-        {MODULES.map((mod) => {
-          const active = mod.id === activeModule.id;
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 lg:gap-4">
+        {CAPABILITIES.map((card) => {
+          const selected = moduleId === card.moduleId && featureId === card.featureId;
           return (
             <button
-              key={mod.id}
+              key={card.id}
               type="button"
-              onClick={() => {
-                setModuleId(mod.id);
-                setFeatureId(mod.features[0].id);
-              }}
-              className="rounded-full px-3.5 py-2 text-[13px] font-semibold transition-opacity hover:opacity-95 md:px-4 md:text-sm"
+              onClick={() => selectCapability(card)}
+              className="group flex flex-col overflow-hidden rounded-2xl text-left transition-transform duration-300 hover:-translate-y-0.5"
               style={{
-                background: active ? PURPLE : "transparent",
-                color: active ? "#fff" : fg,
-                border: `1px solid ${active ? PURPLE : chipBorder}`,
+                background: surface,
+                border: selected
+                  ? `1.5px solid ${PURPLE}`
+                  : `1px solid ${chipBorder}`,
+                boxShadow: selected
+                  ? isDark
+                    ? "0 12px 28px rgba(92,0,225,0.25)"
+                    : "0 12px 28px rgba(92,0,225,0.12)"
+                  : undefined,
               }}
             >
-              {mod.label}
+              <div
+                className="relative h-20 overflow-hidden sm:h-24"
+                style={{
+                  background: isDark ? "rgba(0,0,0,0.35)" : "rgba(17,24,39,0.04)",
+                }}
+              >
+                <img
+                  src={card.imageSrc}
+                  alt=""
+                  className="h-full w-full object-cover object-left-top opacity-95 transition-transform duration-500 group-hover:scale-[1.03]"
+                  loading="lazy"
+                  decoding="async"
+                  aria-hidden
+                />
+                <div
+                  className="pointer-events-none absolute inset-0"
+                  style={{
+                    background: isDark
+                      ? "linear-gradient(180deg, transparent 40%, rgba(12,8,18,0.75) 100%)"
+                      : "linear-gradient(180deg, transparent 45%, rgba(255,255,255,0.85) 100%)",
+                  }}
+                />
+              </div>
+              <div className="flex flex-1 flex-col gap-1 px-3 py-3 sm:px-3.5 sm:py-3.5">
+                <span className="text-sm font-semibold leading-snug" style={{ color: fg }}>
+                  {card.title}
+                </span>
+                <span className="text-xs leading-snug" style={{ color: muted }}>
+                  {card.benefit}
+                </span>
+              </div>
             </button>
           );
         })}
       </div>
 
-      <p className="mt-4 max-w-3xl text-sm leading-relaxed md:text-[15px]" style={{ color: muted }}>
-        {activeModule.blurb}
+      <p className="mt-4 text-xs" style={{ color: muted }}>
+        Clique em um card para ver a tela e o problema que ela resolve.
       </p>
 
-      {activeModule.features.length > 1 ? (
-        <div className="mt-5 flex flex-wrap gap-2">
-          {activeModule.features.map((feat) => {
-            const active = feat.id === activeFeature.id;
+      <div id="sobre-tour" className="mt-10 scroll-mt-28">
+        <div className="flex flex-wrap gap-2">
+          {MODULES.map((mod) => {
+            const active = mod.id === activeModule.id;
             return (
               <button
-                key={feat.id}
+                key={mod.id}
                 type="button"
-                onClick={() => setFeatureId(feat.id)}
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold transition-opacity hover:opacity-95"
+                onClick={() => {
+                  setModuleId(mod.id);
+                  setFeatureId(mod.features[0].id);
+                }}
+                className="rounded-full px-3.5 py-2 text-[13px] font-semibold transition-opacity hover:opacity-95 md:px-4 md:text-sm"
                 style={{
-                  background: active ? "rgba(92,0,225,0.14)" : surface,
-                  color: active ? PURPLE : muted,
-                  border: `1px solid ${active ? "rgba(92,0,225,0.35)" : chipBorder}`,
+                  background: active ? PURPLE : "transparent",
+                  color: active ? "#fff" : fg,
+                  border: `1px solid ${active ? PURPLE : chipBorder}`,
                 }}
               >
-                {feat.title}
+                {mod.label}
               </button>
             );
           })}
         </div>
-      ) : null}
 
-      <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.25fr)] lg:items-start lg:gap-10">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em]" style={{ color: PURPLE }}>
-            {activeModule.label}
-          </p>
-          <h3 className="mt-2 text-xl font-bold md:text-2xl" style={{ color: fg }}>
-            {activeFeature.title}
-          </h3>
-          <p className="mt-3 text-sm leading-relaxed md:text-[15px]" style={{ color: muted }}>
-            {activeFeature.description}
-          </p>
-        </div>
-        {activeFeature.imageSrc ? (
-          <ScreenshotFrame src={activeFeature.imageSrc} alt={activeFeature.imageAlt} isDark={isDark} />
+        <p className="mt-4 max-w-3xl text-sm leading-relaxed md:text-[15px]" style={{ color: muted }}>
+          {activeModule.blurb}
+        </p>
+
+        {activeModule.features.length > 1 ? (
+          <div className="mt-5 flex flex-wrap gap-2">
+            {activeModule.features.map((feat) => {
+              const active = feat.id === activeFeature.id;
+              return (
+                <button
+                  key={feat.id}
+                  type="button"
+                  onClick={() => setFeatureId(feat.id)}
+                  className="rounded-lg px-3 py-1.5 text-xs font-semibold transition-opacity hover:opacity-95"
+                  style={{
+                    background: active ? "rgba(92,0,225,0.14)" : surface,
+                    color: active ? PURPLE : muted,
+                    border: `1px solid ${active ? "rgba(92,0,225,0.35)" : chipBorder}`,
+                  }}
+                >
+                  {feat.title}
+                </button>
+              );
+            })}
+          </div>
         ) : null}
+
+        <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.25fr)] lg:items-start lg:gap-10">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em]" style={{ color: PURPLE }}>
+              {activeModule.label}
+            </p>
+            <h3 className="mt-2 text-xl font-bold md:text-2xl" style={{ color: fg }}>
+              {activeFeature.title}
+            </h3>
+            <p className="mt-3 text-sm leading-relaxed md:text-[15px]" style={{ color: muted }}>
+              {activeFeature.description}
+            </p>
+          </div>
+          {activeFeature.imageSrc ? (
+            <ScreenshotFrame src={activeFeature.imageSrc} alt={activeFeature.imageAlt} isDark={isDark} />
+          ) : null}
+        </div>
       </div>
     </div>
   );
