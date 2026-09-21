@@ -153,6 +153,12 @@ userProfilesRouter.patch("/:id", requireFeature(FEATURE), async (req, res) => {
   } = {};
 
   if (req.body?.name != null) {
+    if (existing.isSystem) {
+      res.status(400).json({
+        error: "Perfis padrão do sistema não podem ser editados. Você pode apenas inativar.",
+      });
+      return;
+    }
     const name = normalizeConfigName(req.body.name);
     if (!name) {
       res.status(400).json({ error: "Nome do perfil é obrigatório." });

@@ -126,6 +126,8 @@ platformRouter.post("/plans", requirePlatformAdmin, async (req, res) => {
         moduleFinanceiro: body.moduleFinanceiro !== false,
         modulePortal: body.modulePortal !== false,
         moduleSharepoint: body.moduleSharepoint === true,
+        moduleComercial: body.moduleComercial === true,
+        moduleRh: body.moduleRh === true,
         active: body.active !== false,
         sortOrder: Number.isFinite(Number(body.sortOrder))
           ? Math.round(Number(body.sortOrder))
@@ -160,6 +162,8 @@ platformRouter.patch("/plans/:id", requirePlatformAdmin, async (req, res) => {
       moduleFinanceiro?: boolean;
       modulePortal?: boolean;
       moduleSharepoint?: boolean;
+      moduleComercial?: boolean;
+      moduleRh?: boolean;
       active?: boolean;
       sortOrder?: number;
     } = {};
@@ -197,6 +201,8 @@ platformRouter.patch("/plans/:id", requirePlatformAdmin, async (req, res) => {
     if (body.moduleFinanceiro !== undefined) data.moduleFinanceiro = !!body.moduleFinanceiro;
     if (body.modulePortal !== undefined) data.modulePortal = !!body.modulePortal;
     if (body.moduleSharepoint !== undefined) data.moduleSharepoint = !!body.moduleSharepoint;
+    if (body.moduleComercial !== undefined) data.moduleComercial = !!body.moduleComercial;
+    if (body.moduleRh !== undefined) data.moduleRh = !!body.moduleRh;
     if (body.active !== undefined) data.active = !!body.active;
     if (body.sortOrder !== undefined && Number.isFinite(Number(body.sortOrder))) {
       data.sortOrder = Math.round(Number(body.sortOrder));

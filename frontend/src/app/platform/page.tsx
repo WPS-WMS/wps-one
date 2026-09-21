@@ -75,6 +75,7 @@ export default function PlatformHomePage() {
       label: string;
       pricePerUserFormatted: string;
       moduleLabels?: string[];
+      allFeatureLabels?: string[];
       modules?: { portal?: boolean; sharepoint?: boolean };
     }[]
   >([]);
@@ -109,12 +110,14 @@ export default function PlatformHomePage() {
           name?: string;
           pricePerUserFormatted?: string;
           moduleLabels?: string[];
+          allFeatureLabels?: string[];
           modules?: { portal?: boolean; sharepoint?: boolean };
         }) => ({
           id: p.id,
           label: p.label || p.name || p.id,
           pricePerUserFormatted: p.pricePerUserFormatted || "—",
           moduleLabels: p.moduleLabels,
+          allFeatureLabels: p.allFeatureLabels,
           modules: p.modules,
         }),
       ),
@@ -143,12 +146,14 @@ export default function PlatformHomePage() {
               name?: string;
               pricePerUserFormatted?: string;
               moduleLabels?: string[];
+              allFeatureLabels?: string[];
               modules?: { portal?: boolean; sharepoint?: boolean };
             }) => ({
               id: p.id,
               label: p.label || p.name || p.id,
               pricePerUserFormatted: p.pricePerUserFormatted || "—",
               moduleLabels: p.moduleLabels,
+              allFeatureLabels: p.allFeatureLabels,
               modules: p.modules,
             }),
           );
@@ -522,12 +527,17 @@ export default function PlatformHomePage() {
                     placeholder="Selecione um plano"
                     options={[
                       { value: "", label: "Selecione um plano" },
-                      ...plans.map((p) => ({
-                        value: p.id,
-                        label: `${p.label} — ${p.pricePerUserFormatted}/usuário${
-                          p.moduleLabels?.length ? ` (${p.moduleLabels.join(", ")})` : ""
-                        }`,
-                      })),
+                      ...plans.map((p) => {
+                        const features = p.allFeatureLabels?.length
+                          ? p.allFeatureLabels
+                          : p.moduleLabels;
+                        return {
+                          value: p.id,
+                          label: `${p.label} — ${p.pricePerUserFormatted}/usuário${
+                            features?.length ? ` (${features.join(", ")})` : ""
+                          }`,
+                        };
+                      }),
                     ]}
                   />
                   {plans.length === 0 ? (

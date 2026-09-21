@@ -41,6 +41,7 @@ type SubscriptionPayload = {
   canceledAt?: string | null;
   accessUntil?: string | null;
   moduleLabels?: string[];
+  addonLabels?: string[];
 };
 
 type ResponseBody = {
@@ -425,6 +426,25 @@ export function MySubscriptionPageContent() {
                   <span
                     key={label}
                     className="rounded-full bg-[color:var(--primary)]/10 px-2 py-0.5 text-[11px] font-medium text-[color:var(--primary)]"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </dd>
+            </div>
+          ) : null}
+          {data?.subscription.addonLabels?.length ? (
+            <div className="sm:col-span-2">
+              <dt className="text-xs text-[color:var(--muted-foreground)]">Addons</dt>
+              <dd className="mt-1 flex flex-wrap gap-1.5">
+                {data.subscription.addonLabels.map((label) => (
+                  <span
+                    key={label}
+                    className="rounded-full border px-2 py-0.5 text-[11px] font-medium"
+                    style={{
+                      borderColor: "color-mix(in srgb, var(--primary) 35%, var(--border))",
+                      background: "color-mix(in srgb, var(--primary) 6%, transparent)",
+                    }}
                   >
                     {label}
                   </span>

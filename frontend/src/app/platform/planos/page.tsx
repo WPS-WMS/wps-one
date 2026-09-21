@@ -10,6 +10,8 @@ type PlanModules = {
   financeiro: boolean;
   portal: boolean;
   sharepoint: boolean;
+  comercial: boolean;
+  rh: boolean;
 };
 
 type PlatformPlan = {
@@ -21,6 +23,8 @@ type PlatformPlan = {
   pricePerUserFormatted: string;
   modules: PlanModules;
   moduleLabels: string[];
+  addonLabels?: string[];
+  allFeatureLabels?: string[];
   active: boolean;
   sortOrder: number;
 };
@@ -33,6 +37,8 @@ type PlanForm = {
   moduleFinanceiro: boolean;
   modulePortal: boolean;
   moduleSharepoint: boolean;
+  moduleComercial: boolean;
+  moduleRh: boolean;
   active: boolean;
 };
 
@@ -44,6 +50,8 @@ const EMPTY_FORM: PlanForm = {
   moduleFinanceiro: true,
   modulePortal: true,
   moduleSharepoint: false,
+  moduleComercial: false,
+  moduleRh: false,
   active: true,
 };
 
@@ -110,6 +118,8 @@ export default function PlatformPlansPage() {
       moduleFinanceiro: plan.modules.financeiro,
       modulePortal: plan.modules.portal,
       moduleSharepoint: plan.modules.sharepoint,
+      moduleComercial: plan.modules.comercial === true,
+      moduleRh: plan.modules.rh === true,
       active: plan.active,
     });
     setFormError(null);
@@ -128,8 +138,8 @@ export default function PlatformPlansPage() {
       setFormError("Informe um preço válido por usuário.");
       return;
     }
-    if (!form.moduleProjetos && !form.moduleFinanceiro && !form.modulePortal && !form.moduleSharepoint) {
-      setFormError("Selecione ao menos um módulo.");
+    if (!form.moduleProjetos && !form.moduleFinanceiro && !form.modulePortal) {
+      setFormError("Selecione ao menos um módulo principal.");
       return;
     }
 
@@ -143,6 +153,8 @@ export default function PlatformPlansPage() {
       moduleFinanceiro: form.moduleFinanceiro,
       modulePortal: form.modulePortal,
       moduleSharepoint: form.moduleSharepoint,
+      moduleComercial: form.moduleComercial,
+      moduleRh: form.moduleRh,
       active: form.active,
     };
     const r = await apiFetch(editing ? `/api/platform/plans/${editing.id}` : "/api/platform/plans", {
@@ -232,7 +244,7 @@ export default function PlatformPlansPage() {
               <tr>
                 <th className="px-4 py-3 font-semibold">Plano</th>
                 <th className="px-4 py-3 font-semibold">Preço / usuário</th>
-                <th className="px-4 py-3 font-semibold">Módulos</th>
+                <th className="px-4 py-3 font-semibold">Módulos / Addons</th>
                 <th className="px-4 py-3 font-semibold">Status</th>
                 <th className="px-4 py-3 font-semibold text-right">Ações</th>
               </tr>
@@ -248,19 +260,37 @@ export default function PlatformPlansPage() {
                   </td>
                   <td className="px-4 py-3 tabular-nums">{plan.pricePerUserFormatted}</td>
                   <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-col gap-2">
                       {plan.moduleLabels.length ? (
-                        plan.moduleLabels.map((label) => (
-                          <span
-                            key={label}
-                            className="rounded-full bg-[color:var(--primary)]/10 px-2 py-0.5 text-[11px] font-medium text-[color:var(--primary)]"
-                          >
-                            {label}
-                          </span>
-                        ))
+                        <div className="flex flex-wrap gap-1.5">
+                          {plan.moduleLabels.map((label) => (
+                            <span
+                              key={label}
+                              className="rounded-full bg-[color:var(--primary)]/10 px-2 py-0.5 text-[11px] font-medium text-[color:var(--primary)]"
+                            >
+                              {label}
+                            </span>
+                          ))}
+                        </div>
                       ) : (
-                        <span className="text-xs text-[color:var(--muted-foreground)]">Nenhum</span>
+                        <span className="text-xs text-[color:var(--muted-foreground)]">Sem módulos</span>
                       )}
+                      {(plan.addonLabels?.length ?? 0) > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {plan.addonLabels!.map((label) => (
+                            <span
+                              key={label}
+                              className="rounded-full border px-2 py-0.5 text-[11px] font-medium text-[color:var(--foreground)]"
+                              style={{
+                                borderColor: "color-mix(in srgb, var(--primary) 35%, var(--border))",
+                                background: "color-mix(in srgb, var(--primary) 6%, transparent)",
+                              }}
+                            >
+                              Addon · {label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -366,7 +396,6 @@ export default function PlatformPlansPage() {
                       ["moduleProjetos", "Gestão de projetos"],
                       ["moduleFinanceiro", "Financeiro"],
                       ["modulePortal", "Portal Colaborativo"],
-                      ["moduleSharepoint", "Sincronizador Cloud2Cloud"],
                     ] as const
                   ).map(([key, label]) => (
                     <label
@@ -381,6 +410,42 @@ export default function PlatformPlansPage() {
                         className="accent-[color:var(--primary)]"
                       />
                       <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              <fieldset>
+                <legend className="mb-2 text-xs text-[color:var(--muted-foreground)]">Addons</legend>
+                <div className="space-y-2">
+                  {(
+                    [
+                      ["moduleComercial", "Comercial", "Módulo em breve — flag reservada no plano"],
+                      ["moduleRh", "RH", "Módulo em breve — flag reservada no plano"],
+                      [
+                        "moduleSharepoint",
+                        "Sincronizador Cloud2Cloud",
+                        "Libera Integrações (SharePoint/Teams) quando ativado na empresa",
+                      ],
+                    ] as const
+                  ).map(([key, label, hint]) => (
+                    <label
+                      key={key}
+                      className="flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-sm"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={form[key]}
+                        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.checked }))}
+                        className="mt-0.5 accent-[color:var(--primary)]"
+                      />
+                      <span>
+                        <span className="font-medium">{label}</span>
+                        <span className="mt-0.5 block text-[11px] text-[color:var(--muted-foreground)]">
+                          {hint}
+                        </span>
+                      </span>
                     </label>
                   ))}
                 </div>

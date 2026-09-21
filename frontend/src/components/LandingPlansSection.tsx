@@ -13,6 +13,8 @@ type PublicPlan = {
   priceCentsPerUser: number;
   pricePerUserFormatted: string;
   moduleLabels: string[];
+  addonLabels?: string[];
+  allFeatureLabels?: string[];
   sortOrder: number;
 };
 
@@ -168,25 +170,85 @@ export function LandingPlansSection({
                   </span>
                 </div>
 
-                <ul className="mt-6 flex-1 space-y-2.5">
-                  {plan.moduleLabels.length > 0 ? (
-                    plan.moduleLabels.map((label) => (
-                      <li key={label} className="flex items-start gap-2.5 text-sm" style={{ color: mutedBody }}>
-                        <span
-                          className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
-                          style={{ background: `${PURPLE}18`, color: PURPLE }}
-                        >
-                          <Check className="h-3 w-3" strokeWidth={3} />
-                        </span>
-                        {label}
-                      </li>
-                    ))
-                  ) : (
-                    <li className="text-sm" style={{ color: mutedBody }}>
-                      Módulos sob consulta
-                    </li>
-                  )}
-                </ul>
+                <div className="mt-6 flex-1 space-y-5">
+                  <div>
+                    <p
+                      className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.16em]"
+                      style={{ color: mutedBody }}
+                    >
+                      Módulos
+                    </p>
+                    {plan.moduleLabels.length > 0 ? (
+                      <ul className="space-y-2.5">
+                        {plan.moduleLabels.map((label) => (
+                          <li
+                            key={label}
+                            className="flex items-start gap-2.5 text-sm"
+                            style={{ color: mutedBody }}
+                          >
+                            <span
+                              className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
+                              style={{ background: `${PURPLE}18`, color: PURPLE }}
+                            >
+                              <Check className="h-3 w-3" strokeWidth={3} />
+                            </span>
+                            {label}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm" style={{ color: mutedBody }}>
+                        Módulos sob consulta
+                      </p>
+                    )}
+                  </div>
+
+                  {(plan.addonLabels?.length ?? 0) > 0 ? (
+                    <div
+                      className="rounded-2xl px-3.5 py-3.5"
+                      style={{
+                        background: featured
+                          ? isDark
+                            ? "rgba(92,0,225,0.18)"
+                            : "rgba(92,0,225,0.06)"
+                          : isDark
+                            ? "rgba(255,255,255,0.04)"
+                            : "rgba(17,24,39,0.03)",
+                        border: `1px solid ${
+                          featured
+                            ? `${PURPLE}40`
+                            : isDark
+                              ? "rgba(255,255,255,0.10)"
+                              : "rgba(17,24,39,0.08)"
+                        }`,
+                      }}
+                    >
+                      <p
+                        className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.16em]"
+                        style={{ color: PURPLE }}
+                      >
+                        Addons
+                      </p>
+                      <ul className="space-y-2.5">
+                        {plan.addonLabels!.map((label) => (
+                          <li
+                            key={label}
+                            className="flex items-start gap-2.5 text-sm"
+                            style={{ color: isDark ? "rgba(244,242,255,0.88)" : "rgba(17,24,39,0.78)" }}
+                          >
+                            <span
+                              className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
+                              style={{ background: PURPLE, color: "#fff" }}
+                            >
+                              <Check className="h-3 w-3" strokeWidth={3} />
+                            </span>
+                            {label}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
 
                 <button
                   type="button"

@@ -19,8 +19,12 @@ model PlatformPlan {
   moduleProjetos    Boolean  @default(true)
   moduleFinanceiro  Boolean  @default(true)
   modulePortal      Boolean  @default(true)
-  /// Addon: Integrações SharePoint / Teams
+  /// Addon: Integrações SharePoint / Teams (Sincronizador Cloud2Cloud)
   moduleSharepoint  Boolean  @default(false)
+  /// Addon reservado (módulo Comercial ainda não implementado no produto).
+  moduleComercial   Boolean  @default(false)
+  /// Addon reservado (módulo RH ainda não implementado no produto).
+  moduleRh          Boolean  @default(false)
   active            Boolean  @default(true)
   sortOrder         Int      @default(0)
   createdAt         DateTime @default(now())

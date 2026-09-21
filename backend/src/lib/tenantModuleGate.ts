@@ -69,6 +69,8 @@ export type TenantModules = {
   financeiro: boolean;
   portal: boolean;
   sharepoint: boolean;
+  comercial: boolean;
+  rh: boolean;
   /** Assinatura encerrada — bloqueia o tenant inteiro. */
   locked: boolean;
   status: string;
@@ -105,6 +107,8 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
       financeiro: false,
       portal: false,
       sharepoint: false,
+      comercial: false,
+      rh: false,
       locked: true,
       status: "locked",
       accessUntil: null,
@@ -152,6 +156,8 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
       financeiro: false,
       portal: false,
       sharepoint: false,
+      comercial: false,
+      rh: false,
       locked: true,
       status: "locked",
       accessUntil: accessUntil ? accessUntil.toISOString() : null,
@@ -184,6 +190,9 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
     financeiro: modules.financeiro,
     portal: hasSubscription ? modules.portal && portalEnabled : portalEnabled,
     sharepoint: hasSubscription ? modules.sharepoint && sharepointEnabled : sharepointEnabled,
+    // Addons reservados: flags do plano (ainda sem telas/gates no produto).
+    comercial: modules.comercial,
+    rh: modules.rh,
     locked: false,
     status,
     accessUntil: accessUntil ? accessUntil.toISOString() : null,
@@ -193,6 +202,8 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
 
 export function tenantHasModule(modules: TenantModules, moduleId: PlanModuleId): boolean {
   if (modules.locked) return false;
+  if (moduleId === "comercial") return modules.comercial;
+  if (moduleId === "rh") return modules.rh;
   return modules[moduleId];
 }
 

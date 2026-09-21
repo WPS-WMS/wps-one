@@ -1,12 +1,19 @@
-/** Módulos comerciais do plano WPS One. */
-export const PLAN_MODULES = ["projetos", "financeiro", "portal", "sharepoint"] as const;
+/** Módulos principais do plano WPS One. */
+export const PLAN_CORE_MODULES = ["projetos", "financeiro", "portal"] as const;
+/** Addons do plano (Cloud2Cloud + reservados Comercial/RH). */
+export const PLAN_ADDON_MODULES = ["sharepoint", "comercial", "rh"] as const;
+export const PLAN_MODULES = [...PLAN_CORE_MODULES, ...PLAN_ADDON_MODULES] as const;
 export type PlanModuleId = (typeof PLAN_MODULES)[number];
+export type PlanCoreModuleId = (typeof PLAN_CORE_MODULES)[number];
+export type PlanAddonModuleId = (typeof PLAN_ADDON_MODULES)[number];
 
 export const PLAN_MODULE_LABELS: Record<PlanModuleId, string> = {
   projetos: "Gestão de projetos",
   financeiro: "Financeiro",
   portal: "Portal Colaborativo",
-  sharepoint: "SharePoint",
+  sharepoint: "Sincronizador Cloud2Cloud",
+  comercial: "Comercial",
+  rh: "RH",
 };
 
 export type PlatformPlanRecord = {
@@ -18,6 +25,8 @@ export type PlatformPlanRecord = {
   moduleFinanceiro: boolean;
   modulePortal: boolean;
   moduleSharepoint: boolean;
+  moduleComercial: boolean;
+  moduleRh: boolean;
   active: boolean;
   sortOrder: number;
 };
@@ -117,24 +126,37 @@ export type PlanModulesState = {
   financeiro: boolean;
   portal: boolean;
   sharepoint: boolean;
+  comercial: boolean;
+  rh: boolean;
 };
 
 export function planModulesFromRecord(plan: PlatformPlanRecord | null | undefined): PlanModulesState {
   if (!plan) {
     // Sem plano configurado: não restringe módulos principais (legado / pré-assinatura).
-    // SharePoint permanece opt-in.
-    return { projetos: true, financeiro: true, portal: true, sharepoint: false };
+    // Addons permanecem opt-in.
+    return {
+      projetos: true,
+      financeiro: true,
+      portal: true,
+      sharepoint: false,
+      comercial: false,
+      rh: false,
+    };
   }
   return {
     projetos: !!plan.moduleProjetos,
     financeiro: !!plan.moduleFinanceiro,
     portal: !!plan.modulePortal,
     sharepoint: !!plan.moduleSharepoint,
+    comercial: !!plan.moduleComercial,
+    rh: !!plan.moduleRh,
   };
 }
 
 export function serializePlan(plan: PlatformPlanRecord) {
   const modules = planModulesFromRecord(plan);
+  const moduleLabels = PLAN_CORE_MODULES.filter((m) => modules[m]).map((m) => PLAN_MODULE_LABELS[m]);
+  const addonLabels = PLAN_ADDON_MODULES.filter((m) => modules[m]).map((m) => PLAN_MODULE_LABELS[m]);
   return {
     id: plan.id,
     name: plan.name,
@@ -143,7 +165,10 @@ export function serializePlan(plan: PlatformPlanRecord) {
     priceCentsPerUser: plan.priceCentsPerUser,
     pricePerUserFormatted: formatBrlFromCents(plan.priceCentsPerUser),
     modules,
-    moduleLabels: PLAN_MODULES.filter((m) => modules[m]).map((m) => PLAN_MODULE_LABELS[m]),
+    moduleLabels,
+    addonLabels,
+    /** Módulos + addons ativos (landing / cards). */
+    allFeatureLabels: [...moduleLabels, ...addonLabels],
     active: plan.active,
     sortOrder: plan.sortOrder,
   };
@@ -223,7 +248,8 @@ export function buildSubscriptionPayload(params: {
     canceledAt: canceledAt ? canceledAt.toISOString() : null,
     accessUntil: accessUntil ? accessUntil.toISOString() : null,
     modules,
-    moduleLabels: PLAN_MODULES.filter((m) => modules[m]).map((m) => PLAN_MODULE_LABELS[m]),
+    moduleLabels: PLAN_CORE_MODULES.filter((m) => modules[m]).map((m) => PLAN_MODULE_LABELS[m]),
+    addonLabels: PLAN_ADDON_MODULES.filter((m) => modules[m]).map((m) => PLAN_MODULE_LABELS[m]),
     note: status === "trial"
       ? accessUntil
         ? `Teste grátis até ${accessUntil.toLocaleDateString("pt-BR")}. Escolha um plano em Minha Assinatura para continuar.`

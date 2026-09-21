@@ -1,0 +1,2 @@
+ALTER TABLE "platform_plans" ADD COLUMN IF NOT EXISTS "moduleComercial" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "platform_plans" ADD COLUMN IF NOT EXISTS "moduleRh" BOOLEAN NOT NULL DEFAULT false;
