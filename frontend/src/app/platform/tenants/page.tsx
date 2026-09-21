@@ -122,7 +122,7 @@ export default function PlatformTenantsPage() {
                 <th className="px-4 py-3">Usuários ativos</th>
                 <th className="px-4 py-3">Mensalidade</th>
                 <th className="px-4 py-3">Início</th>
-                <th className="px-4 py-3">Próx. parcela</th>
+                <th className="px-4 py-3">Próxima mensalidade</th>
                 <th className="px-4 py-3">Storage</th>
               </tr>
             </thead>

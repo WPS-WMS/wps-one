@@ -394,7 +394,7 @@ export function MySubscriptionPageContent() {
           </div>
           <div>
             <dt className="text-xs text-[color:var(--muted-foreground)]">
-              {isCanceling ? "Acesso até" : "Próxima parcela"}
+              {isCanceling ? "Acesso até" : "Próxima mensalidade"}
             </dt>
             <dd className="mt-1 font-medium">
               {fmtDate(isCanceling ? data?.subscription.accessUntil : data?.subscription.nextPaymentAt)}

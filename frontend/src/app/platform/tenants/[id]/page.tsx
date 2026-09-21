@@ -476,7 +476,7 @@ export default function PlatformTenantDetailPage() {
             <dd className="mt-1 text-base font-semibold">{fmtDateLong(detail.subscription.startedAt)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-[color:var(--muted-foreground)]">Próxima parcela</dt>
+            <dt className="text-xs text-[color:var(--muted-foreground)]">Próxima mensalidade</dt>
             <dd className="mt-1 text-base font-semibold">
               {fmtDateLong(detail.subscription.nextPaymentAt)}
             </dd>
