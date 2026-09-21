@@ -181,7 +181,7 @@ export function LandingCreateAccountModal({ open, onClose, isDark }: Props) {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block space-y-1.5">
                 <span className="text-xs font-medium" style={{ color: muted }}>
-                  1.1 E-mail
+                  E-mail
                 </span>
                 <input
                   required
@@ -197,7 +197,7 @@ export function LandingCreateAccountModal({ open, onClose, isDark }: Props) {
               </label>
               <label className="block space-y-1.5">
                 <span className="text-xs font-medium" style={{ color: muted }}>
-                  1.2 Número de contato
+                  Número de contato
                 </span>
                 <input
                   required
