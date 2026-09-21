@@ -318,6 +318,7 @@ platformRouter.post("/tenants", requirePlatformAdmin, async (req, res) => {
           subscriptionStatus: "active",
           portalModuleEnabled,
           sharepointModuleEnabled,
+          signupSource: "platform",
         },
       });
 
@@ -537,6 +538,9 @@ platformRouter.get("/tenants/:id", requirePlatformAdmin, async (req, res) => {
       slug: tenant.slug,
       createdAt: tenant.createdAt.toISOString(),
       updatedAt: tenant.updatedAt.toISOString(),
+      signupSource: tenant.signupSource ?? null,
+      employeeCountLabel: tenant.employeeCountLabel ?? null,
+      companyNeed: tenant.companyNeed ?? null,
       portalModuleEnabled: tenant.portalModuleEnabled !== false,
       sharepointModuleEnabled: tenant.sharepointModuleEnabled === true,
       hasSubscriptionPlan: !!tenant.subscriptionPlanId || !!tenant.platformPlan,
@@ -589,6 +593,8 @@ platformRouter.patch("/tenants/:id", requirePlatformAdmin, async (req, res) => {
   const adminNameRaw = body.adminName;
   const portalModuleEnabledRaw = body.portalModuleEnabled;
   const sharepointModuleEnabledRaw = body.sharepointModuleEnabled;
+  const employeeCountLabelRaw = body.employeeCountLabel ?? body.employees;
+  const companyNeedRaw = body.companyNeed ?? body.need;
 
   const companyName =
     companyNameRaw !== undefined ? String(companyNameRaw ?? "").trim() : undefined;
@@ -604,6 +610,12 @@ platformRouter.patch("/tenants/:id", requirePlatformAdmin, async (req, res) => {
     portalModuleEnabledRaw !== undefined ? portalModuleEnabledRaw === true : undefined;
   const sharepointModuleEnabled =
     sharepointModuleEnabledRaw !== undefined ? sharepointModuleEnabledRaw === true : undefined;
+  const employeeCountLabel =
+    employeeCountLabelRaw !== undefined
+      ? String(employeeCountLabelRaw ?? "").trim() || null
+      : undefined;
+  const companyNeed =
+    companyNeedRaw !== undefined ? String(companyNeedRaw ?? "").trim() || null : undefined;
 
   if (companyName !== undefined && !companyName) {
     res.status(400).json({ error: "Nome da empresa é obrigatório." });
@@ -619,12 +631,22 @@ platformRouter.patch("/tenants/:id", requirePlatformAdmin, async (req, res) => {
     res.status(400).json({ error: "Nome do administrador é obrigatório." });
     return;
   }
+  if (employeeCountLabel !== undefined && employeeCountLabel && employeeCountLabel.length > 80) {
+    res.status(400).json({ error: "Quantidade de colaboradores inválida." });
+    return;
+  }
+  if (companyNeed !== undefined && companyNeed && companyNeed.length > 2000) {
+    res.status(400).json({ error: "Necessidade da empresa muito longa." });
+    return;
+  }
   if (
     companyName === undefined &&
     adminEmail === undefined &&
     adminName === undefined &&
     portalModuleEnabled === undefined &&
-    sharepointModuleEnabled === undefined
+    sharepointModuleEnabled === undefined &&
+    employeeCountLabel === undefined &&
+    companyNeed === undefined
   ) {
     res.status(400).json({ error: "Nenhum campo para atualizar." });
     return;
@@ -668,7 +690,9 @@ platformRouter.patch("/tenants/:id", requirePlatformAdmin, async (req, res) => {
       if (
         companyName !== undefined ||
         portalModuleEnabled !== undefined ||
-        sharepointModuleEnabled !== undefined
+        sharepointModuleEnabled !== undefined ||
+        employeeCountLabel !== undefined ||
+        companyNeed !== undefined
       ) {
         await tx.tenant.update({
           where: { id },
@@ -676,6 +700,8 @@ platformRouter.patch("/tenants/:id", requirePlatformAdmin, async (req, res) => {
             ...(companyName !== undefined ? { name: companyName } : {}),
             ...(portalModuleEnabled !== undefined ? { portalModuleEnabled } : {}),
             ...(sharepointModuleEnabled !== undefined ? { sharepointModuleEnabled } : {}),
+            ...(employeeCountLabel !== undefined ? { employeeCountLabel } : {}),
+            ...(companyNeed !== undefined ? { companyNeed } : {}),
           },
         });
       }
@@ -725,6 +751,9 @@ platformRouter.patch("/tenants/:id", requirePlatformAdmin, async (req, res) => {
       slug: updatedTenant.slug,
       createdAt: updatedTenant.createdAt.toISOString(),
       updatedAt: updatedTenant.updatedAt.toISOString(),
+      signupSource: updatedTenant.signupSource ?? null,
+      employeeCountLabel: updatedTenant.employeeCountLabel ?? null,
+      companyNeed: updatedTenant.companyNeed ?? null,
       portalModuleEnabled: updatedTenant.portalModuleEnabled !== false,
       sharepointModuleEnabled: updatedTenant.sharepointModuleEnabled === true,
       hasSubscriptionPlan: !!updatedTenant.subscriptionPlanId || !!updatedTenant.platformPlan,
@@ -874,5 +903,89 @@ platformRouter.patch("/tenants/:id/subscription", requirePlatformAdmin, async (r
   } catch (err) {
     console.error("[platform] subscription patch", errorSummary(err));
     res.status(500).json({ error: "Erro ao atualizar assinatura." });
+  }
+});
+
+/** Métricas de aquisição (landing: cadastros e demonstrações). */
+platformRouter.get("/metrics", requirePlatformAdmin, async (_req, res) => {
+  try {
+    const [demoCount, contactCount, landingSignupCount, landingSignups, demos, trialsActive, trialsLocked] =
+      await Promise.all([
+        prisma.landingLeadRequest.count({ where: { kind: "demo" } }),
+        prisma.landingLeadRequest.count({ where: { kind: "contact" } }),
+        prisma.tenant.count({ where: { signupSource: "landing" } }),
+        prisma.tenant.findMany({
+          where: { signupSource: "landing" },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            createdAt: true,
+            subscriptionStatus: true,
+            subscriptionAccessUntil: true,
+            employeeCountLabel: true,
+            companyNeed: true,
+            users: {
+              where: { isPrimaryAdmin: true },
+              take: 1,
+              select: { name: true, email: true },
+            },
+          },
+        }),
+        prisma.landingLeadRequest.findMany({
+          where: { kind: "demo" },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+          select: {
+            id: true,
+            name: true,
+            company: true,
+            email: true,
+            phone: true,
+            createdAt: true,
+          },
+        }),
+        prisma.tenant.count({
+          where: { signupSource: "landing", subscriptionStatus: "trial" },
+        }),
+        prisma.tenant.count({
+          where: { signupSource: "landing", subscriptionStatus: "locked" },
+        }),
+      ]);
+
+    res.json({
+      totals: {
+        landingSignups: landingSignupCount,
+        demoRequests: demoCount,
+        contactRequests: contactCount,
+        trialsActive,
+        trialsLocked,
+      },
+      landingSignups: landingSignups.map((t) => ({
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        createdAt: t.createdAt.toISOString(),
+        subscriptionStatus: t.subscriptionStatus,
+        trialEndsAt: t.subscriptionAccessUntil?.toISOString() ?? null,
+        employeeCountLabel: t.employeeCountLabel,
+        companyNeed: t.companyNeed,
+        adminName: t.users[0]?.name ?? null,
+        adminEmail: t.users[0]?.email ?? null,
+      })),
+      demoRequests: demos.map((d) => ({
+        id: d.id,
+        name: d.name,
+        company: d.company,
+        email: d.email,
+        phone: d.phone,
+        createdAt: d.createdAt.toISOString(),
+      })),
+    });
+  } catch (err) {
+    console.error("[platform] metrics", errorSummary(err));
+    res.status(500).json({ error: "Erro ao carregar métricas." });
   }
 });

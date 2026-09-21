@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Building2, KeyRound, LayoutDashboard, LogOut, Rocket, Tags } from "lucide-react";
+import { Building2, KeyRound, LayoutDashboard, LogOut, Rocket, Tags, BarChart3 } from "lucide-react";
 import { Link } from "@/components/Link";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -33,6 +33,7 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
   const nav = [
     { href: "/platform", label: "Visão geral", icon: LayoutDashboard, exact: true },
     { href: "/platform/tenants", label: "Clientes", icon: Building2, exact: false },
+    { href: "/platform/metricas", label: "Métricas", icon: BarChart3, exact: false },
     { href: "/platform/planos", label: "Planos", icon: Tags, exact: false },
     { href: "/platform/atualizacoes", label: "Atualizações", icon: Rocket, exact: false },
     { href: "/platform/trocar-senha", label: "Trocar senha", icon: KeyRound, exact: false },

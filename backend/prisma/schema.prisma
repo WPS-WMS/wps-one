@@ -45,12 +45,18 @@ model Tenant {
   subscriptionNextPaymentAt  DateTime?
   /// PIX | BOLETO | CARTAO_CREDITO
   subscriptionPaymentMethod  String?
-  /// active | canceling | locked | none
+  /// active | canceling | locked | none | trial
   subscriptionStatus         String?
   subscriptionCanceledAt     DateTime?
   /// Após cancelamento: acesso liberado até esta data (inclusive).
   subscriptionAccessUntil    DateTime?
   platformPlan               PlatformPlan? @relation(fields: [subscriptionPlanId], references: [id], onDelete: SetNull)
+  /// Origem do cadastro: landing | platform | null (legado)
+  signupSource               String?
+  /// Quantidade de colaboradores informada no cadastro (texto livre, ex.: 1–10).
+  employeeCountLabel         String?
+  /// Necessidade / objetivo informado no cadastro da landing.
+  companyNeed                String?  @db.Text
   users     User[]
   clients   Client[]
   activities Activity[]
@@ -113,6 +119,25 @@ model Tenant {
   /// Refresh token criptografado (AES-GCM).
   microsoftOauthRefreshToken   String?
   microsoftOauthConnectedAt    DateTime?
+}
+
+/// Leads públicos da landing (demonstração / contato) para métricas da plataforma.
+model LandingLeadRequest {
+  id        String   @id @default(cuid())
+  /// demo | contact
+  kind      String
+  name      String
+  company   String?
+  email     String
+  phone     String?
+  employees String?
+  need      String?  @db.Text
+  message   String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([kind, createdAt])
+  @@index([createdAt])
+  @@map("landing_lead_requests")
 }
 
 /// Configuração Focus NFe (NFSe Nacional) por tenant.

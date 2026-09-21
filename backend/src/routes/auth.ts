@@ -142,7 +142,7 @@ authRouter.post("/login", async (req, res) => {
       if (modules.locked) {
         res.status(403).json({
           error:
-            "Assinatura encerrada. O acesso à organização foi bloqueado. Entre em contato com o suporte WPS One.",
+            "Período de teste ou assinatura encerrado. O acesso foi bloqueado. Escolha um plano em Minha Assinatura (se ainda tiver acesso) ou fale com o suporte WPS One.",
           code: "SUBSCRIPTION_LOCKED",
         });
         return;
@@ -283,7 +283,7 @@ authRouter.get("/me", async (req, res) => {
       if (modules.locked) {
         res.status(403).json({
           error:
-            "Assinatura encerrada. O acesso à organização foi bloqueado. Entre em contato com o suporte WPS One.",
+            "Período de teste ou assinatura encerrado. O acesso foi bloqueado. Escolha um plano em Minha Assinatura (se ainda tiver acesso) ou fale com o suporte WPS One.",
           code: "SUBSCRIPTION_LOCKED",
         });
         return;

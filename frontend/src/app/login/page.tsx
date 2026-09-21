@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getSafeInternalRedirect } from "@/lib/safeRedirect";
 import { resolvePostLoginPath } from "@/lib/roles";
 import { Eye, EyeOff } from "lucide-react";
+import { SubscriptionLockedModal } from "@/components/SubscriptionLockedModal";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "https://wps-one-backend.onrender.com";
@@ -30,6 +31,7 @@ function LoginPageInner() {
   const [forgotMessage, setForgotMessage] = useState("");
   const [forgotError, setForgotError] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [lockedModalOpen, setLockedModalOpen] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("inativo") === "1") {
@@ -79,6 +81,23 @@ function LoginPageInner() {
         return;
       }
       if (!res.ok) {
+        const locked =
+          res.status === 403 &&
+          (data?.code === "SUBSCRIPTION_LOCKED" ||
+            String(data?.error ?? "")
+              .toLowerCase()
+              .includes("bloqueado") ||
+            String(data?.error ?? "")
+              .toLowerCase()
+              .includes("assinatura encerrada") ||
+            String(data?.error ?? "")
+              .toLowerCase()
+              .includes("período de teste"));
+        if (locked) {
+          setLockedModalOpen(true);
+          setError("");
+          return;
+        }
         const inactive =
           res.status === 403 &&
           String(data?.error ?? "").toLowerCase().includes("administrador");
@@ -350,6 +369,10 @@ function LoginPageInner() {
           </div>
         </div>
       )}
+      <SubscriptionLockedModal
+        open={lockedModalOpen}
+        onClose={() => setLockedModalOpen(false)}
+      />
     </div>
   );
 }

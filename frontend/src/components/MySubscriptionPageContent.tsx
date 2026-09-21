@@ -220,6 +220,7 @@ export function MySubscriptionPageContent() {
   const paymentMethods = data?.paymentMethods ?? DEFAULT_PAYMENT_METHODS;
   const status = data?.subscription.status ?? "none";
   const isCanceling = status === "canceling";
+  const isTrial = status === "trial";
   const isLocked = status === "locked";
   const hasPlan = Boolean(data?.subscription.planId ?? data?.subscription.plan);
   const accessUntilLabel = fmtDate(data?.subscription.accessUntil);
@@ -245,6 +246,27 @@ export function MySubscriptionPageContent() {
           style={{ borderColor: "rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.08)" }}
         >
           {error}
+        </div>
+      ) : null}
+
+      {isTrial ? (
+        <div
+          className="rounded-xl border px-4 py-3 text-sm"
+          style={{
+            borderColor: "rgba(92,0,225,0.35)",
+            background: "rgba(92,0,225,0.10)",
+            color: "var(--foreground)",
+          }}
+        >
+          Você está no <strong>teste grátis</strong>
+          {accessUntilLabel ? (
+            <>
+              {" "}
+              até <strong>{accessUntilLabel}</strong>
+            </>
+          ) : null}
+          . Escolha um plano abaixo e salve para continuar usando após o período. Sem assinatura, o
+          acesso será bloqueado.
         </div>
       ) : null}
 

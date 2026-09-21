@@ -15,6 +15,9 @@ type Detail = {
   portalModuleEnabled?: boolean;
   sharepointModuleEnabled?: boolean;
   hasSubscriptionPlan?: boolean;
+  signupSource?: string | null;
+  employeeCountLabel?: string | null;
+  companyNeed?: string | null;
   planModules?: {
     portal?: boolean;
     sharepoint?: boolean;
@@ -102,6 +105,8 @@ export default function PlatformTenantDetailPage() {
   const [adminEmail, setAdminEmail] = useState("");
   const [portalModuleEnabled, setPortalModuleEnabled] = useState(true);
   const [sharepointModuleEnabled, setSharepointModuleEnabled] = useState(false);
+  const [employeeCountLabel, setEmployeeCountLabel] = useState("");
+  const [companyNeed, setCompanyNeed] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveOk, setSaveOk] = useState(false);
@@ -130,6 +135,8 @@ export default function PlatformTenantDetailPage() {
       setAdminEmail(next.primaryAdmin?.email ?? "");
       setPortalModuleEnabled(next.portalModuleEnabled !== false);
       setSharepointModuleEnabled(next.sharepointModuleEnabled === true);
+      setEmployeeCountLabel(next.employeeCountLabel ?? "");
+      setCompanyNeed(next.companyNeed ?? "");
       setLoading(false);
     })();
     return () => {
@@ -147,6 +154,8 @@ export default function PlatformTenantDetailPage() {
       companyName: companyName.trim(),
       portalModuleEnabled,
       sharepointModuleEnabled,
+      employeeCountLabel: employeeCountLabel.trim(),
+      companyNeed: companyNeed.trim(),
     };
     if (detail?.primaryAdmin) {
       payload.adminName = adminName.trim();
@@ -173,6 +182,8 @@ export default function PlatformTenantDetailPage() {
             updatedAt: next.updatedAt,
             portalModuleEnabled: next.portalModuleEnabled,
             sharepointModuleEnabled: next.sharepointModuleEnabled,
+            employeeCountLabel: next.employeeCountLabel ?? null,
+            companyNeed: next.companyNeed ?? null,
             hasSubscriptionPlan: next.hasSubscriptionPlan ?? prev.hasSubscriptionPlan,
             planModules: next.planModules ?? prev.planModules,
             primaryAdmin: next.primaryAdmin ?? prev.primaryAdmin,
@@ -186,6 +197,8 @@ export default function PlatformTenantDetailPage() {
     setAdminEmail(next.primaryAdmin?.email ?? adminEmail);
     setPortalModuleEnabled(next.portalModuleEnabled !== false);
     setSharepointModuleEnabled(next.sharepointModuleEnabled === true);
+    setEmployeeCountLabel(next.employeeCountLabel ?? "");
+    setCompanyNeed(next.companyNeed ?? "");
     setSaveOk(true);
   }
 
@@ -221,6 +234,8 @@ export default function PlatformTenantDetailPage() {
     companyName.trim() !== detail.name ||
     portalModuleEnabled !== (detail.portalModuleEnabled !== false) ||
     sharepointModuleEnabled !== (detail.sharepointModuleEnabled === true) ||
+    employeeCountLabel.trim() !== (detail.employeeCountLabel ?? "") ||
+    companyNeed.trim() !== (detail.companyNeed ?? "") ||
     (detail.primaryAdmin
       ? adminName.trim() !== detail.primaryAdmin.name ||
         adminEmail.trim().toLowerCase() !== detail.primaryAdmin.email
@@ -314,6 +329,42 @@ export default function PlatformTenantDetailPage() {
               Nenhum SUPER_ADMIN provisionado pela plataforma encontrado neste tenant.
             </p>
           )}
+
+          <div className="sm:col-span-2">
+            <label className="mb-1.5 block text-xs font-medium text-[color:var(--muted-foreground)]">
+              Quantos colaboradores tem a sua empresa?
+            </label>
+            <input
+              type="text"
+              maxLength={80}
+              className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm"
+              style={{ borderColor: "var(--border)" }}
+              value={employeeCountLabel}
+              onChange={(e) => {
+                setEmployeeCountLabel(e.target.value);
+                setSaveOk(false);
+              }}
+              placeholder="Ex.: 1–10, 11–50, 50+"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="mb-1.5 block text-xs font-medium text-[color:var(--muted-foreground)]">
+              Necessidade da empresa
+            </label>
+            <textarea
+              rows={3}
+              maxLength={2000}
+              className="w-full resize-y rounded-xl border bg-transparent px-3 py-2.5 text-sm"
+              style={{ borderColor: "var(--border)" }}
+              value={companyNeed}
+              onChange={(e) => {
+                setCompanyNeed(e.target.value);
+                setSaveOk(false);
+              }}
+              placeholder="Ex.: Gestão de projetos, financeiro, previsibilidade…"
+            />
+          </div>
 
           <div className="sm:col-span-2 space-y-2 rounded-xl border px-3 py-3" style={{ borderColor: "var(--border)" }}>
             <p className="text-xs font-semibold text-[color:var(--muted-foreground)]">

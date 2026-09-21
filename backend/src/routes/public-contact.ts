@@ -5,6 +5,13 @@ import { renderEmailLayout, escapeHtml as escapeHtmlTemplate } from "../lib/emai
 import { errorSummary } from "../lib/devLog.js";
 import { serializePlan } from "../lib/platformPlans.js";
 import { listPlatformPlans } from "../lib/subscriptionHelpers.js";
+import { prisma } from "../lib/prisma.js";
+import { validatePasswordPolicy } from "../lib/passwordPolicy.js";
+import {
+  createLandingTrialTenant,
+  hashPassword,
+  TRIAL_DAYS,
+} from "../lib/publicSignup.js";
 
 const CONTACT_TO = "contato@wpsconsult.com.br";
 
@@ -75,6 +82,19 @@ publicContactRouter.post("/contact", async (req, res) => {
     return;
   }
 
+  try {
+    await prisma.landingLeadRequest.create({
+      data: {
+        kind: "contact",
+        name: `${firstName} ${lastName}`.trim(),
+        email: email.toLowerCase(),
+        message,
+      },
+    });
+  } catch (err) {
+    console.error("[public-contact] persist", errorSummary(err));
+  }
+
   const subject = `[Site WPS One] Contato de ${firstName} ${lastName}`;
   const html = renderEmailLayout({
     subject,
@@ -139,6 +159,22 @@ publicContactRouter.post("/demo", async (req, res) => {
     return;
   }
 
+  try {
+    await prisma.landingLeadRequest.create({
+      data: {
+        kind: "demo",
+        name,
+        company,
+        email: email.toLowerCase(),
+        phone,
+      },
+    });
+  } catch (err) {
+    console.error("[public-demo] persist", errorSummary(err));
+    res.status(500).json({ error: "Não foi possível registrar sua solicitação. Tente novamente mais tarde." });
+    return;
+  }
+
   const subject = `[Site WPS One] Demonstração — ${name} (${company})`;
   const html = renderEmailLayout({
     subject,
@@ -166,23 +202,17 @@ publicContactRouter.post("/demo", async (req, res) => {
   });
 
   try {
-    const result = await sendMail({ to: CONTACT_TO, subject, html });
-    if ("skipped" in result && result.skipped) {
-      res.status(503).json({
-        error:
-          "Envio de e-mail não configurado no servidor. Entre em contato por telefone ou e-mail direto.",
-      });
-      return;
-    }
+    await sendMail({ to: CONTACT_TO, subject, html });
     res.json({ ok: true });
   } catch (err) {
-    console.error("[public-demo]", errorSummary(err));
-    res.status(500).json({ error: "Não foi possível enviar sua solicitação. Tente novamente mais tarde." });
+    console.error("[public-demo] mail", errorSummary(err));
+    // Lead já persistido — não falha a UX se o e-mail cair.
+    res.json({ ok: true, mailWarning: true });
   }
 });
 
-/** Interesse em criar conta a partir da landing. */
-publicContactRouter.post("/signup-request", async (req, res) => {
+/** Criação real de conta na landing (teste grátis de 7 dias). */
+publicContactRouter.post("/signup", async (req, res) => {
   const body = req.body as Record<string, unknown>;
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const email = typeof body.email === "string" ? body.email.trim() : "";
@@ -190,6 +220,13 @@ publicContactRouter.post("/signup-request", async (req, res) => {
   const company = typeof body.company === "string" ? body.company.trim() : "";
   const employees = typeof body.employees === "string" ? body.employees.trim() : "";
   const need = typeof body.need === "string" ? body.need.trim() : "";
+  const password = typeof body.password === "string" ? body.password : "";
+  const passwordConfirm =
+    typeof body.passwordConfirm === "string"
+      ? body.passwordConfirm
+      : typeof body.confirmPassword === "string"
+        ? body.confirmPassword
+        : "";
   const phoneDigits = phone.replace(/\D/g, "");
 
   if (!name || name.length > 160) {
@@ -220,47 +257,74 @@ publicContactRouter.post("/signup-request", async (req, res) => {
     res.status(400).json({ error: "Descrição da necessidade muito longa." });
     return;
   }
-
-  const subject = `[Site WPS One] Criar conta — ${name} (${company})`;
-  const html = renderEmailLayout({
-    subject,
-    title: "Solicitação de criação de conta",
-    preheader: `${name} · ${company} quer criar conta no WPS One`,
-    summaryRows: [
-      { label: "Nome", value: name },
-      { label: "E-mail", value: email },
-      { label: "Telefone", value: phone },
-      { label: "Empresa", value: company },
-      { label: "Colaboradores", value: employees },
-    ],
-    bodyHtml: `
-      <div style="margin:0 0 10px 0;color:#64748b;font-size:12px;line-height:18px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">
-        Necessidade atual
-      </div>
-      <div style="border:1px solid #e5e7eb;border-radius:14px;background:#f8fafc;padding:14px 16px;color:#0f172a;font-size:14px;line-height:22px;white-space:pre-wrap">
-        ${escapeHtmlTemplate(need)}
-      </div>
-      <div style="margin-top:14px;color:#64748b;font-size:12px;line-height:18px">
-        Origem: botão &ldquo;Criar conta&rdquo; na landing.
-        Responda para
-        <a href="mailto:${escapeHtmlTemplate(email)}" style="color:#5c00e1;text-decoration:underline">${escapeHtmlTemplate(email)}</a>
-        ou ligue/WhatsApp para ${escapeHtmlTemplate(phone)}.
-      </div>
-    `,
-  });
+  const passwordError = validatePasswordPolicy(password);
+  if (passwordError) {
+    res.status(400).json({ error: passwordError });
+    return;
+  }
+  if (password !== passwordConfirm) {
+    res.status(400).json({ error: "A confirmação de senha não confere." });
+    return;
+  }
 
   try {
-    const result = await sendMail({ to: CONTACT_TO, subject, html });
-    if ("skipped" in result && result.skipped) {
-      res.status(503).json({
-        error:
-          "Envio de e-mail não configurado no servidor. Entre em contato por telefone ou e-mail direto.",
-      });
+    const passwordHash = await hashPassword(password);
+    const created = await createLandingTrialTenant({
+      name,
+      email,
+      phone,
+      company,
+      employees,
+      need,
+      passwordHash,
+    });
+
+    const trialLabel = created.trialEndsAt.toLocaleDateString("pt-BR");
+    const subject = `[Site WPS One] Nova conta (teste ${TRIAL_DAYS} dias) — ${company}`;
+    const html = renderEmailLayout({
+      subject,
+      title: "Nova conta criada na landing",
+      preheader: `${name} · ${company} — teste até ${trialLabel}`,
+      summaryRows: [
+        { label: "Nome", value: name },
+        { label: "E-mail", value: email },
+        { label: "Telefone", value: phone },
+        { label: "Empresa", value: company },
+        { label: "Colaboradores", value: employees },
+        { label: "Teste até", value: trialLabel },
+      ],
+      bodyHtml: `
+        <div style="margin:0 0 10px 0;color:#64748b;font-size:12px;line-height:18px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">
+          Necessidade
+        </div>
+        <div style="border:1px solid #e5e7eb;border-radius:14px;background:#f8fafc;padding:14px 16px;color:#0f172a;font-size:14px;line-height:22px;white-space:pre-wrap">
+          ${escapeHtmlTemplate(need)}
+        </div>
+        <div style="margin-top:14px;color:#64748b;font-size:12px;line-height:18px">
+          Tenant: ${escapeHtmlTemplate(created.tenant.slug)} · após o teste, o acesso bloqueia sem assinatura em Minha Assinatura.
+        </div>
+      `,
+    });
+    void sendMail({ to: CONTACT_TO, subject, html }).catch((err) => {
+      console.error("[public-signup] mail", errorSummary(err));
+    });
+
+    res.status(201).json({
+      ok: true,
+      trialDays: TRIAL_DAYS,
+      trialEndsAt: created.trialEndsAt.toISOString(),
+      message: `Conta criada. Você tem ${TRIAL_DAYS} dias de teste grátis. Faça login e, antes do fim do período, escolha um plano em Configurações → Minha Assinatura.`,
+    });
+  } catch (err) {
+    const code =
+      err && typeof err === "object" && "code" in err
+        ? String((err as { code?: string }).code)
+        : "";
+    if (code === "EMAIL_IN_USE" || code === "P2002") {
+      res.status(400).json({ error: "E-mail já cadastrado. Faça login ou use outro e-mail." });
       return;
     }
-    res.json({ ok: true });
-  } catch (err) {
-    console.error("[public-signup-request]", errorSummary(err));
-    res.status(500).json({ error: "Não foi possível enviar sua solicitação. Tente novamente mais tarde." });
+    console.error("[public-signup]", errorSummary(err));
+    res.status(500).json({ error: "Não foi possível criar sua conta. Tente novamente mais tarde." });
   }
 });

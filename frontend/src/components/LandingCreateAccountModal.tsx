@@ -24,6 +24,8 @@ export function LandingCreateAccountModal({ open, onClose, isDark }: Props) {
   const [company, setCompany] = useState("");
   const [employees, setEmployees] = useState("");
   const [need, setNeed] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
@@ -57,12 +59,27 @@ export function LandingCreateAccountModal({ open, onClose, isDark }: Props) {
     ["--tw-ring-color" as string]: `${PURPLE}55`,
   };
 
+  function resetForm() {
+    setName("");
+    setEmail("");
+    setPhone("");
+    setCompany("");
+    setEmployees("");
+    setNeed("");
+    setPassword("");
+    setPasswordConfirm("");
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setFeedback(null);
+    if (password !== passwordConfirm) {
+      setFeedback({ type: "err", text: "A confirmação de senha não confere." });
+      return;
+    }
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/public/signup-request`, {
+      const res = await fetch(`${API_BASE_URL}/api/public/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -72,23 +89,26 @@ export function LandingCreateAccountModal({ open, onClose, isDark }: Props) {
           company: company.trim(),
           employees: employees.trim(),
           need: need.trim(),
+          password,
+          passwordConfirm,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        trialDays?: number;
+      };
       if (!res.ok) {
-        setFeedback({ type: "err", text: data.error ?? "Não foi possível enviar. Tente novamente." });
+        setFeedback({ type: "err", text: data.error ?? "Não foi possível criar a conta." });
         return;
       }
       setFeedback({
         type: "ok",
-        text: "Solicitação enviada. Em breve entraremos em contato para criar sua conta.",
+        text:
+          data.message ??
+          `Conta criada com ${data.trialDays ?? 7} dias de teste. Faça login e escolha um plano em Minha Assinatura antes do fim do período.`,
       });
-      setName("");
-      setEmail("");
-      setPhone("");
-      setCompany("");
-      setEmployees("");
-      setNeed("");
+      resetForm();
     } catch {
       setFeedback({
         type: "err",
@@ -139,7 +159,8 @@ export function LandingCreateAccountModal({ open, onClose, isDark }: Props) {
               Criar conta
             </h2>
             <p className="mt-1 text-sm" style={{ color: muted }}>
-              Preencha os dados abaixo. Nossa equipe libera o acesso e retorna o contato.
+              7 dias de teste grátis. Depois, assine em Configurações → Minha Assinatura para manter o
+              acesso.
             </p>
           </div>
           <button
@@ -218,56 +239,88 @@ export function LandingCreateAccountModal({ open, onClose, isDark }: Props) {
             <legend className="text-sm font-medium" style={{ color: labelColor }}>
               2. Qual o nome da sua empresa?
             </legend>
-            <label className="block space-y-1.5">
-              <span className="sr-only">Nome da empresa</span>
-              <input
-                required
-                maxLength={200}
-                autoComplete="organization"
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-                className={inputClass}
-                style={inputStyle}
-                placeholder="Nome da empresa"
-              />
-            </label>
+            <input
+              required
+              maxLength={200}
+              autoComplete="organization"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+              className={inputClass}
+              style={inputStyle}
+              placeholder="Nome da empresa"
+            />
           </fieldset>
 
           <fieldset className="space-y-3">
             <legend className="text-sm font-medium" style={{ color: labelColor }}>
               3. Quantos colaboradores tem a sua empresa?
             </legend>
-            <label className="block space-y-1.5">
-              <span className="sr-only">Número de colaboradores</span>
-              <input
-                required
-                maxLength={80}
-                value={employees}
-                onChange={(e) => setEmployees(e.target.value)}
-                className={inputClass}
-                style={inputStyle}
-                placeholder="Ex.: 1–10, 11–50, 50+"
-              />
-            </label>
+            <input
+              required
+              maxLength={80}
+              value={employees}
+              onChange={(e) => setEmployees(e.target.value)}
+              className={inputClass}
+              style={inputStyle}
+              placeholder="Ex.: 1–10, 11–50, 50+"
+            />
           </fieldset>
 
           <fieldset className="space-y-3">
             <legend className="text-sm font-medium" style={{ color: labelColor }}>
               4. Qual sua necessidade atual?
             </legend>
-            <label className="block space-y-1.5">
-              <span className="sr-only">Necessidade atual</span>
-              <textarea
-                required
-                rows={3}
-                maxLength={2000}
-                value={need}
-                onChange={(e) => setNeed(e.target.value)}
-                className={`${inputClass} resize-y min-h-[88px]`}
-                style={inputStyle}
-                placeholder="Ex.: Gestão de projetos, financeiro, previsibilidade de margem…"
-              />
-            </label>
+            <textarea
+              required
+              rows={3}
+              maxLength={2000}
+              value={need}
+              onChange={(e) => setNeed(e.target.value)}
+              className={`${inputClass} resize-y min-h-[88px]`}
+              style={inputStyle}
+              placeholder="Ex.: Gestão de projetos, financeiro, previsibilidade de margem…"
+            />
+          </fieldset>
+
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-medium" style={{ color: labelColor }}>
+              5. Senha de acesso
+            </legend>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium" style={{ color: muted }}>
+                  Senha
+                </span>
+                <input
+                  required
+                  type="password"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={inputClass}
+                  style={inputStyle}
+                  placeholder="Mín. 8 caracteres"
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium" style={{ color: muted }}>
+                  Confirmar senha
+                </span>
+                <input
+                  required
+                  type="password"
+                  autoComplete="new-password"
+                  value={passwordConfirm}
+                  onChange={(e) => setPasswordConfirm(e.target.value)}
+                  className={inputClass}
+                  style={inputStyle}
+                  placeholder="Repita a senha"
+                />
+              </label>
+            </div>
+            <p className="text-xs" style={{ color: muted }}>
+              Use no mínimo 8 caracteres, com 1 maiúscula, 1 número e 1 caractere especial.
+            </p>
           </fieldset>
 
           {feedback ? (
@@ -309,7 +362,7 @@ export function LandingCreateAccountModal({ open, onClose, isDark }: Props) {
               className="inline-flex h-10 items-center rounded-full px-6 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 disabled:opacity-60"
               style={{ background: PURPLE }}
             >
-              {submitting ? "Enviando…" : feedback?.type === "ok" ? "Enviado" : "Enviar solicitação"}
+              {submitting ? "Criando…" : feedback?.type === "ok" ? "Conta criada" : "Criar conta"}
             </button>
           </div>
         </form>

@@ -22,7 +22,7 @@ export type PlatformPlanRecord = {
   sortOrder: number;
 };
 
-export type SubscriptionStatus = "active" | "canceling" | "locked" | "none";
+export type SubscriptionStatus = "active" | "canceling" | "locked" | "none" | "trial";
 
 export const SUBSCRIPTION_PAYMENT_METHODS = {
   PIX: { id: "PIX" as const, label: "Pix" },
@@ -50,7 +50,13 @@ export function subscriptionPaymentMethodLabel(
 export function normalizeSubscriptionStatus(
   value: string | null | undefined,
 ): SubscriptionStatus {
-  if (value === "active" || value === "canceling" || value === "locked" || value === "none") {
+  if (
+    value === "active" ||
+    value === "canceling" ||
+    value === "locked" ||
+    value === "none" ||
+    value === "trial"
+  ) {
     return value;
   }
   return "none";
@@ -182,6 +188,7 @@ export function buildSubscriptionPayload(params: {
   let status = normalizeSubscriptionStatus(params.status);
   if (status === "none" && plan) status = "active";
   if (!plan && status === "active") status = "none";
+  // trial permanece trial mesmo sem plano (teste grátis da landing).
 
   const modules = planModulesFromRecord(plan);
   const accessUntil = params.accessUntil ?? null;
@@ -190,11 +197,13 @@ export function buildSubscriptionPayload(params: {
   const statusLabel =
     status === "active"
       ? "Ativa"
-      : status === "canceling"
-        ? "Cancelamento agendado"
-        : status === "locked"
-          ? "Encerrada"
-          : "Não configurada";
+      : status === "trial"
+        ? "Teste grátis"
+        : status === "canceling"
+          ? "Cancelamento agendado"
+          : status === "locked"
+            ? "Encerrada"
+            : "Não configurada";
 
   return {
     planId: plan?.id ?? params.planId ?? null,
@@ -215,8 +224,12 @@ export function buildSubscriptionPayload(params: {
     accessUntil: accessUntil ? accessUntil.toISOString() : null,
     modules,
     moduleLabels: PLAN_MODULES.filter((m) => modules[m]).map((m) => PLAN_MODULE_LABELS[m]),
-    note: plan
-      ? `Cobrança por usuário ativo · ${plan.name}`
-      : "Escolha um plano cadastrado no painel da plataforma.",
+    note: status === "trial"
+      ? accessUntil
+        ? `Teste grátis até ${accessUntil.toLocaleDateString("pt-BR")}. Escolha um plano em Minha Assinatura para continuar.`
+        : "Teste grátis. Escolha um plano em Minha Assinatura para continuar após o período."
+      : plan
+        ? `Cobrança por usuário ativo · ${plan.name}`
+        : "Escolha um plano cadastrado no painel da plataforma.",
   };
 }

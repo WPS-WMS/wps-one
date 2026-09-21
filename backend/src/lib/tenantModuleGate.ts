@@ -115,7 +115,7 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
   let status = normalizeSubscriptionStatus(tenant.subscriptionStatus);
   let accessUntil = tenant.subscriptionAccessUntil;
 
-  if (status === "canceling" && accessUntil) {
+  if ((status === "canceling" || status === "trial") && accessUntil) {
     const limit = endOfUtcDay(accessUntil);
     if (Date.now() > limit.getTime()) {
       await prisma.tenant.update({
