@@ -415,6 +415,10 @@ model User {
   inativacaoMotivo      String?
   /// SUPER_ADMIN provisionado pela Platform na criação do tenant (oculto na lista de usuários).
   isPrimaryAdmin        Boolean  @default(false)
+  /// Addons do plano atribuídos a este usuário (cobrança por seat).
+  addonSharepoint       Boolean  @default(false)
+  addonComercial        Boolean  @default(false)
+  addonRh               Boolean  @default(false)
 
   tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   skillProfile          SkillProfile? @relation(fields: [skillProfileId], references: [id], onDelete: SetNull)

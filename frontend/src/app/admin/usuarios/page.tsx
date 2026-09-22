@@ -79,6 +79,16 @@ type UserRow = {
     status: string;
     personType: string;
   } | null;
+  addonSharepoint?: boolean;
+  addonComercial?: boolean;
+  addonRh?: boolean;
+  licenseLabels?: string[];
+  availableAddons?: {
+    sharepoint: boolean;
+    comercial: boolean;
+    rh: boolean;
+  };
+  planLabel?: string | null;
 };
 
 const formLabelClass = "block text-sm font-medium text-[color:var(--muted-foreground)] mb-1.5";
@@ -133,6 +143,91 @@ function EmergencyContactSection({
           placeholder="(00) 00000-0000"
           inputMode="tel"
         />
+      </div>
+    </FormModalSection>
+  );
+}
+
+type AvailableAddons = { sharepoint: boolean; comercial: boolean; rh: boolean };
+type AddonFlags = { sharepoint: boolean; comercial: boolean; rh: boolean };
+
+const ADDON_OPTIONS: Array<{
+  id: keyof AddonFlags;
+  label: string;
+}> = [
+  { id: "sharepoint", label: "Sincronizador Cloud2Cloud" },
+  { id: "comercial", label: "Comercial" },
+  { id: "rh", label: "RH" },
+];
+
+function UserAddonLicensesSection({
+  role,
+  needsClientLink,
+  available,
+  planLabel,
+  value,
+  onChange,
+}: {
+  role: string;
+  needsClientLink: (role: string) => boolean;
+  available: AvailableAddons;
+  planLabel?: string | null;
+  value: AddonFlags;
+  onChange: (next: AddonFlags) => void;
+}) {
+  const isCliente = needsClientLink(role) || role === "CLIENTE";
+  const enabledOptions = ADDON_OPTIONS.filter((o) => available[o.id]);
+  if (isCliente) {
+    return (
+      <FormModalSection
+        title="Licenças"
+        description="Perfil Cliente não entra na cobrança do plano nem de addons."
+      >
+        <p className="text-sm text-[color:var(--muted-foreground)]">Não cobrado</p>
+      </FormModalSection>
+    );
+  }
+  if (enabledOptions.length === 0) {
+    return (
+      <FormModalSection
+        title="Licenças"
+        description={
+          planLabel
+            ? `Plano atual: ${planLabel}. Este plano não inclui addons.`
+            : "Configure um plano com addons em Minha Assinatura / painel da plataforma."
+        }
+      >
+        <p className="text-sm text-[color:var(--muted-foreground)]">
+          {planLabel ? `${planLabel} (sem addons)` : "Plano não configurado"}
+        </p>
+      </FormModalSection>
+    );
+  }
+  return (
+    <FormModalSection
+      title="Licenças / Addons"
+      description={
+        planLabel
+          ? `Plano ${planLabel}: marque os addons que este usuário pode usar (entra na cobrança).`
+          : "Marque os addons atribuídos a este usuário."
+      }
+    >
+      <div className="space-y-2">
+        {enabledOptions.map((opt) => (
+          <label
+            key={opt.id}
+            className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <input
+              type="checkbox"
+              checked={value[opt.id]}
+              onChange={(e) => onChange({ ...value, [opt.id]: e.target.checked })}
+              className="accent-[color:var(--primary)]"
+            />
+            <span>{opt.label}</span>
+          </label>
+        ))}
       </div>
     </FormModalSection>
   );
@@ -277,6 +372,12 @@ export default function UsuariosPage() {
   const [statusUser, setStatusUser] = useState<UserRow | null>(null);
   const [clientsById, setClientsById] = useState<Record<string, string>>({});
   const [profiles, setProfiles] = useState<UserProfileOption[]>([]);
+  const [availableAddons, setAvailableAddons] = useState<AvailableAddons>({
+    sharepoint: false,
+    comercial: false,
+    rh: false,
+  });
+  const [planLabel, setPlanLabel] = useState<string | null>(null);
 
   const roleSelectOptions = useMemo(
     () => profiles.map((p) => ({ value: p.code, label: p.name })),
@@ -314,7 +415,12 @@ export default function UsuariosPage() {
         if (!Array.isArray(data)) return [];
         return data as UserRow[];
       })
-      .then((data) => setUsers(data))
+      .then((data) => {
+        setUsers(data);
+        const first = data.find((u) => u.availableAddons || u.planLabel);
+        if (first?.availableAddons) setAvailableAddons(first.availableAddons);
+        if (first?.planLabel) setPlanLabel(first.planLabel);
+      })
       .catch((err) => {
         setUsers([]);
         setLoadError(String(err?.message || "Erro ao carregar usuários."));
@@ -334,6 +440,31 @@ export default function UsuariosPage() {
       })
       .then(setProfiles)
       .catch(() => setProfiles([]));
+  }, []);
+
+  useEffect(() => {
+    apiFetch("/api/tenants/me/subscription")
+      .then(async (r) => {
+        if (!r.ok) return null;
+        return r.json().catch(() => null);
+      })
+      .then((body) => {
+        if (!body?.subscription) return;
+        const modules = body.subscription.modules as
+          | { sharepoint?: boolean; comercial?: boolean; rh?: boolean }
+          | undefined;
+        if (modules) {
+          setAvailableAddons({
+            sharepoint: !!modules.sharepoint,
+            comercial: !!modules.comercial,
+            rh: !!modules.rh,
+          });
+        }
+        if (body.subscription.planLabel) {
+          setPlanLabel(String(body.subscription.planLabel));
+        }
+      })
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -363,7 +494,7 @@ export default function UsuariosPage() {
         <div className="max-w-6xl mx-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-[color:var(--foreground)]">Usuários</h1>
           <p className="text-xs md:text-sm text-[color:var(--muted-foreground)] mt-1">
-            Gerencie todos os usuários do sistema.
+            Gerencie usuários, perfis e licenças (plano e addons). Perfil Cliente não é cobrado.
           </p>
         </div>
       </header>
@@ -456,12 +587,13 @@ export default function UsuariosPage() {
           )}
           <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[880px]">
+              <table className="w-full min-w-[1000px]">
                 <thead>
                   <tr className="border-b border-[color:var(--border)] bg-[color:var(--surface)]/80 text-left text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
                     <th className="px-6 py-3">Nome</th>
                     <th className="px-6 py-3">E-mail</th>
                     <th className="px-6 py-3">Tipo</th>
+                    <th className="px-6 py-3">Licenças</th>
                     <th className="px-6 py-3">Cargo</th>
                     <th className="px-6 py-3">Empresas</th>
                     <th className="px-6 py-3 text-center">Status</th>
@@ -482,6 +614,16 @@ export default function UsuariosPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-[color:var(--muted-foreground)]">{labelForRole(u.role)}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div
+                          className="max-w-[280px] truncate text-sm text-[color:var(--muted-foreground)]"
+                          title={(u.licenseLabels ?? []).join(", ")}
+                        >
+                          {(u.licenseLabels ?? []).length > 0
+                            ? u.licenseLabels!.join(", ")
+                            : "—"}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-[color:var(--muted-foreground)]">{u.cargo || "—"}</div>
@@ -545,6 +687,8 @@ export default function UsuariosPage() {
           roleSelectOptions={roleSelectOptions}
           needsTimeEntry={needsTimeEntry}
           needsClientLink={needsClientLink}
+          availableAddons={availableAddons}
+          planLabel={planLabel}
           onClose={() => setModalOpen(false)}
           onSaved={() => {
             setModalOpen(false);
@@ -561,6 +705,8 @@ export default function UsuariosPage() {
           roleSelectOptions={roleSelectOptions}
           needsTimeEntry={needsTimeEntry}
           needsClientLink={needsClientLink}
+          availableAddons={availableAddons}
+          planLabel={planLabel}
           onClose={() => setEditingUser(null)}
           onSaved={() => {
             setEditingUser(null);
@@ -902,12 +1048,16 @@ function NovoUsuarioModal({
   roleSelectOptions,
   needsTimeEntry,
   needsClientLink,
+  availableAddons,
+  planLabel,
   onClose,
   onSaved,
 }: {
   roleSelectOptions: Array<{ value: string; label: string }>;
   needsTimeEntry: (role: string) => boolean;
   needsClientLink: (role: string) => boolean;
+  availableAddons: AvailableAddons;
+  planLabel?: string | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -924,6 +1074,11 @@ function NovoUsuarioModal({
   const [seeAllProjects, setSeeAllProjects] = useState(false);
   const [visibleProjectIds, setVisibleProjectIds] = useState<string[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
+  const [addonFlags, setAddonFlags] = useState<AddonFlags>({
+    sharepoint: false,
+    comercial: false,
+    rh: false,
+  });
   const [permitirMaisHoras, setPermitirMaisHoras] = useState(false);
   const [permitirFimDeSemana, setPermitirFimDeSemana] = useState(false);
   const [permitirOutroPeriodo, setPermitirOutroPeriodo] = useState(false);
@@ -1029,6 +1184,9 @@ function NovoUsuarioModal({
         skillProfileId: needsClientLink(role) ? null : skillProfileId || null,
         emergencyContactName: emergencyContactName.trim() || null,
         emergencyContactPhone: emergencyContactPhone.replace(/\D/g, "") || null,
+        addonSharepoint: needsClientLink(role) ? false : addonFlags.sharepoint,
+        addonComercial: needsClientLink(role) ? false : addonFlags.comercial,
+        addonRh: needsClientLink(role) ? false : addonFlags.rh,
       };
       if (role !== "CLIENTE") {
         body.birthDate = birthDate || undefined;
@@ -1168,7 +1326,12 @@ function NovoUsuarioModal({
                   id="usuario-novo-perfil"
                   value={role}
                   options={roleSelectOptions}
-                  onChange={setRole}
+                  onChange={(next) => {
+                    setRole(next);
+                    if (needsClientLink(next) || next === "CLIENTE") {
+                      setAddonFlags({ sharepoint: false, comercial: false, rh: false });
+                    }
+                  }}
                   placeholder="Selecione o perfil"
                 />
               </div>
@@ -1251,6 +1414,15 @@ function NovoUsuarioModal({
                 </div>
               </FormModalSection>
             )}
+
+            <UserAddonLicensesSection
+              role={role}
+              needsClientLink={needsClientLink}
+              available={availableAddons}
+              planLabel={planLabel}
+              value={addonFlags}
+              onChange={setAddonFlags}
+            />
 
             <EmergencyContactSection
               name={emergencyContactName}
@@ -1429,6 +1601,8 @@ function EditarUsuarioModal({
   roleSelectOptions,
   needsTimeEntry,
   needsClientLink,
+  availableAddons,
+  planLabel,
   onClose,
   onSaved,
 }: {
@@ -1438,6 +1612,8 @@ function EditarUsuarioModal({
   roleSelectOptions: Array<{ value: string; label: string }>;
   needsTimeEntry: (role: string) => boolean;
   needsClientLink: (role: string) => boolean;
+  availableAddons: AvailableAddons;
+  planLabel?: string | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -1463,6 +1639,11 @@ function EditarUsuarioModal({
     () => user.clientAccess?.[0]?.visibleProjects?.map((p) => p.projectId) ?? [],
   );
   const [clients, setClients] = useState<ClientOption[]>([]);
+  const [addonFlags, setAddonFlags] = useState<AddonFlags>({
+    sharepoint: !!user.addonSharepoint,
+    comercial: !!user.addonComercial,
+    rh: !!user.addonRh,
+  });
   const [permitirMaisHoras, setPermitirMaisHoras] = useState(user.permitirMaisHoras ?? false);
   const [permitirFimDeSemana, setPermitirFimDeSemana] = useState(user.permitirFimDeSemana ?? false);
   const [permitirOutroPeriodo, setPermitirOutroPeriodo] = useState(user.permitirOutroPeriodo ?? false);
@@ -1592,6 +1773,9 @@ function EditarUsuarioModal({
         skillProfileId: needsClientLink(role) ? null : skillProfileId || null,
         emergencyContactName: emergencyContactName.trim() || null,
         emergencyContactPhone: emergencyContactPhone.replace(/\D/g, "") || null,
+        addonSharepoint: needsClientLink(role) ? false : addonFlags.sharepoint,
+        addonComercial: needsClientLink(role) ? false : addonFlags.comercial,
+        addonRh: needsClientLink(role) ? false : addonFlags.rh,
       };
       if (role !== "CLIENTE") {
         body.birthDate = birthDate || undefined;
@@ -1815,7 +1999,12 @@ function EditarUsuarioModal({
                   id="usuario-edit-perfil"
                   value={role}
                   options={roleSelectOptions}
-                  onChange={setRole}
+                  onChange={(next) => {
+                    setRole(next);
+                    if (needsClientLink(next) || next === "CLIENTE") {
+                      setAddonFlags({ sharepoint: false, comercial: false, rh: false });
+                    }
+                  }}
                   placeholder="Selecione o perfil"
                 />
               </div>
@@ -1898,6 +2087,15 @@ function EditarUsuarioModal({
                 </div>
               </FormModalSection>
             )}
+
+            <UserAddonLicensesSection
+              role={role}
+              needsClientLink={needsClientLink}
+              available={availableAddons}
+              planLabel={planLabel}
+              value={addonFlags}
+              onChange={setAddonFlags}
+            />
 
             <EmergencyContactSection
               name={emergencyContactName}

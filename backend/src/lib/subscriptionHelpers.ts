@@ -1,6 +1,7 @@
 import { prisma } from "./prisma.js";
 import {
   buildSubscriptionPayload,
+  type AddonSeatCounts,
   type PlatformPlanRecord,
 } from "./platformPlans.js";
 
@@ -61,9 +62,38 @@ export async function findPlatformPlanById(id: string) {
   return prisma.platformPlan.findUnique({ where: { id } });
 }
 
+/** Conta seats de addon a partir dos usuários ativos cobráveis (exclui Cliente). */
+export async function countAddonSeatsFromUsers(tenantId: string): Promise<AddonSeatCounts> {
+  const whereBase = {
+    tenantId,
+    ativo: true as const,
+    role: { notIn: ["PLATFORM_ADMIN", "CLIENTE"] },
+  };
+  const [sharepoint, comercial, rh] = await Promise.all([
+    prisma.user.count({ where: { ...whereBase, addonSharepoint: true } }),
+    prisma.user.count({ where: { ...whereBase, addonComercial: true } }),
+    prisma.user.count({ where: { ...whereBase, addonRh: true } }),
+  ]);
+  return { sharepoint, comercial, rh };
+}
+
+export async function syncTenantAddonSeatsFromUsers(tenantId: string): Promise<AddonSeatCounts> {
+  const seats = await countAddonSeatsFromUsers(tenantId);
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: {
+      subscriptionAddonSharepointUsers: seats.sharepoint,
+      subscriptionAddonComercialUsers: seats.comercial,
+      subscriptionAddonRhUsers: seats.rh,
+    },
+  });
+  return seats;
+}
+
 export function subscriptionPayloadForTenant(
   tenant: TenantSubscriptionRow,
   billableUsersActive: number,
+  addonSeatsOverride?: AddonSeatCounts | null,
 ) {
   return buildSubscriptionPayload({
     plan: tenant.platformPlan,
@@ -76,7 +106,7 @@ export function subscriptionPayloadForTenant(
     canceledAt: tenant.subscriptionCanceledAt,
     accessUntil: tenant.subscriptionAccessUntil,
     billableUsersActive,
-    addonSeats: {
+    addonSeats: addonSeatsOverride ?? {
       sharepoint: tenant.subscriptionAddonSharepointUsers ?? 0,
       comercial: tenant.subscriptionAddonComercialUsers ?? 0,
       rh: tenant.subscriptionAddonRhUsers ?? 0,

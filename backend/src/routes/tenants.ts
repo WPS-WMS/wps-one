@@ -7,7 +7,6 @@ import { isTenantSignupAllowed } from "../lib/deployEnv.js";
 import {
   computeNextSubscriptionPaymentAt,
   isSubscriptionPaymentMethodId,
-  normalizeAddonSeats,
   resolveNextPaymentAt,
   serializePlan,
   SUBSCRIPTION_PAYMENT_METHODS,
@@ -15,6 +14,7 @@ import {
 import {
   findPlatformPlanById,
   listPlatformPlans,
+  countAddonSeatsFromUsers,
   subscriptionPayloadForTenant,
   TENANT_SUBSCRIPTION_SELECT,
 } from "../lib/subscriptionHelpers.js";
@@ -158,7 +158,12 @@ tenantsRouter.get("/me/subscription", authMiddleware, async (req, res) => {
       return;
     }
     const usage = await getTenantUsageSnapshot(tenant.id);
-    const subscription = subscriptionPayloadForTenant(tenant, usage.billableUsersActive);
+    const addonSeats = await countAddonSeatsFromUsers(tenant.id);
+    const subscription = subscriptionPayloadForTenant(
+      tenant,
+      usage.billableUsersActive,
+      addonSeats,
+    );
     const plans = await listPlatformPlans({ activeOnly: true });
     res.json({
       tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug },
@@ -173,6 +178,8 @@ tenantsRouter.get("/me/subscription", authMiddleware, async (req, res) => {
         id: m.id,
         label: m.label,
       })),
+      licenseNote:
+        "Addons são atribuídos em Configurações > Usuários. Perfil Cliente não entra na cobrança.",
     });
   } catch (err) {
     console.error("[tenants] GET me/subscription", errorSummary(err));
@@ -217,10 +224,6 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
     }
   }
 
-  const addonSeatsRaw = body.addonSeats;
-  const hasAddonSeatsPayload =
-    addonSeatsRaw != null && typeof addonSeatsRaw === "object" && !Array.isArray(addonSeatsRaw);
-
   try {
     const existing = await prisma.tenant.findUnique({
       where: { id: user.tenantId },
@@ -235,8 +238,7 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
     if (
       existing.subscriptionStatus === "canceling" &&
       planId === undefined &&
-      paymentMethod === undefined &&
-      !hasAddonSeatsPayload
+      paymentMethod === undefined
     ) {
       res.status(400).json({ error: "Assinatura em cancelamento. Nenhuma alteração pendente." });
       return;
@@ -261,7 +263,6 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
         nextCanceledAt = null;
         nextAccessUntil = null;
       } else {
-        // Limpar plano imediatamente só se ainda não estava ativo com período.
         nextStarted = null;
         nextPayment = null;
         nextMethod = null;
@@ -275,19 +276,26 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
       planRecord ??
       (nextPlanId ? await findPlatformPlanById(nextPlanId) : null);
 
-    const usage = await getTenantUsageSnapshot(existing.id);
-    const nextAddonSeats = nextPlanId
-      ? normalizeAddonSeats(
-          hasAddonSeatsPayload
-            ? (addonSeatsRaw as { sharepoint?: number; comercial?: number; rh?: number })
-            : {
-                sharepoint: existing.subscriptionAddonSharepointUsers,
-                comercial: existing.subscriptionAddonComercialUsers,
-                rh: existing.subscriptionAddonRhUsers,
-              },
-          resolvedPlan,
-          usage.billableUsersActive,
-        )
+    // Se o plano mudou, remove addons dos usuários que o novo plano não inclui.
+    if (planId !== undefined) {
+      const clearData: {
+        addonSharepoint?: boolean;
+        addonComercial?: boolean;
+        addonRh?: boolean;
+      } = {};
+      if (!resolvedPlan?.moduleSharepoint) clearData.addonSharepoint = false;
+      if (!resolvedPlan?.moduleComercial) clearData.addonComercial = false;
+      if (!resolvedPlan?.moduleRh) clearData.addonRh = false;
+      if (Object.keys(clearData).length > 0) {
+        await prisma.user.updateMany({
+          where: { tenantId: existing.id },
+          data: clearData,
+        });
+      }
+    }
+
+    const addonSeats = nextPlanId
+      ? await countAddonSeatsFromUsers(existing.id)
       : { sharepoint: 0, comercial: 0, rh: 0 };
 
     const updated = await prisma.tenant.update({
@@ -301,15 +309,20 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
         subscriptionStatus: nextStatus,
         subscriptionCanceledAt: nextCanceledAt,
         subscriptionAccessUntil: nextAccessUntil,
-        subscriptionAddonSharepointUsers: nextAddonSeats.sharepoint,
-        subscriptionAddonComercialUsers: nextAddonSeats.comercial,
-        subscriptionAddonRhUsers: nextAddonSeats.rh,
+        subscriptionAddonSharepointUsers: addonSeats.sharepoint,
+        subscriptionAddonComercialUsers: addonSeats.comercial,
+        subscriptionAddonRhUsers: addonSeats.rh,
       },
       select: TENANT_SUBSCRIPTION_SELECT,
     });
 
     const usageAfter = await getTenantUsageSnapshot(updated.id);
-    const subscription = subscriptionPayloadForTenant(updated, usageAfter.billableUsersActive);
+    const seatsAfter = await countAddonSeatsFromUsers(updated.id);
+    const subscription = subscriptionPayloadForTenant(
+      updated,
+      usageAfter.billableUsersActive,
+      seatsAfter,
+    );
 
     res.json({
       tenant: { id: updated.id, name: updated.name, slug: updated.slug },

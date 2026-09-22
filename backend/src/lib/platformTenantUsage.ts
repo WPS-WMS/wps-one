@@ -3,7 +3,7 @@ import { prisma } from "./prisma.js";
 export type TenantUsageSnapshot = {
   usersTotal: number;
   usersActive: number;
-  /** Usuários ativos cobráveis (exclui PLATFORM_ADMIN). */
+  /** Usuários ativos cobráveis (exclui PLATFORM_ADMIN e CLIENTE). */
   billableUsersActive: number;
   projects: number;
   storageBytes: number;
@@ -82,7 +82,11 @@ export async function getTenantUsageSnapshot(tenantId: string): Promise<TenantUs
       prisma.user.count({ where: { tenantId } }),
       prisma.user.count({ where: { tenantId, ativo: true } }),
       prisma.user.count({
-        where: { tenantId, ativo: true, role: { not: "PLATFORM_ADMIN" } },
+        where: {
+          tenantId,
+          ativo: true,
+          role: { notIn: ["PLATFORM_ADMIN", "CLIENTE"] },
+        },
       }),
       prisma.project.count({ where: { client: { tenantId } } }),
       sumAttachmentBytes(tenantId),

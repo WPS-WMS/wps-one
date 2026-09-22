@@ -122,7 +122,6 @@ export function MySubscriptionPageContent() {
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [plan, setPlan] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
-  const [addonSeats, setAddonSeats] = useState({ sharepoint: 0, comercial: 0, rh: 0 });
   const [confirmCancel, setConfirmCancel] = useState(false);
 
   const allowed = permissionsReady && can("configuracoes.assinatura");
@@ -150,11 +149,6 @@ export function MySubscriptionPageContent() {
       setPlan(row.subscription.planId ?? row.subscription.plan ?? "");
       const method = row.subscription.paymentMethod ?? "";
       setPaymentMethod(method === "BOLETO" ? "" : method);
-      setAddonSeats({
-        sharepoint: row.subscription.addonSeats?.sharepoint ?? 0,
-        comercial: row.subscription.addonSeats?.comercial ?? 0,
-        rh: row.subscription.addonSeats?.rh ?? 0,
-      });
       setLoading(false);
     })();
     return () => {
@@ -172,7 +166,6 @@ export function MySubscriptionPageContent() {
       body: JSON.stringify({
         planId: plan || null,
         paymentMethod: plan ? paymentMethod || null : null,
-        addonSeats: plan ? addonSeats : { sharepoint: 0, comercial: 0, rh: 0 },
       }),
     });
     const body = await r.json().catch(() => null);
@@ -195,11 +188,6 @@ export function MySubscriptionPageContent() {
     setPlan(row.subscription.planId ?? row.subscription.plan ?? "");
     const nextMethod = row.subscription.paymentMethod ?? "";
     setPaymentMethod(nextMethod === "BOLETO" ? "" : nextMethod);
-    setAddonSeats({
-      sharepoint: row.subscription.addonSeats?.sharepoint ?? 0,
-      comercial: row.subscription.addonSeats?.comercial ?? 0,
-      rh: row.subscription.addonSeats?.rh ?? 0,
-    });
     setSaveMsg("Assinatura atualizada.");
     await refreshSession?.();
     // Garante menus/rotas com os módulos do novo plano.
@@ -268,14 +256,7 @@ export function MySubscriptionPageContent() {
   const hasPlan = Boolean(data?.subscription.planId ?? data?.subscription.plan);
   const accessUntilLabel = fmtDate(data?.subscription.accessUntil);
   const selectedPlan = plans.find((p) => p.id === plan) ?? null;
-  const selectedAddons = selectedPlan?.addons ?? [];
-  const billableMax = data?.usage.billableUsersActive ?? 0;
-
-  function setAddonSeatCount(id: "sharepoint" | "comercial" | "rh", raw: string) {
-    const n = Math.floor(Number(raw));
-    const clamped = !Number.isFinite(n) || n < 0 ? 0 : Math.min(n, billableMax);
-    setAddonSeats((prev) => ({ ...prev, [id]: clamped }));
-  }
+  const selectedAddons = selectedPlan?.addons ?? data?.subscription.addons ?? [];
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-6">
@@ -380,18 +361,7 @@ export function MySubscriptionPageContent() {
               placeholder="Não configurado"
               onChange={(next) => {
                 setPlan(next);
-                if (!next) {
-                  setPaymentMethod("");
-                  setAddonSeats({ sharepoint: 0, comercial: 0, rh: 0 });
-                  return;
-                }
-                const nextPlan = plans.find((p) => p.id === next);
-                const keep = {
-                  sharepoint: nextPlan?.modules?.sharepoint ? addonSeats.sharepoint : 0,
-                  comercial: nextPlan?.modules?.comercial ? addonSeats.comercial : 0,
-                  rh: nextPlan?.modules?.rh ? addonSeats.rh : 0,
-                };
-                setAddonSeats(keep);
+                if (!next) setPaymentMethod("");
               }}
               options={[
                 { value: "", label: "Não configurado" },
@@ -411,43 +381,40 @@ export function MySubscriptionPageContent() {
           {plan && selectedAddons.length > 0 ? (
             <div>
               <p className="mb-1 text-xs text-[color:var(--muted-foreground)]">
-                Usuários com acesso aos addons
+                Addons em uso
               </p>
               <p className="mb-2 text-[11px] text-[color:var(--muted-foreground)]">
-                Informe quantos usuários cobráveis (máx. {billableMax}) terão cada addon. O valor é
-                somado ao preço do plano.
+                Atribua addons em{" "}
+                <Link href={`${basePath}/usuarios`} className="text-[color:var(--primary)] hover:underline">
+                  Usuários
+                </Link>
+                . Perfil Cliente não é cobrado. A quantidade abaixo reflete quem está com a licença.
               </p>
               <div className="space-y-2">
-                {selectedAddons.map((addon) => (
-                  <div
-                    key={addon.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2.5"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">{addon.label}</p>
-                      <p className="text-[11px] text-[color:var(--muted-foreground)]">
-                        +{addon.pricePerUserFormatted} / usuário
+                {(data?.subscription.addons ?? selectedAddons).map((addon) => {
+                  const seats =
+                    "seats" in addon && typeof addon.seats === "number"
+                      ? addon.seats
+                      : data?.subscription.addonSeats?.[addon.id as "sharepoint" | "comercial" | "rh"] ??
+                        0;
+                  return (
+                    <div
+                      key={addon.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2.5"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">{addon.label}</p>
+                        <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                          +{addon.pricePerUserFormatted} / usuário
+                        </p>
+                      </div>
+                      <p className="text-sm tabular-nums font-medium">
+                        {seats} usuário{seats === 1 ? "" : "s"}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-[11px] text-[color:var(--muted-foreground)]">
-                        Usuários
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={billableMax}
-                        step={1}
-                        disabled={isCanceling || isLocked}
-                        value={addonSeats[addon.id]}
-                        onChange={(e) => setAddonSeatCount(addon.id, e.target.value)}
-                        className="w-20 rounded-lg border bg-transparent px-2 py-1.5 text-sm tabular-nums"
-                        style={{ borderColor: "var(--border)" }}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ) : null}

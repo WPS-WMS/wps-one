@@ -20,6 +20,12 @@ import {
   buildUserHistoryEntries,
 } from "../lib/userHistoryHelpers.js";
 import { validatePasswordPolicy } from "../lib/passwordPolicy.js";
+import {
+  buildUserLicenseLabels,
+  normalizeUserAddonFlags,
+  parseAddonFlagsFromBody,
+} from "../lib/userLicenseHelpers.js";
+import { syncTenantAddonSeatsFromUsers } from "../lib/subscriptionHelpers.js";
 
 function parseOptionalHourlyRate(raw: unknown): number | null | "invalid" | undefined {
   if (raw === undefined) return undefined;
@@ -377,6 +383,22 @@ usersRouter.get("/", async (req, res) => {
       : status === "ativos"
         ? { ativo: true }
         : {};
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: {
+      subscriptionPlan: true,
+      platformPlan: { select: { name: true, moduleSharepoint: true, moduleComercial: true, moduleRh: true } },
+    },
+  });
+  const planName = tenant?.platformPlan?.name ?? tenant?.subscriptionPlan ?? null;
+  const planForAddons = tenant?.platformPlan
+    ? ({
+        moduleSharepoint: tenant.platformPlan.moduleSharepoint,
+        moduleComercial: tenant.platformPlan.moduleComercial,
+        moduleRh: tenant.platformPlan.moduleRh,
+      } as const)
+    : null;
+
   const users = await prisma.user.findMany({
     where: {
       tenantId,
@@ -421,6 +443,9 @@ usersRouter.get("/", async (req, res) => {
       inativadoEm: true,
       inativacaoMotivo: true,
       createdAt: true,
+      addonSharepoint: true,
+      addonComercial: true,
+      addonRh: true,
       clientAccess: {
         select: {
           clientId: true,
@@ -434,7 +459,23 @@ usersRouter.get("/", async (req, res) => {
     },
     orderBy: { name: "asc" },
   });
-  res.json(users);
+  res.json(
+    users.map((u) => ({
+      ...u,
+      licenseLabels: buildUserLicenseLabels({
+        role: u.role,
+        ativo: u.ativo,
+        planName,
+        flags: u,
+      }),
+      availableAddons: {
+        sharepoint: !!planForAddons?.moduleSharepoint,
+        comercial: !!planForAddons?.moduleComercial,
+        rh: !!planForAddons?.moduleRh,
+      },
+      planLabel: planName,
+    })),
+  );
 });
 
 usersRouter.get("/client-projects", async (req, res) => {
@@ -712,6 +753,19 @@ usersRouter.post("/", async (req, res) => {
     }
     resolvedSkillProfileId = skill.id;
   }
+  const tenantPlan = await prisma.tenant.findUnique({
+    where: { id: authUser.tenantId },
+    select: {
+      platformPlan: {
+        select: { moduleSharepoint: true, moduleComercial: true, moduleRh: true },
+      },
+    },
+  });
+  const addonFlags = normalizeUserAddonFlags(
+    roleStr,
+    parseAddonFlagsFromBody(req.body as Record<string, unknown>),
+    tenantPlan?.platformPlan,
+  );
   const newUser = await prisma.user.create({
     data: {
       email: emailNorm,
@@ -751,6 +805,7 @@ usersRouter.post("/", async (req, res) => {
           : null,
       emergencyContactName: normalizeOptionalString(emergencyContactName),
       emergencyContactPhone: normalizeOptionalPhone(emergencyContactPhone),
+      ...addonFlags,
     },
     select: {
       id: true,
@@ -803,6 +858,7 @@ usersRouter.post("/", async (req, res) => {
       createdById: authUser.id,
     });
   }
+  await syncTenantAddonSeatsFromUsers(authUser.tenantId);
   res.json(newUser);
 });
 
@@ -1145,6 +1201,44 @@ usersRouter.patch("/:id", async (req, res) => {
       data.passwordHash = await hashPassword(String(password));
     }
 
+    const bodyHasAddons =
+      body.addonSharepoint !== undefined ||
+      body.addonComercial !== undefined ||
+      body.addonRh !== undefined ||
+      body.addons !== undefined ||
+      role !== undefined;
+    if (bodyHasAddons) {
+      const tenantPlan = await prisma.tenant.findUnique({
+        where: { id: authUser.tenantId },
+        select: {
+          platformPlan: {
+            select: { moduleSharepoint: true, moduleComercial: true, moduleRh: true },
+          },
+        },
+      });
+      const nextFlags = normalizeUserAddonFlags(
+        newRole,
+        {
+          addonSharepoint:
+            body.addonSharepoint !== undefined || body.addons !== undefined
+              ? parseAddonFlagsFromBody(body as Record<string, unknown>).addonSharepoint
+              : existing.addonSharepoint,
+          addonComercial:
+            body.addonComercial !== undefined || body.addons !== undefined
+              ? parseAddonFlagsFromBody(body as Record<string, unknown>).addonComercial
+              : existing.addonComercial,
+          addonRh:
+            body.addonRh !== undefined || body.addons !== undefined
+              ? parseAddonFlagsFromBody(body as Record<string, unknown>).addonRh
+              : existing.addonRh,
+        },
+        tenantPlan?.platformPlan,
+      );
+      data.addonSharepoint = nextFlags.addonSharepoint;
+      data.addonComercial = nextFlags.addonComercial;
+      data.addonRh = nextFlags.addonRh;
+    }
+
     const historyEntries = buildUserHistoryEntries(
       existing as unknown as Record<string, unknown>,
       data as unknown as Record<string, unknown>,
@@ -1242,9 +1336,14 @@ usersRouter.patch("/:id", async (req, res) => {
           diasPermitidos: true,
           createdAt: true,
           ativo: true,
+          addonSharepoint: true,
+          addonComercial: true,
+          addonRh: true,
         },
       });
     });
+
+    await syncTenantAddonSeatsFromUsers(authUser.tenantId);
 
     // Recorrências usam valor fixo: a nova taxa não se propaga sozinha para as parcelas futuras.
     let recurrenceWarning: { count: number; rules: Array<{ id: string; description: string }> } | null =
