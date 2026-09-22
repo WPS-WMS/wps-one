@@ -176,7 +176,7 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
   const modules = hasSubscription
     ? plan
       ? planModulesFromRecord(plan)
-      : { projetos: false, financeiro: false, portal: false, sharepoint: false }
+      : { projetos: false, financeiro: false, portal: false, sharepoint: false, comercial: false, rh: false }
     : planModulesFromRecord(null);
 
   // Addon (Portal / SharePoint):
