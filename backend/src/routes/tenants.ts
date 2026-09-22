@@ -15,6 +15,7 @@ import {
   findPlatformPlanById,
   listPlatformPlans,
   countAddonSeatsFromUsers,
+  listAddonAssigneesFromUsers,
   subscriptionPayloadForTenant,
   TENANT_SUBSCRIPTION_SELECT,
 } from "../lib/subscriptionHelpers.js";
@@ -158,11 +159,17 @@ tenantsRouter.get("/me/subscription", authMiddleware, async (req, res) => {
       return;
     }
     const usage = await getTenantUsageSnapshot(tenant.id);
-    const addonSeats = await countAddonSeatsFromUsers(tenant.id);
+    const addonAssignees = await listAddonAssigneesFromUsers(tenant.id);
+    const addonSeats = {
+      sharepoint: addonAssignees.sharepoint.length,
+      comercial: addonAssignees.comercial.length,
+      rh: addonAssignees.rh.length,
+    };
     const subscription = subscriptionPayloadForTenant(
       tenant,
       usage.billableUsersActive,
       addonSeats,
+      addonAssignees,
     );
     const plans = await listPlatformPlans({ activeOnly: true });
     res.json({
@@ -317,11 +324,19 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
     });
 
     const usageAfter = await getTenantUsageSnapshot(updated.id);
-    const seatsAfter = await countAddonSeatsFromUsers(updated.id);
+    const assigneesAfter = nextPlanId
+      ? await listAddonAssigneesFromUsers(updated.id)
+      : { sharepoint: [], comercial: [], rh: [] };
+    const seatsAfter = {
+      sharepoint: assigneesAfter.sharepoint.length,
+      comercial: assigneesAfter.comercial.length,
+      rh: assigneesAfter.rh.length,
+    };
     const subscription = subscriptionPayloadForTenant(
       updated,
       usageAfter.billableUsersActive,
       seatsAfter,
+      assigneesAfter,
     );
 
     res.json({

@@ -44,6 +44,7 @@ type SubscriptionAddonRow = PlanAddon & {
   seats: number;
   monthlyCents: number;
   monthlyFormatted: string;
+  users?: Array<{ id: string; name: string; email: string }>;
 };
 
 type SubscriptionPayload = {
@@ -256,7 +257,22 @@ export function MySubscriptionPageContent() {
   const hasPlan = Boolean(data?.subscription.planId ?? data?.subscription.plan);
   const accessUntilLabel = fmtDate(data?.subscription.accessUntil);
   const selectedPlan = plans.find((p) => p.id === plan) ?? null;
-  const selectedAddons = selectedPlan?.addons ?? data?.subscription.addons ?? [];
+  const subscriptionAddons = data?.subscription.addons ?? [];
+  const selectedPlanAddons = selectedPlan?.addons ?? [];
+  /** Preferir addons da assinatura salva (com nomes); se o plano selecionado for outro, mostrar os do plano. */
+  const addonRows: SubscriptionAddonRow[] =
+    plan && data?.subscription.planId === plan && subscriptionAddons.length > 0
+      ? subscriptionAddons
+      : selectedPlanAddons.map((a) => {
+          const fromSub = subscriptionAddons.find((s) => s.id === a.id);
+          return {
+            ...a,
+            seats: fromSub?.seats ?? 0,
+            monthlyCents: fromSub?.monthlyCents ?? 0,
+            monthlyFormatted: fromSub?.monthlyFormatted ?? "R$ 0,00",
+            users: fromSub?.users ?? [],
+          };
+        });
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-6">
@@ -378,44 +394,71 @@ export function MySubscriptionPageContent() {
             ) : null}
           </div>
 
-          {plan && selectedAddons.length > 0 ? (
+          {plan && addonRows.length > 0 ? (
             <div>
               <p className="mb-1 text-xs text-[color:var(--muted-foreground)]">
                 Addons em uso
               </p>
               <p className="mb-2 text-[11px] text-[color:var(--muted-foreground)]">
-                Atribua addons em{" "}
+                Só leitura — atribua em{" "}
                 <Link href={`${basePath}/usuarios`} className="text-[color:var(--primary)] hover:underline">
                   Usuários
                 </Link>
-                . Perfil Cliente não é cobrado. A quantidade abaixo reflete quem está com a licença.
+                . Perfil Cliente não é cobrado.
               </p>
               <div className="space-y-2">
-                {(data?.subscription.addons ?? selectedAddons).map((addon) => {
-                  const seats =
-                    "seats" in addon && typeof addon.seats === "number"
-                      ? addon.seats
-                      : data?.subscription.addonSeats?.[addon.id as "sharepoint" | "comercial" | "rh"] ??
-                        0;
+                {addonRows.map((addon) => {
+                  const seats = addon.seats ?? 0;
+                  const users = addon.users ?? [];
+                  const namesPreview = users.map((u) => u.name).join(", ");
                   return (
                     <div
                       key={addon.id}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2.5"
+                      className="rounded-lg border px-3 py-2.5"
                       style={{ borderColor: "var(--border)" }}
                     >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium">{addon.label}</p>
-                        <p className="text-[11px] text-[color:var(--muted-foreground)]">
-                          +{addon.pricePerUserFormatted} / usuário
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{addon.label}</p>
+                          <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                            +{addon.pricePerUserFormatted} / usuário
+                            {seats > 0 ? ` · ${addon.monthlyFormatted}/mês` : ""}
+                          </p>
+                        </div>
+                        <p className="shrink-0 text-sm tabular-nums font-medium">
+                          {seats} usuário{seats === 1 ? "" : "s"}
                         </p>
                       </div>
-                      <p className="text-sm tabular-nums font-medium">
-                        {seats} usuário{seats === 1 ? "" : "s"}
-                      </p>
+                      {seats > 0 && users.length > 0 ? (
+                        <p
+                          className="mt-2 text-xs text-[color:var(--muted-foreground)]"
+                          title={namesPreview}
+                        >
+                          {namesPreview}
+                        </p>
+                      ) : (
+                        <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                          Nenhum usuário com este addon.{" "}
+                          <Link
+                            href={`${basePath}/usuarios`}
+                            className="text-[color:var(--primary)] hover:underline"
+                          >
+                            Atribuir em Usuários
+                          </Link>
+                        </p>
+                      )}
                     </div>
                   );
                 })}
               </div>
+            </div>
+          ) : plan ? (
+            <div>
+              <p className="mb-1 text-xs text-[color:var(--muted-foreground)]">Addons em uso</p>
+              <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                Este plano não inclui addons. Se precisar de Cloud2Cloud, Comercial ou RH, escolha um
+                plano que os contenha ou peça ao time WPS One.
+              </p>
             </div>
           ) : null}
 

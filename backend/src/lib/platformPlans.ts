@@ -270,6 +270,11 @@ export function buildSubscriptionPayload(params: {
   accessUntil?: Date | null | undefined;
   billableUsersActive: number;
   addonSeats?: AddonSeatCounts | null;
+  addonAssignees?: {
+    sharepoint?: Array<{ id: string; name: string; email: string }>;
+    comercial?: Array<{ id: string; name: string; email: string }>;
+    rh?: Array<{ id: string; name: string; email: string }>;
+  } | null;
 }) {
   const plan = params.plan ?? null;
   const priceCents = plan?.priceCentsPerUser ?? null;
@@ -307,6 +312,7 @@ export function buildSubscriptionPayload(params: {
   const accessUntil = params.accessUntil ?? null;
   const canceledAt = params.canceledAt ?? null;
   const addons = plan ? serializePlanAddons(plan) : [];
+  const assignees = params.addonAssignees ?? null;
 
   const statusLabel =
     status === "active"
@@ -335,12 +341,17 @@ export function buildSubscriptionPayload(params: {
     addonMonthlyAmountCents: addonMonthlyCents,
     addonMonthlyAmountFormatted: formatBrlFromCents(addonMonthlyCents),
     addonSeats,
-    addons: addons.map((a) => ({
-      ...a,
-      seats: addonSeats[a.id],
-      monthlyCents: addonSeats[a.id] * a.priceCentsPerUser,
-      monthlyFormatted: formatBrlFromCents(addonSeats[a.id] * a.priceCentsPerUser),
-    })),
+    addons: addons.map((a) => {
+      const users = assignees?.[a.id] ?? [];
+      const seats = users.length > 0 ? users.length : addonSeats[a.id];
+      return {
+        ...a,
+        seats,
+        monthlyCents: seats * a.priceCentsPerUser,
+        monthlyFormatted: formatBrlFromCents(seats * a.priceCentsPerUser),
+        users,
+      };
+    }),
     startedAt: startedAt ? startedAt.toISOString() : null,
     nextPaymentAt: nextPaymentAt ? nextPaymentAt.toISOString() : null,
     paymentMethod,

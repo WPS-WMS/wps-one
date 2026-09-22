@@ -64,15 +64,47 @@ export async function findPlatformPlanById(id: string) {
 
 /** Conta seats de addon a partir dos usuários ativos cobráveis (exclui Cliente). */
 export async function countAddonSeatsFromUsers(tenantId: string): Promise<AddonSeatCounts> {
+  const assignees = await listAddonAssigneesFromUsers(tenantId);
+  return {
+    sharepoint: assignees.sharepoint.length,
+    comercial: assignees.comercial.length,
+    rh: assignees.rh.length,
+  };
+}
+
+export type AddonAssignee = { id: string; name: string; email: string };
+
+export type AddonAssigneesByModule = {
+  sharepoint: AddonAssignee[];
+  comercial: AddonAssignee[];
+  rh: AddonAssignee[];
+};
+
+/** Lista usuários ativos cobráveis com cada addon (para resumo na Minha Assinatura). */
+export async function listAddonAssigneesFromUsers(
+  tenantId: string,
+): Promise<AddonAssigneesByModule> {
   const whereBase = {
     tenantId,
     ativo: true as const,
     role: { notIn: ["PLATFORM_ADMIN", "CLIENTE"] },
   };
   const [sharepoint, comercial, rh] = await Promise.all([
-    prisma.user.count({ where: { ...whereBase, addonSharepoint: true } }),
-    prisma.user.count({ where: { ...whereBase, addonComercial: true } }),
-    prisma.user.count({ where: { ...whereBase, addonRh: true } }),
+    prisma.user.findMany({
+      where: { ...whereBase, addonSharepoint: true },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.user.findMany({
+      where: { ...whereBase, addonComercial: true },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.user.findMany({
+      where: { ...whereBase, addonRh: true },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
   return { sharepoint, comercial, rh };
 }
@@ -94,6 +126,7 @@ export function subscriptionPayloadForTenant(
   tenant: TenantSubscriptionRow,
   billableUsersActive: number,
   addonSeatsOverride?: AddonSeatCounts | null,
+  addonAssignees?: AddonAssigneesByModule | null,
 ) {
   return buildSubscriptionPayload({
     plan: tenant.platformPlan,
@@ -111,5 +144,6 @@ export function subscriptionPayloadForTenant(
       comercial: tenant.subscriptionAddonComercialUsers ?? 0,
       rh: tenant.subscriptionAddonRhUsers ?? 0,
     },
+    addonAssignees: addonAssignees ?? null,
   });
 }
