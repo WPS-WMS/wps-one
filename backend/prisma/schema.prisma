@@ -25,6 +25,10 @@ model PlatformPlan {
   moduleComercial   Boolean  @default(false)
   /// Addon reservado (módulo RH ainda não implementado no produto).
   moduleRh          Boolean  @default(false)
+  /// Preço adicional por usuário (centavos) de cada addon incluso no plano.
+  addonSharepointCentsPerUser Int @default(0)
+  addonComercialCentsPerUser  Int @default(0)
+  addonRhCentsPerUser         Int @default(0)
   active            Boolean  @default(true)
   sortOrder         Int      @default(0)
   createdAt         DateTime @default(now())
@@ -54,6 +58,10 @@ model Tenant {
   subscriptionCanceledAt     DateTime?
   /// Após cancelamento: acesso liberado até esta data (inclusive).
   subscriptionAccessUntil    DateTime?
+  /// Qtd. de usuários cobrados em cada addon (≤ usuários cobráveis do plano).
+  subscriptionAddonSharepointUsers Int @default(0)
+  subscriptionAddonComercialUsers  Int @default(0)
+  subscriptionAddonRhUsers         Int @default(0)
   platformPlan               PlatformPlan? @relation(fields: [subscriptionPlanId], references: [id], onDelete: SetNull)
   /// Origem do cadastro: landing | platform | null (legado)
   signupSource               String?

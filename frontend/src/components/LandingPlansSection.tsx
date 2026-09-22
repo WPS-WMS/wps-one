@@ -14,6 +14,12 @@ type PublicPlan = {
   pricePerUserFormatted: string;
   moduleLabels: string[];
   addonLabels?: string[];
+  addons?: {
+    id: string;
+    label: string;
+    priceCentsPerUser: number;
+    pricePerUserFormatted: string;
+  }[];
   allFeatureLabels?: string[];
   sortOrder: number;
 };
@@ -203,7 +209,7 @@ export function LandingPlansSection({
                     )}
                   </div>
 
-                  {(plan.addonLabels?.length ?? 0) > 0 ? (
+                  {(plan.addons?.length ?? plan.addonLabels?.length ?? 0) > 0 ? (
                     <div
                       className="rounded-2xl px-3.5 py-3.5"
                       style={{
@@ -230,9 +236,23 @@ export function LandingPlansSection({
                         Addons
                       </p>
                       <ul className="space-y-2.5">
-                        {plan.addonLabels!.map((label) => (
+                        {(plan.addons?.length
+                          ? plan.addons.map((addon) => ({
+                              key: addon.id,
+                              label: addon.label,
+                              price:
+                                addon.priceCentsPerUser > 0
+                                  ? `+${addon.pricePerUserFormatted}/usuário`
+                                  : null,
+                            }))
+                          : (plan.addonLabels ?? []).map((label) => ({
+                              key: label,
+                              label,
+                              price: null as string | null,
+                            }))
+                        ).map((item) => (
                           <li
-                            key={label}
+                            key={item.key}
                             className="flex items-start gap-2.5 text-sm"
                             style={{ color: isDark ? "rgba(244,242,255,0.88)" : "rgba(17,24,39,0.78)" }}
                           >
@@ -242,7 +262,14 @@ export function LandingPlansSection({
                             >
                               <Check className="h-3 w-3" strokeWidth={3} />
                             </span>
-                            {label}
+                            <span>
+                              {item.label}
+                              {item.price ? (
+                                <span className="mt-0.5 block text-[11px]" style={{ color: mutedBody }}>
+                                  {item.price}
+                                </span>
+                              ) : null}
+                            </span>
                           </li>
                         ))}
                       </ul>

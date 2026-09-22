@@ -24,6 +24,17 @@ type PlatformPlan = {
   modules: PlanModules;
   moduleLabels: string[];
   addonLabels?: string[];
+  addons?: {
+    id: string;
+    label: string;
+    priceCentsPerUser: number;
+    pricePerUserFormatted: string;
+  }[];
+  addonPrices?: {
+    sharepoint: number;
+    comercial: number;
+    rh: number;
+  };
   allFeatureLabels?: string[];
   active: boolean;
   sortOrder: number;
@@ -39,6 +50,9 @@ type PlanForm = {
   moduleSharepoint: boolean;
   moduleComercial: boolean;
   moduleRh: boolean;
+  addonSharepointReais: string;
+  addonComercialReais: string;
+  addonRhReais: string;
   active: boolean;
 };
 
@@ -52,6 +66,9 @@ const EMPTY_FORM: PlanForm = {
   moduleSharepoint: false,
   moduleComercial: false,
   moduleRh: false,
+  addonSharepointReais: "",
+  addonComercialReais: "",
+  addonRhReais: "",
   active: true,
 };
 
@@ -120,6 +137,9 @@ export default function PlatformPlansPage() {
       moduleSharepoint: plan.modules.sharepoint,
       moduleComercial: plan.modules.comercial === true,
       moduleRh: plan.modules.rh === true,
+      addonSharepointReais: centsToReaisInput(plan.addonPrices?.sharepoint ?? 0),
+      addonComercialReais: centsToReaisInput(plan.addonPrices?.comercial ?? 0),
+      addonRhReais: centsToReaisInput(plan.addonPrices?.rh ?? 0),
       active: plan.active,
     });
     setFormError(null);
@@ -143,6 +163,32 @@ export default function PlatformPlansPage() {
       return;
     }
 
+    const parseAddonPrice = (enabled: boolean, raw: string, label: string): number | null => {
+      if (!enabled) return 0;
+      if (!raw.trim()) return 0;
+      const cents = reaisToCents(raw);
+      if (cents == null) {
+        setFormError(`Preço inválido do addon ${label}.`);
+        return null;
+      }
+      return cents;
+    };
+
+    const addonSharepointCents = parseAddonPrice(
+      form.moduleSharepoint,
+      form.addonSharepointReais,
+      "Cloud2Cloud",
+    );
+    if (addonSharepointCents == null) return;
+    const addonComercialCents = parseAddonPrice(
+      form.moduleComercial,
+      form.addonComercialReais,
+      "Comercial",
+    );
+    if (addonComercialCents == null) return;
+    const addonRhCents = parseAddonPrice(form.moduleRh, form.addonRhReais, "RH");
+    if (addonRhCents == null) return;
+
     setSaving(true);
     setFormError(null);
     const payload = {
@@ -155,6 +201,9 @@ export default function PlatformPlansPage() {
       moduleSharepoint: form.moduleSharepoint,
       moduleComercial: form.moduleComercial,
       moduleRh: form.moduleRh,
+      addonSharepointCentsPerUser: addonSharepointCents,
+      addonComercialCentsPerUser: addonComercialCents,
+      addonRhCentsPerUser: addonRhCents,
       active: form.active,
     };
     const r = await apiFetch(editing ? `/api/platform/plans/${editing.id}` : "/api/platform/plans", {
@@ -275,18 +324,21 @@ export default function PlatformPlansPage() {
                       ) : (
                         <span className="text-xs text-[color:var(--muted-foreground)]">Sem módulos</span>
                       )}
-                      {(plan.addonLabels?.length ?? 0) > 0 ? (
+                      {(plan.addons?.length ?? 0) > 0 ? (
                         <div className="flex flex-wrap gap-1.5">
-                          {plan.addonLabels!.map((label) => (
+                          {plan.addons!.map((addon) => (
                             <span
-                              key={label}
+                              key={addon.id}
                               className="rounded-full border px-2 py-0.5 text-[11px] font-medium text-[color:var(--foreground)]"
                               style={{
                                 borderColor: "color-mix(in srgb, var(--primary) 35%, var(--border))",
                                 background: "color-mix(in srgb, var(--primary) 6%, transparent)",
                               }}
                             >
-                              Addon · {label}
+                              Addon · {addon.label}
+                              {addon.priceCentsPerUser > 0
+                                ? ` (+${addon.pricePerUserFormatted}/usuário)`
+                                : ""}
                             </span>
                           ))}
                         </div>
@@ -345,7 +397,7 @@ export default function PlatformPlansPage() {
           >
             <h3 className="text-lg font-semibold">{editing ? "Editar plano" : "Novo plano"}</h3>
             <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">
-              Defina preço e módulos inclusos neste plano.
+              Defina preço base, módulos e o valor adicional por usuário de cada addon.
             </p>
 
             <div className="mt-4 space-y-3">
@@ -420,33 +472,64 @@ export default function PlatformPlansPage() {
                 <div className="space-y-2">
                   {(
                     [
-                      ["moduleComercial", "Comercial", "Módulo em breve — flag reservada no plano"],
-                      ["moduleRh", "RH", "Módulo em breve — flag reservada no plano"],
+                      [
+                        "moduleComercial",
+                        "addonComercialReais",
+                        "Comercial",
+                        "Módulo em breve — valor adicional por usuário",
+                      ],
+                      [
+                        "moduleRh",
+                        "addonRhReais",
+                        "RH",
+                        "Módulo em breve — valor adicional por usuário",
+                      ],
                       [
                         "moduleSharepoint",
+                        "addonSharepointReais",
                         "Sincronizador Cloud2Cloud",
-                        "Libera Integrações (SharePoint/Teams) quando ativado na empresa",
+                        "Libera Integrações (SharePoint/Teams) — valor adicional por usuário",
                       ],
                     ] as const
-                  ).map(([key, label, hint]) => (
-                    <label
-                      key={key}
-                      className="flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-sm"
+                  ).map(([enabledKey, priceKey, label, hint]) => (
+                    <div
+                      key={enabledKey}
+                      className="rounded-lg border px-3 py-2"
                       style={{ borderColor: "var(--border)" }}
                     >
-                      <input
-                        type="checkbox"
-                        checked={form[key]}
-                        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.checked }))}
-                        className="mt-0.5 accent-[color:var(--primary)]"
-                      />
-                      <span>
-                        <span className="font-medium">{label}</span>
-                        <span className="mt-0.5 block text-[11px] text-[color:var(--muted-foreground)]">
-                          {hint}
+                      <label className="flex cursor-pointer items-start gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={form[enabledKey]}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, [enabledKey]: e.target.checked }))
+                          }
+                          className="mt-0.5 accent-[color:var(--primary)]"
+                        />
+                        <span>
+                          <span className="font-medium">{label}</span>
+                          <span className="mt-0.5 block text-[11px] text-[color:var(--muted-foreground)]">
+                            {hint}
+                          </span>
                         </span>
-                      </span>
-                    </label>
+                      </label>
+                      {form[enabledKey] ? (
+                        <div className="mt-2 pl-6">
+                          <label className="mb-1 block text-[11px] text-[color:var(--muted-foreground)]">
+                            Preço adicional / usuário (R$)
+                          </label>
+                          <input
+                            value={form[priceKey]}
+                            onChange={(e) =>
+                              setForm((f) => ({ ...f, [priceKey]: e.target.value }))
+                            }
+                            className="w-full max-w-[160px] rounded-lg border bg-transparent px-3 py-1.5 text-sm"
+                            style={{ borderColor: "var(--border)" }}
+                            placeholder="0,00"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
                   ))}
                 </div>
               </fieldset>

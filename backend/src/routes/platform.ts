@@ -128,6 +128,18 @@ platformRouter.post("/plans", requirePlatformAdmin, async (req, res) => {
         moduleSharepoint: body.moduleSharepoint === true,
         moduleComercial: body.moduleComercial === true,
         moduleRh: body.moduleRh === true,
+        addonSharepointCentsPerUser:
+          body.moduleSharepoint === true
+            ? Math.max(0, Math.round(Number(body.addonSharepointCentsPerUser) || 0))
+            : 0,
+        addonComercialCentsPerUser:
+          body.moduleComercial === true
+            ? Math.max(0, Math.round(Number(body.addonComercialCentsPerUser) || 0))
+            : 0,
+        addonRhCentsPerUser:
+          body.moduleRh === true
+            ? Math.max(0, Math.round(Number(body.addonRhCentsPerUser) || 0))
+            : 0,
         active: body.active !== false,
         sortOrder: Number.isFinite(Number(body.sortOrder))
           ? Math.round(Number(body.sortOrder))
@@ -164,6 +176,9 @@ platformRouter.patch("/plans/:id", requirePlatformAdmin, async (req, res) => {
       moduleSharepoint?: boolean;
       moduleComercial?: boolean;
       moduleRh?: boolean;
+      addonSharepointCentsPerUser?: number;
+      addonComercialCentsPerUser?: number;
+      addonRhCentsPerUser?: number;
       active?: boolean;
       sortOrder?: number;
     } = {};
@@ -203,6 +218,55 @@ platformRouter.patch("/plans/:id", requirePlatformAdmin, async (req, res) => {
     if (body.moduleSharepoint !== undefined) data.moduleSharepoint = !!body.moduleSharepoint;
     if (body.moduleComercial !== undefined) data.moduleComercial = !!body.moduleComercial;
     if (body.moduleRh !== undefined) data.moduleRh = !!body.moduleRh;
+
+    const nextSharepoint =
+      data.moduleSharepoint !== undefined ? data.moduleSharepoint : existing.moduleSharepoint;
+    const nextComercial =
+      data.moduleComercial !== undefined ? data.moduleComercial : existing.moduleComercial;
+    const nextRh = data.moduleRh !== undefined ? data.moduleRh : existing.moduleRh;
+
+    if (body.addonSharepointCentsPerUser !== undefined || body.moduleSharepoint !== undefined) {
+      data.addonSharepointCentsPerUser = nextSharepoint
+        ? Math.max(
+            0,
+            Math.round(
+              Number(
+                body.addonSharepointCentsPerUser !== undefined
+                  ? body.addonSharepointCentsPerUser
+                  : existing.addonSharepointCentsPerUser,
+              ) || 0,
+            ),
+          )
+        : 0;
+    }
+    if (body.addonComercialCentsPerUser !== undefined || body.moduleComercial !== undefined) {
+      data.addonComercialCentsPerUser = nextComercial
+        ? Math.max(
+            0,
+            Math.round(
+              Number(
+                body.addonComercialCentsPerUser !== undefined
+                  ? body.addonComercialCentsPerUser
+                  : existing.addonComercialCentsPerUser,
+              ) || 0,
+            ),
+          )
+        : 0;
+    }
+    if (body.addonRhCentsPerUser !== undefined || body.moduleRh !== undefined) {
+      data.addonRhCentsPerUser = nextRh
+        ? Math.max(
+            0,
+            Math.round(
+              Number(
+                body.addonRhCentsPerUser !== undefined
+                  ? body.addonRhCentsPerUser
+                  : existing.addonRhCentsPerUser,
+              ) || 0,
+            ),
+          )
+        : 0;
+    }
     if (body.active !== undefined) data.active = !!body.active;
     if (body.sortOrder !== undefined && Number.isFinite(Number(body.sortOrder))) {
       data.sortOrder = Math.round(Number(body.sortOrder));

@@ -9,19 +9,41 @@ import { usePathname } from "next/navigation";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
 
+type PlanAddon = {
+  id: "sharepoint" | "comercial" | "rh";
+  label: string;
+  priceCentsPerUser: number;
+  pricePerUserFormatted: string;
+};
+
 type PlanOption = {
   id: string;
   name?: string;
   label: string;
   priceCentsPerUser: number;
   pricePerUserFormatted: string;
-  modules?: { projetos: boolean; financeiro: boolean; portal: boolean };
+  modules?: {
+    projetos: boolean;
+    financeiro: boolean;
+    portal: boolean;
+    sharepoint?: boolean;
+    comercial?: boolean;
+    rh?: boolean;
+  };
   moduleLabels?: string[];
+  addonLabels?: string[];
+  addons?: PlanAddon[];
 };
 
 type PaymentMethodOption = {
   id: string;
   label: string;
+};
+
+type SubscriptionAddonRow = PlanAddon & {
+  seats: number;
+  monthlyCents: number;
+  monthlyFormatted: string;
 };
 
 type SubscriptionPayload = {
@@ -34,6 +56,8 @@ type SubscriptionPayload = {
   note?: string;
   pricePerUserFormatted: string | null;
   monthlyAmountFormatted: string;
+  baseMonthlyAmountFormatted?: string;
+  addonMonthlyAmountFormatted?: string;
   startedAt: string | null;
   nextPaymentAt: string | null;
   paymentMethod: string | null;
@@ -42,6 +66,12 @@ type SubscriptionPayload = {
   accessUntil?: string | null;
   moduleLabels?: string[];
   addonLabels?: string[];
+  addonSeats?: {
+    sharepoint: number;
+    comercial: number;
+    rh: number;
+  };
+  addons?: SubscriptionAddonRow[];
 };
 
 type ResponseBody = {
@@ -92,6 +122,7 @@ export function MySubscriptionPageContent() {
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [plan, setPlan] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
+  const [addonSeats, setAddonSeats] = useState({ sharepoint: 0, comercial: 0, rh: 0 });
   const [confirmCancel, setConfirmCancel] = useState(false);
 
   const allowed = permissionsReady && can("configuracoes.assinatura");
@@ -119,6 +150,11 @@ export function MySubscriptionPageContent() {
       setPlan(row.subscription.planId ?? row.subscription.plan ?? "");
       const method = row.subscription.paymentMethod ?? "";
       setPaymentMethod(method === "BOLETO" ? "" : method);
+      setAddonSeats({
+        sharepoint: row.subscription.addonSeats?.sharepoint ?? 0,
+        comercial: row.subscription.addonSeats?.comercial ?? 0,
+        rh: row.subscription.addonSeats?.rh ?? 0,
+      });
       setLoading(false);
     })();
     return () => {
@@ -136,6 +172,7 @@ export function MySubscriptionPageContent() {
       body: JSON.stringify({
         planId: plan || null,
         paymentMethod: plan ? paymentMethod || null : null,
+        addonSeats: plan ? addonSeats : { sharepoint: 0, comercial: 0, rh: 0 },
       }),
     });
     const body = await r.json().catch(() => null);
@@ -158,6 +195,11 @@ export function MySubscriptionPageContent() {
     setPlan(row.subscription.planId ?? row.subscription.plan ?? "");
     const nextMethod = row.subscription.paymentMethod ?? "";
     setPaymentMethod(nextMethod === "BOLETO" ? "" : nextMethod);
+    setAddonSeats({
+      sharepoint: row.subscription.addonSeats?.sharepoint ?? 0,
+      comercial: row.subscription.addonSeats?.comercial ?? 0,
+      rh: row.subscription.addonSeats?.rh ?? 0,
+    });
     setSaveMsg("Assinatura atualizada.");
     await refreshSession?.();
     // Garante menus/rotas com os módulos do novo plano.
@@ -225,6 +267,15 @@ export function MySubscriptionPageContent() {
   const isLocked = status === "locked";
   const hasPlan = Boolean(data?.subscription.planId ?? data?.subscription.plan);
   const accessUntilLabel = fmtDate(data?.subscription.accessUntil);
+  const selectedPlan = plans.find((p) => p.id === plan) ?? null;
+  const selectedAddons = selectedPlan?.addons ?? [];
+  const billableMax = data?.usage.billableUsersActive ?? 0;
+
+  function setAddonSeatCount(id: "sharepoint" | "comercial" | "rh", raw: string) {
+    const n = Math.floor(Number(raw));
+    const clamped = !Number.isFinite(n) || n < 0 ? 0 : Math.min(n, billableMax);
+    setAddonSeats((prev) => ({ ...prev, [id]: clamped }));
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-6">
@@ -329,7 +380,18 @@ export function MySubscriptionPageContent() {
               placeholder="Não configurado"
               onChange={(next) => {
                 setPlan(next);
-                if (!next) setPaymentMethod("");
+                if (!next) {
+                  setPaymentMethod("");
+                  setAddonSeats({ sharepoint: 0, comercial: 0, rh: 0 });
+                  return;
+                }
+                const nextPlan = plans.find((p) => p.id === next);
+                const keep = {
+                  sharepoint: nextPlan?.modules?.sharepoint ? addonSeats.sharepoint : 0,
+                  comercial: nextPlan?.modules?.comercial ? addonSeats.comercial : 0,
+                  rh: nextPlan?.modules?.rh ? addonSeats.rh : 0,
+                };
+                setAddonSeats(keep);
               }}
               options={[
                 { value: "", label: "Não configurado" },
@@ -345,6 +407,50 @@ export function MySubscriptionPageContent() {
               </p>
             ) : null}
           </div>
+
+          {plan && selectedAddons.length > 0 ? (
+            <div>
+              <p className="mb-1 text-xs text-[color:var(--muted-foreground)]">
+                Usuários com acesso aos addons
+              </p>
+              <p className="mb-2 text-[11px] text-[color:var(--muted-foreground)]">
+                Informe quantos usuários cobráveis (máx. {billableMax}) terão cada addon. O valor é
+                somado ao preço do plano.
+              </p>
+              <div className="space-y-2">
+                {selectedAddons.map((addon) => (
+                  <div
+                    key={addon.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2.5"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{addon.label}</p>
+                      <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                        +{addon.pricePerUserFormatted} / usuário
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-[11px] text-[color:var(--muted-foreground)]">
+                        Usuários
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={billableMax}
+                        step={1}
+                        disabled={isCanceling || isLocked}
+                        value={addonSeats[addon.id]}
+                        onChange={(e) => setAddonSeatCount(addon.id, e.target.value)}
+                        className="w-20 rounded-lg border bg-transparent px-2 py-1.5 text-sm tabular-nums"
+                        style={{ borderColor: "var(--border)" }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {plan ? (
             <div>
@@ -402,7 +508,7 @@ export function MySubscriptionPageContent() {
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-[color:var(--muted-foreground)]">Preço por usuário</dt>
+            <dt className="text-xs text-[color:var(--muted-foreground)]">Preço base / usuário</dt>
             <dd className="mt-1 font-medium">{data?.subscription.pricePerUserFormatted ?? "—"}</dd>
           </div>
           <div>
@@ -418,6 +524,18 @@ export function MySubscriptionPageContent() {
                       : "Não configurada")}
             </dd>
           </div>
+          {data?.subscription.baseMonthlyAmountFormatted ? (
+            <div>
+              <dt className="text-xs text-[color:var(--muted-foreground)]">Mensalidade (plano)</dt>
+              <dd className="mt-1 font-medium">{data.subscription.baseMonthlyAmountFormatted}</dd>
+            </div>
+          ) : null}
+          {(data?.subscription.addons?.some((a) => a.monthlyCents > 0) ?? false) ? (
+            <div>
+              <dt className="text-xs text-[color:var(--muted-foreground)]">Mensalidade (addons)</dt>
+              <dd className="mt-1 font-medium">{data?.subscription.addonMonthlyAmountFormatted}</dd>
+            </div>
+          ) : null}
           {data?.subscription.moduleLabels?.length ? (
             <div className="sm:col-span-2">
               <dt className="text-xs text-[color:var(--muted-foreground)]">Módulos do plano</dt>
@@ -433,21 +551,19 @@ export function MySubscriptionPageContent() {
               </dd>
             </div>
           ) : null}
-          {data?.subscription.addonLabels?.length ? (
+          {data?.subscription.addons?.length ? (
             <div className="sm:col-span-2">
-              <dt className="text-xs text-[color:var(--muted-foreground)]">Addons</dt>
-              <dd className="mt-1 flex flex-wrap gap-1.5">
-                {data.subscription.addonLabels.map((label) => (
-                  <span
-                    key={label}
-                    className="rounded-full border px-2 py-0.5 text-[11px] font-medium"
-                    style={{
-                      borderColor: "color-mix(in srgb, var(--primary) 35%, var(--border))",
-                      background: "color-mix(in srgb, var(--primary) 6%, transparent)",
-                    }}
-                  >
-                    {label}
-                  </span>
+              <dt className="text-xs text-[color:var(--muted-foreground)]">Addons contratados</dt>
+              <dd className="mt-1 space-y-1">
+                {data.subscription.addons.map((addon) => (
+                  <p key={addon.id} className="text-sm">
+                    <span className="font-medium">{addon.label}</span>
+                    <span className="text-[color:var(--muted-foreground)]">
+                      {" "}
+                      · {addon.seats} usuário{addon.seats === 1 ? "" : "s"} ·{" "}
+                      {addon.monthlyFormatted}/mês
+                    </span>
+                  </p>
                 ))}
               </dd>
             </div>

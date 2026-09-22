@@ -7,6 +7,7 @@ import { isTenantSignupAllowed } from "../lib/deployEnv.js";
 import {
   computeNextSubscriptionPaymentAt,
   isSubscriptionPaymentMethodId,
+  normalizeAddonSeats,
   resolveNextPaymentAt,
   serializePlan,
   SUBSCRIPTION_PAYMENT_METHODS,
@@ -216,6 +217,10 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
     }
   }
 
+  const addonSeatsRaw = body.addonSeats;
+  const hasAddonSeatsPayload =
+    addonSeatsRaw != null && typeof addonSeatsRaw === "object" && !Array.isArray(addonSeatsRaw);
+
   try {
     const existing = await prisma.tenant.findUnique({
       where: { id: user.tenantId },
@@ -230,7 +235,8 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
     if (
       existing.subscriptionStatus === "canceling" &&
       planId === undefined &&
-      paymentMethod === undefined
+      paymentMethod === undefined &&
+      !hasAddonSeatsPayload
     ) {
       res.status(400).json({ error: "Assinatura em cancelamento. Nenhuma alteração pendente." });
       return;
@@ -269,6 +275,21 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
       planRecord ??
       (nextPlanId ? await findPlatformPlanById(nextPlanId) : null);
 
+    const usage = await getTenantUsageSnapshot(existing.id);
+    const nextAddonSeats = nextPlanId
+      ? normalizeAddonSeats(
+          hasAddonSeatsPayload
+            ? (addonSeatsRaw as { sharepoint?: number; comercial?: number; rh?: number })
+            : {
+                sharepoint: existing.subscriptionAddonSharepointUsers,
+                comercial: existing.subscriptionAddonComercialUsers,
+                rh: existing.subscriptionAddonRhUsers,
+              },
+          resolvedPlan,
+          usage.billableUsersActive,
+        )
+      : { sharepoint: 0, comercial: 0, rh: 0 };
+
     const updated = await prisma.tenant.update({
       where: { id: existing.id },
       data: {
@@ -280,19 +301,22 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
         subscriptionStatus: nextStatus,
         subscriptionCanceledAt: nextCanceledAt,
         subscriptionAccessUntil: nextAccessUntil,
+        subscriptionAddonSharepointUsers: nextAddonSeats.sharepoint,
+        subscriptionAddonComercialUsers: nextAddonSeats.comercial,
+        subscriptionAddonRhUsers: nextAddonSeats.rh,
       },
       select: TENANT_SUBSCRIPTION_SELECT,
     });
 
-    const usage = await getTenantUsageSnapshot(updated.id);
-    const subscription = subscriptionPayloadForTenant(updated, usage.billableUsersActive);
+    const usageAfter = await getTenantUsageSnapshot(updated.id);
+    const subscription = subscriptionPayloadForTenant(updated, usageAfter.billableUsersActive);
 
     res.json({
       tenant: { id: updated.id, name: updated.name, slug: updated.slug },
       usage: {
-        usersTotal: usage.usersTotal,
-        usersActive: usage.usersActive,
-        billableUsersActive: usage.billableUsersActive,
+        usersTotal: usageAfter.usersTotal,
+        usersActive: usageAfter.usersActive,
+        billableUsersActive: usageAfter.billableUsersActive,
       },
       subscription,
     });

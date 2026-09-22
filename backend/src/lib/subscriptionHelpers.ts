@@ -16,6 +16,9 @@ export const TENANT_SUBSCRIPTION_SELECT = {
   subscriptionStatus: true,
   subscriptionCanceledAt: true,
   subscriptionAccessUntil: true,
+  subscriptionAddonSharepointUsers: true,
+  subscriptionAddonComercialUsers: true,
+  subscriptionAddonRhUsers: true,
   platformPlan: true,
   portalModuleEnabled: true,
   sharepointModuleEnabled: true,
@@ -36,6 +39,9 @@ export type TenantSubscriptionRow = {
   subscriptionStatus: string | null;
   subscriptionCanceledAt: Date | null;
   subscriptionAccessUntil: Date | null;
+  subscriptionAddonSharepointUsers: number;
+  subscriptionAddonComercialUsers: number;
+  subscriptionAddonRhUsers: number;
   platformPlan: PlatformPlanRecord | null;
   portalModuleEnabled: boolean;
   sharepointModuleEnabled: boolean;
@@ -70,5 +76,10 @@ export function subscriptionPayloadForTenant(
     canceledAt: tenant.subscriptionCanceledAt,
     accessUntil: tenant.subscriptionAccessUntil,
     billableUsersActive,
+    addonSeats: {
+      sharepoint: tenant.subscriptionAddonSharepointUsers ?? 0,
+      comercial: tenant.subscriptionAddonComercialUsers ?? 0,
+      rh: tenant.subscriptionAddonRhUsers ?? 0,
+    },
   });
 }

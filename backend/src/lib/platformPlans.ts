@@ -27,9 +27,68 @@ export type PlatformPlanRecord = {
   moduleSharepoint: boolean;
   moduleComercial: boolean;
   moduleRh: boolean;
+  addonSharepointCentsPerUser: number;
+  addonComercialCentsPerUser: number;
+  addonRhCentsPerUser: number;
   active: boolean;
   sortOrder: number;
 };
+
+export type AddonSeatCounts = {
+  sharepoint: number;
+  comercial: number;
+  rh: number;
+};
+
+export function addonPriceCentsForModule(
+  plan: PlatformPlanRecord | null | undefined,
+  moduleId: PlanAddonModuleId,
+): number {
+  if (!plan) return 0;
+  if (moduleId === "sharepoint") return Math.max(0, plan.addonSharepointCentsPerUser ?? 0);
+  if (moduleId === "comercial") return Math.max(0, plan.addonComercialCentsPerUser ?? 0);
+  return Math.max(0, plan.addonRhCentsPerUser ?? 0);
+}
+
+export function planHasAddon(
+  plan: PlatformPlanRecord | null | undefined,
+  moduleId: PlanAddonModuleId,
+): boolean {
+  if (!plan) return false;
+  if (moduleId === "sharepoint") return !!plan.moduleSharepoint;
+  if (moduleId === "comercial") return !!plan.moduleComercial;
+  return !!plan.moduleRh;
+}
+
+export function normalizeAddonSeats(
+  raw: Partial<AddonSeatCounts> | null | undefined,
+  plan: PlatformPlanRecord | null | undefined,
+  maxUsers: number,
+): AddonSeatCounts {
+  const clamp = (n: unknown) => {
+    const v = Math.floor(Number(n));
+    if (!Number.isFinite(v) || v < 0) return 0;
+    return Math.min(v, Math.max(0, Math.floor(maxUsers)));
+  };
+  return {
+    sharepoint: planHasAddon(plan, "sharepoint") ? clamp(raw?.sharepoint) : 0,
+    comercial: planHasAddon(plan, "comercial") ? clamp(raw?.comercial) : 0,
+    rh: planHasAddon(plan, "rh") ? clamp(raw?.rh) : 0,
+  };
+}
+
+export function serializePlanAddons(plan: PlatformPlanRecord) {
+  return PLAN_ADDON_MODULES.filter((m) => planHasAddon(plan, m)).map((id) => {
+    const priceCents = addonPriceCentsForModule(plan, id);
+    return {
+      id,
+      label: PLAN_MODULE_LABELS[id],
+      priceCentsPerUser: priceCents,
+      pricePerUserFormatted: formatBrlFromCents(priceCents),
+    };
+  });
+}
+
 
 export type SubscriptionStatus = "active" | "canceling" | "locked" | "none" | "trial";
 
@@ -157,6 +216,7 @@ export function serializePlan(plan: PlatformPlanRecord) {
   const modules = planModulesFromRecord(plan);
   const moduleLabels = PLAN_CORE_MODULES.filter((m) => modules[m]).map((m) => PLAN_MODULE_LABELS[m]);
   const addonLabels = PLAN_ADDON_MODULES.filter((m) => modules[m]).map((m) => PLAN_MODULE_LABELS[m]);
+  const addons = serializePlanAddons(plan);
   return {
     id: plan.id,
     name: plan.name,
@@ -167,6 +227,12 @@ export function serializePlan(plan: PlatformPlanRecord) {
     modules,
     moduleLabels,
     addonLabels,
+    addons,
+    addonPrices: {
+      sharepoint: plan.addonSharepointCentsPerUser ?? 0,
+      comercial: plan.addonComercialCentsPerUser ?? 0,
+      rh: plan.addonRhCentsPerUser ?? 0,
+    },
     /** Módulos + addons ativos (landing / cards). */
     allFeatureLabels: [...moduleLabels, ...addonLabels],
     active: plan.active,
@@ -177,10 +243,19 @@ export function serializePlan(plan: PlatformPlanRecord) {
 export function monthlyBillingCents(params: {
   priceCentsPerUser: number | null | undefined;
   billableUsersActive: number;
+  plan?: PlatformPlanRecord | null;
+  addonSeats?: AddonSeatCounts | null;
 }): number {
   if (params.priceCentsPerUser == null) return 0;
   const users = Math.max(0, Math.floor(params.billableUsersActive));
-  return users * params.priceCentsPerUser;
+  let total = users * params.priceCentsPerUser;
+  const plan = params.plan ?? null;
+  const seats = normalizeAddonSeats(params.addonSeats, plan, users);
+  for (const id of PLAN_ADDON_MODULES) {
+    if (!planHasAddon(plan, id)) continue;
+    total += seats[id] * addonPriceCentsForModule(plan, id);
+  }
+  return total;
 }
 
 export function buildSubscriptionPayload(params: {
@@ -194,13 +269,26 @@ export function buildSubscriptionPayload(params: {
   canceledAt?: Date | null | undefined;
   accessUntil?: Date | null | undefined;
   billableUsersActive: number;
+  addonSeats?: AddonSeatCounts | null;
 }) {
   const plan = params.plan ?? null;
   const priceCents = plan?.priceCentsPerUser ?? null;
+  const addonSeats = normalizeAddonSeats(
+    params.addonSeats,
+    plan,
+    params.billableUsersActive,
+  );
   const monthlyCents = monthlyBillingCents({
     priceCentsPerUser: priceCents,
     billableUsersActive: params.billableUsersActive,
+    plan,
+    addonSeats,
   });
+  const baseMonthlyCents =
+    priceCents != null
+      ? Math.max(0, Math.floor(params.billableUsersActive)) * priceCents
+      : 0;
+  const addonMonthlyCents = Math.max(0, monthlyCents - baseMonthlyCents);
   const startedAt = params.startedAt ?? null;
   const nextPaymentAt = resolveNextPaymentAt({
     startedAt,
@@ -218,6 +306,7 @@ export function buildSubscriptionPayload(params: {
   const modules = planModulesFromRecord(plan);
   const accessUntil = params.accessUntil ?? null;
   const canceledAt = params.canceledAt ?? null;
+  const addons = plan ? serializePlanAddons(plan) : [];
 
   const statusLabel =
     status === "active"
@@ -241,6 +330,17 @@ export function buildSubscriptionPayload(params: {
     pricePerUserFormatted: priceCents != null ? formatBrlFromCents(priceCents) : null,
     monthlyAmountCents: monthlyCents,
     monthlyAmountFormatted: formatBrlFromCents(monthlyCents),
+    baseMonthlyAmountCents: baseMonthlyCents,
+    baseMonthlyAmountFormatted: formatBrlFromCents(baseMonthlyCents),
+    addonMonthlyAmountCents: addonMonthlyCents,
+    addonMonthlyAmountFormatted: formatBrlFromCents(addonMonthlyCents),
+    addonSeats,
+    addons: addons.map((a) => ({
+      ...a,
+      seats: addonSeats[a.id],
+      monthlyCents: addonSeats[a.id] * a.priceCentsPerUser,
+      monthlyFormatted: formatBrlFromCents(addonSeats[a.id] * a.priceCentsPerUser),
+    })),
     startedAt: startedAt ? startedAt.toISOString() : null,
     nextPaymentAt: nextPaymentAt ? nextPaymentAt.toISOString() : null,
     paymentMethod,
@@ -259,3 +359,4 @@ export function buildSubscriptionPayload(params: {
         : "Escolha um plano cadastrado no painel da plataforma.",
   };
 }
+
