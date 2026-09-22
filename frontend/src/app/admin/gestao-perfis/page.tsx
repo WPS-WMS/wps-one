@@ -160,6 +160,15 @@ function buildDefaultPermissions(): Permissions {
       case "projeto.verDetalhes":
       case "projeto.lista":
       case "projeto.dashboardDaily":
+        initial[f.id] = {
+          ...d(),
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+          DIRETORIA: "allow",
+        };
+        break;
       case "projeto.listaTarefas":
         initial[f.id] = {
           ...d(),
@@ -168,6 +177,7 @@ function buildDefaultPermissions(): Permissions {
           CONSULTOR: "allow",
           CONSULTOR_ONDEMAND: "allow",
           DIRETORIA: "allow",
+          CLIENTE: "allow",
         };
         break;
       case "projeto.gestaoTm":
@@ -211,6 +221,14 @@ function buildDefaultPermissions(): Permissions {
         initial[f.id] = { ...d(), GESTOR_PROJETOS: "allow", FINANCEIRO: "allow", DIRETORIA: "allow" };
         break;
       case "relatorios.gestaoHoras":
+        initial[f.id] = {
+          ...d(),
+          GESTOR_PROJETOS: "allow",
+          FINANCEIRO: "allow",
+          DIRETORIA: "allow",
+          CLIENTE: "allow",
+        };
+        break;
       case "relatorios.horas":
       case "relatorios.utilizacao":
       case "relatorios.chamados":
@@ -384,12 +402,12 @@ export default function GestaoPerfisPage() {
         const matrix =
           data.permissions && typeof data.permissions === "object" ? data.permissions : data;
         const roleRows = Array.isArray(data.roles) ? data.roles : [];
-        const nextRoles: RoleOption[] = roleRows.map(
-          (r: { code?: string; name?: string; id?: string }) => ({
+        const nextRoles: RoleOption[] = roleRows
+          .map((r: { code?: string; name?: string; id?: string }) => ({
             id: String(r.code ?? r.id ?? ""),
             label: String(r.name ?? r.code ?? ""),
-          }),
-        ).filter((r: RoleOption) => r.id);
+          }))
+          .filter((r: RoleOption) => r.id && r.id !== "CLIENTE" && r.id !== "SUPER_ADMIN");
         if (nextRoles.length > 0) {
           setRoles(nextRoles);
           setSelectedRoleId((prev) =>
@@ -509,7 +527,7 @@ export default function GestaoPerfisPage() {
               id: String(r.code ?? ""),
               label: String(r.name ?? r.code ?? ""),
             }))
-            .filter((r: RoleOption) => r.id);
+            .filter((r: RoleOption) => r.id && r.id !== "CLIENTE" && r.id !== "SUPER_ADMIN");
           if (nextRoles.length > 0) setRoles(nextRoles);
         }
         setInitialPermissions(next);

@@ -29,7 +29,6 @@ export const GESTAO_PERFIS_ROLES = [
   { id: "GESTOR_PROJETOS" as const, label: "Gestor de Projetos" },
   { id: "CONSULTOR" as const, label: "Consultor" },
   { id: "CONSULTOR_ONDEMAND" as const, label: "Consultor OnDemand" },
-  { id: "CLIENTE" as const, label: "Cliente" },
   { id: "ADMINISTRATIVO" as const, label: "Administrativo" },
   { id: "FINANCEIRO" as const, label: "Financeiro" },
   { id: "DIRETORIA" as const, label: "Diretoria" },

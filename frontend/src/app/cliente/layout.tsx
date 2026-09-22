@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar, type NavItem } from "@/components/Sidebar";
 import { Home, PlusCircle, FolderKanban, Settings, BarChart3 } from "lucide-react";
+import { canAccessRelatorioGestaoHoras } from "@/lib/featureNav";
 
 export default function ClienteLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, can } = useAuth();
@@ -25,7 +26,9 @@ export default function ClienteLayout({ children }: { children: React.ReactNode 
         children: [{ href: "/cliente/projetos/lista-tarefas", label: "Lista de Tarefas" }],
       });
     }
-    items.push({ href: "/cliente/relatorios/gestao-horas", label: "Gestão de horas", icon: BarChart3 });
+    if (canAccessRelatorioGestaoHoras(can)) {
+      items.push({ href: "/cliente/relatorios/gestao-horas", label: "Gestão de horas", icon: BarChart3 });
+    }
     if (can("configuracoes")) {
       items.push({ href: "/cliente/configuracoes", label: "Configurações", icon: Settings });
     }

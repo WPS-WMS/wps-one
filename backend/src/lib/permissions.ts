@@ -101,6 +101,23 @@ export const FEATURES = [
 
 export type FeatureId = (typeof FEATURES)[number];
 
+/**
+ * Acessos fixos do perfil Cliente (não editáveis na Gestão de perfis).
+ * Impede burlar cobrança liberando outros módulos para CLIENTE.
+ */
+export const CLIENTE_FIXED_ALLOW_FEATURES = [
+  "home",
+  "chamados.criacao",
+  "projeto.listaTarefas",
+  "relatorios.gestaoHoras",
+] as const satisfies readonly FeatureId[];
+
+const CLIENTE_FIXED_ALLOW_SET = new Set<string>(CLIENTE_FIXED_ALLOW_FEATURES);
+
+export function isClienteFixedAllowFeature(featureId: string): boolean {
+  return CLIENTE_FIXED_ALLOW_SET.has(featureId);
+}
+
 /** Sub-permissões de Projetos (basta uma para o middleware base de /api/projects). */
 export const PROJETO_FEATURE_IDS: FeatureId[] = [
   "projeto",
@@ -156,6 +173,14 @@ export function buildDefaultPermissions(): PermissionsMatrix {
       case "projeto.verDetalhes":
       case "projeto.lista":
       case "projeto.dashboardDaily":
+        initial[feature] = row("allow", {
+          ADMIN_PORTAL: "allow",
+          GESTOR_PROJETOS: "allow",
+          CONSULTOR: "allow",
+          CONSULTOR_ONDEMAND: "allow",
+          DIRETORIA: "allow",
+        });
+        break;
       case "projeto.listaTarefas":
         initial[feature] = row("allow", {
           ADMIN_PORTAL: "allow",
@@ -163,6 +188,7 @@ export function buildDefaultPermissions(): PermissionsMatrix {
           CONSULTOR: "allow",
           CONSULTOR_ONDEMAND: "allow",
           DIRETORIA: "allow",
+          CLIENTE: "allow",
         });
         break;
       case "projeto.gestaoTm":
@@ -217,6 +243,13 @@ export function buildDefaultPermissions(): PermissionsMatrix {
         });
         break;
       case "relatorios.gestaoHoras":
+        initial[feature] = row("allow", {
+          GESTOR_PROJETOS: "allow",
+          FINANCEIRO: "allow",
+          DIRETORIA: "allow",
+          CLIENTE: "allow",
+        });
+        break;
       case "relatorios.horas":
       case "relatorios.utilizacao":
       case "relatorios.chamados":
@@ -464,8 +497,12 @@ export async function isFeatureAllowed(params: {
     return true;
   }
 
-  if ((role === "CLIENTE" || profile?.requiresClientLink) && featureId === "tarefa.editar") {
-    return false;
+  // Cliente: whitelist fixa (não depende da Gestão de perfis / overrides no banco).
+  if (role === "CLIENTE" || profile?.requiresClientLink) {
+    if (featureId === "tarefa.editar") return false;
+    if (role === "CLIENTE") {
+      return isClienteFixedAllowFeature(featureId);
+    }
   }
 
   const rowDb = await prisma.tenantFeaturePermission.findUnique({
@@ -523,6 +560,10 @@ export async function isAnyFeatureAllowed(params: {
     return gated.some((f) => f !== "chamados.criacao");
   }
 
+  if (role === "CLIENTE") {
+    return gated.some((f) => isClienteFixedAllowFeature(f));
+  }
+
   const candidates = gated.filter((f) => !(role === "CLIENTE" && f === "tarefa.editar"));
   if (!candidates.length) return false;
 
@@ -571,12 +612,13 @@ export async function getAllowedFeaturesForUser(params: { tenantId: string; role
     );
   }
 
+  if (role === "CLIENTE") {
+    return filterFeaturesByTenantModules(modules, [...CLIENTE_FIXED_ALLOW_FEATURES]);
+  }
+
   const matrix = await getTenantPermissionsMatrix(tenantId);
   return filterFeaturesByTenantModules(
     modules,
-    FEATURES.filter((f) => {
-      if (role === "CLIENTE" && f === "tarefa.editar") return false;
-      return matrix[f][role] !== "deny";
-    }),
+    FEATURES.filter((f) => matrix[f][role] !== "deny"),
   );
 }

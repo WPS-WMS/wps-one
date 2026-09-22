@@ -586,68 +586,68 @@ export default function UsuariosPage() {
             </div>
           )}
           <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1000px]">
-                <thead>
-                  <tr className="border-b border-[color:var(--border)] bg-[color:var(--surface)]/80 text-left text-xs font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
-                    <th className="px-6 py-3">Nome</th>
-                    <th className="px-6 py-3">E-mail</th>
-                    <th className="px-6 py-3">Tipo</th>
-                    <th className="px-6 py-3">Licenças</th>
-                    <th className="px-6 py-3">Cargo</th>
-                    <th className="px-6 py-3">Empresas</th>
-                    <th className="px-6 py-3 text-center">Status</th>
-                    <th className="pl-6 pr-8 py-3 text-right whitespace-nowrap">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u) => (
+            <table className="w-full table-fixed">
+              <thead>
+                <tr className="border-b border-[color:var(--border)] bg-[color:var(--surface)]/80 text-left text-[10px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                  <th className="w-[26%] px-3 py-2.5">Nome</th>
+                  <th className="w-[12%] px-2 py-2.5">Tipo</th>
+                  <th className="w-[20%] px-2 py-2.5">Licenças</th>
+                  <th className="w-[14%] px-2 py-2.5">Cargo</th>
+                  <th className="w-[12%] px-2 py-2.5">Empresas</th>
+                  <th className="w-[8%] px-2 py-2.5 text-center">Status</th>
+                  <th className="w-[8%] px-2 py-2.5 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => {
+                  const companyLabel = needsClientLink(u.role)
+                    ? (() => {
+                        const ids = u.clientAccess?.map((a) => a.clientId) ?? [];
+                        if (ids.length === 0) return "—";
+                        const names = ids.map((id) => clientsById[id]).filter(Boolean);
+                        return names.length > 0 ? names.join(", ") : `${ids.length} empresa(s)`;
+                      })()
+                    : "—";
+                  const licensesLabel =
+                    (u.licenseLabels ?? []).length > 0 ? u.licenseLabels!.join(", ") : "—";
+                  return (
                     <tr
                       key={u.id}
                       className="border-t border-[color:var(--border)]/70 hover:bg-[color:var(--surface)]/60 transition-colors"
                     >
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-[color:var(--foreground)]">{u.name}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-[color:var(--muted-foreground)]">{u.email}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-[color:var(--muted-foreground)]">{labelForRole(u.role)}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div
-                          className="max-w-[280px] truncate text-sm text-[color:var(--muted-foreground)]"
-                          title={(u.licenseLabels ?? []).join(", ")}
-                        >
-                          {(u.licenseLabels ?? []).length > 0
-                            ? u.licenseLabels!.join(", ")
-                            : "—"}
+                      <td className="px-3 py-2.5 align-top">
+                        <div className="truncate text-sm font-medium text-[color:var(--foreground)]" title={u.name}>
+                          {u.name}
+                        </div>
+                        <div className="truncate text-[11px] text-[color:var(--muted-foreground)]" title={u.email}>
+                          {u.email}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-[color:var(--muted-foreground)]">{u.cargo || "—"}</div>
+                      <td className="px-2 py-2.5 align-top">
+                        <div className="truncate text-xs text-[color:var(--muted-foreground)]" title={labelForRole(u.role)}>
+                          {labelForRole(u.role)}
+                        </div>
                       </td>
-                      <td className="px-6 py-4">
-                        {needsClientLink(u.role) ? (() => {
-                          const ids = u.clientAccess?.map((a) => a.clientId) ?? [];
-                          if (ids.length === 0) return <div className="text-sm text-[color:var(--muted-foreground)]">—</div>;
-                          const names = ids.map((id) => clientsById[id]).filter(Boolean);
-                          const label = names.length > 0 ? names.join(", ") : `${ids.length} empresa(s)`;
-                          return (
-                            <div className="text-sm text-[color:var(--muted-foreground)] max-w-[260px] truncate" title={label}>
-                              {label}
-                            </div>
-                          );
-                        })() : (
-                          <div className="text-sm text-[color:var(--muted-foreground)]">—</div>
-                        )}
+                      <td className="px-2 py-2.5 align-top">
+                        <div className="truncate text-xs text-[color:var(--muted-foreground)]" title={licensesLabel}>
+                          {licensesLabel}
+                        </div>
                       </td>
-                      <td className="px-6 py-4 text-center">
+                      <td className="px-2 py-2.5 align-top">
+                        <div className="truncate text-xs text-[color:var(--muted-foreground)]" title={u.cargo || "—"}>
+                          {u.cargo || "—"}
+                        </div>
+                      </td>
+                      <td className="px-2 py-2.5 align-top">
+                        <div className="truncate text-xs text-[color:var(--muted-foreground)]" title={companyLabel}>
+                          {companyLabel}
+                        </div>
+                      </td>
+                      <td className="px-2 py-2.5 text-center align-middle">
                         <ConfigStatusBadge active={u.ativo !== false} />
                       </td>
-                      <td className="pl-6 pr-8 py-4 whitespace-nowrap">
-                        <div className="inline-flex items-center justify-end gap-2">
+                      <td className="px-2 py-2.5 whitespace-nowrap align-middle">
+                        <div className="inline-flex w-full items-center justify-end gap-1">
                           <button
                             type="button"
                             onClick={() => setEditingUser(u)}
@@ -674,10 +674,10 @@ export default function UsuariosPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       </main>

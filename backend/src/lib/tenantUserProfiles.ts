@@ -115,7 +115,7 @@ export const SYSTEM_USER_PROFILES: SystemUserProfileSeed[] = [
     requiresTimeEntry: false,
     excludeFromHourBank: true,
     sortOrder: 90,
-    configurable: true,
+    configurable: false,
     assignable: true,
   },
 ];
