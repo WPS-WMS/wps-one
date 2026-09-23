@@ -1,13 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CreditCard, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Check, Copy, CreditCard, Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "@/components/Link";
 import { usePathname } from "next/navigation";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { PopoverSelect } from "@/components/ui/PopoverSelect";
+import {
+  buildWpsStaticPixBrCode,
+  pixQrImageUrl,
+  WPS_PIX_CNPJ_FORMATTED,
+  WPS_PIX_CNPJ_KEY,
+} from "@/lib/wpsPix";
 
 type PlanAddon = {
   id: "sharepoint" | "comercial" | "rh";
@@ -56,6 +62,7 @@ type SubscriptionPayload = {
   label: string;
   note?: string;
   pricePerUserFormatted: string | null;
+  monthlyAmountCents?: number;
   monthlyAmountFormatted: string;
   baseMonthlyAmountFormatted?: string;
   addonMonthlyAmountFormatted?: string;
@@ -124,8 +131,50 @@ export function MySubscriptionPageContent() {
   const [plan, setPlan] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [pixCopied, setPixCopied] = useState<"key" | "brcode" | null>(null);
 
   const allowed = permissionsReady && can("configuracoes.assinatura");
+
+  /** Valor do Pix = mensalidade deste tenant (plano + addons × usuários). */
+  const pixAmountCents = useMemo(() => {
+    if (!data) return null;
+    const selected = (data.plans ?? []).find((p) => p.id === plan);
+    if (selected) {
+      const billable = data.usage.billableUsersActive;
+      const base = billable * selected.priceCentsPerUser;
+      const addonCents = (selected.addons ?? []).reduce((sum, a) => {
+        const fromSub = data.subscription.addons?.find((s) => s.id === a.id);
+        const seats = fromSub?.seats ?? 0;
+        return sum + seats * a.priceCentsPerUser;
+      }, 0);
+      return base + addonCents;
+    }
+    return data.subscription.monthlyAmountCents ?? 0;
+  }, [data, plan]);
+
+  const pixAmountFormatted = useMemo(() => {
+    if (pixAmountCents == null || pixAmountCents <= 0) return null;
+    return (pixAmountCents / 100).toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    });
+  }, [pixAmountCents]);
+
+  const pixBrCode = useMemo(
+    () => buildWpsStaticPixBrCode({ amountCents: pixAmountCents }),
+    [pixAmountCents],
+  );
+  const pixQrUrl = useMemo(() => pixQrImageUrl(pixBrCode, 200), [pixBrCode]);
+
+  async function copyPix(text: string, kind: "key" | "brcode") {
+    try {
+      await navigator.clipboard.writeText(text);
+      setPixCopied(kind);
+      window.setTimeout(() => setPixCopied(null), 2000);
+    } catch {
+      setError("Não foi possível copiar. Selecione o texto e copie manualmente.");
+    }
+  }
 
   useEffect(() => {
     if (authLoading || !permissionsReady) return;
@@ -465,7 +514,7 @@ export function MySubscriptionPageContent() {
           {plan ? (
             <div>
               <p className="mb-2 text-xs text-[color:var(--muted-foreground)]">Forma de pagamento</p>
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-2">
                 {paymentMethods.map((method) => {
                   const selected = paymentMethod === method.id;
                   return (
@@ -494,9 +543,99 @@ export function MySubscriptionPageContent() {
                   );
                 })}
               </div>
-              <p className="mt-2 text-[11px] text-[color:var(--muted-foreground)]">
-                O checkout com a forma escolhida será disponibilizado em breve.
-              </p>
+
+              {paymentMethod === "PIX" ? (
+                <div
+                  className="mt-3 rounded-xl border p-4"
+                  style={{
+                    borderColor: "color-mix(in srgb, var(--primary) 30%, var(--border))",
+                    background: "color-mix(in srgb, var(--primary) 5%, transparent)",
+                  }}
+                >
+                  <p className="text-sm font-semibold">Pagar com Pix</p>
+                  <p className="mt-1 text-[11px] text-[color:var(--muted-foreground)]">
+                    Escaneie o QR Code ou use o Pix copia e cola. Chave: CNPJ {WPS_PIX_CNPJ_FORMATTED}.
+                    {pixAmountFormatted
+                      ? ` Valor já incluso: ${pixAmountFormatted}.`
+                      : " O valor será informado no app do banco."}
+                  </p>
+                  <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
+                    <div className="mx-auto shrink-0 rounded-xl border bg-white p-2 sm:mx-0" style={{ borderColor: "var(--border)" }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={pixQrUrl}
+                        alt="QR Code Pix WPS One"
+                        width={200}
+                        height={200}
+                        className="h-[200px] w-[200px]"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-3">
+                      <div>
+                        <label className="mb-1 block text-[11px] text-[color:var(--muted-foreground)]">
+                          Chave Pix (CNPJ)
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            readOnly
+                            value={WPS_PIX_CNPJ_FORMATTED}
+                            className="min-w-0 flex-1 rounded-lg border bg-transparent px-3 py-2 text-sm tabular-nums"
+                            style={{ borderColor: "var(--border)" }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void copyPix(WPS_PIX_CNPJ_KEY, "key")}
+                            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold hover:bg-black/5"
+                            style={{ borderColor: "var(--border)" }}
+                          >
+                            {pixCopied === "key" ? (
+                              <Check className="h-3.5 w-3.5 text-emerald-600" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                            {pixCopied === "key" ? "Copiado" : "Copiar"}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[11px] text-[color:var(--muted-foreground)]">
+                          Pix copia e cola
+                        </label>
+                        <div className="flex gap-2">
+                          <textarea
+                            readOnly
+                            rows={3}
+                            value={pixBrCode}
+                            className="min-w-0 flex-1 resize-none rounded-lg border bg-transparent px-3 py-2 font-mono text-[11px] leading-relaxed"
+                            style={{ borderColor: "var(--border)" }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void copyPix(pixBrCode, "brcode")}
+                            className="inline-flex h-fit items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold hover:bg-black/5"
+                            style={{ borderColor: "var(--border)" }}
+                          >
+                            {pixCopied === "brcode" ? (
+                              <Check className="h-3.5 w-3.5 text-emerald-600" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                            {pixCopied === "brcode" ? "Copiado" : "Copiar"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : paymentMethod === "CARTAO_CREDITO" ? (
+                <p className="mt-2 text-[11px] text-[color:var(--muted-foreground)]">
+                  O checkout com cartão será disponibilizado em breve.
+                </p>
+              ) : (
+                <p className="mt-2 text-[11px] text-[color:var(--muted-foreground)]">
+                  Selecione a forma de pagamento.
+                </p>
+              )}
             </div>
           ) : null}
         </div>

@@ -41,10 +41,22 @@ type Detail = {
     pricePerUserFormatted: string | null;
     monthlyAmountCents: number;
     monthlyAmountFormatted: string;
+    baseMonthlyAmountFormatted?: string;
+    addonMonthlyAmountFormatted?: string;
     startedAt: string | null;
     nextPaymentAt: string | null;
     paymentMethod?: string | null;
     paymentMethodLabel?: string | null;
+    addons?: Array<{
+      id: string;
+      label: string;
+      priceCentsPerUser: number;
+      pricePerUserFormatted: string;
+      seats: number;
+      monthlyCents: number;
+      monthlyFormatted: string;
+      users?: Array<{ id: string; name: string; email: string }>;
+    }>;
   };
   primaryAdmin: {
     id: string;
@@ -500,6 +512,22 @@ export default function PlatformTenantDetailPage() {
               {detail.subscription.status === "active" ? "Ativa" : "Não configurada"}
             </dd>
           </div>
+          {detail.subscription.baseMonthlyAmountFormatted ? (
+            <div>
+              <dt className="text-xs text-[color:var(--muted-foreground)]">Mensalidade (plano)</dt>
+              <dd className="mt-1 font-medium tabular-nums">
+                {detail.subscription.baseMonthlyAmountFormatted}
+              </dd>
+            </div>
+          ) : null}
+          {(detail.subscription.addons?.some((a) => a.monthlyCents > 0) ?? false) ? (
+            <div>
+              <dt className="text-xs text-[color:var(--muted-foreground)]">Mensalidade (addons)</dt>
+              <dd className="mt-1 font-medium tabular-nums">
+                {detail.subscription.addonMonthlyAmountFormatted ?? "—"}
+              </dd>
+            </div>
+          ) : null}
           {detail.subscription.paymentMethodLabel ? (
             <div>
               <dt className="text-xs text-[color:var(--muted-foreground)]">Forma de pagamento</dt>
@@ -507,6 +535,54 @@ export default function PlatformTenantDetailPage() {
             </div>
           ) : null}
         </dl>
+
+        {(detail.subscription.addons?.length ?? 0) > 0 ? (
+          <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+            <p className="text-xs text-[color:var(--muted-foreground)]">Addons em uso</p>
+            <p className="mt-0.5 text-[11px] text-[color:var(--muted-foreground)]">
+              Atribuição feita pela empresa em Usuários. Perfil Cliente não é cobrado.
+            </p>
+            <div className="mt-3 space-y-2">
+              {detail.subscription.addons!.map((addon) => {
+                const seats = addon.seats ?? 0;
+                const users = addon.users ?? [];
+                const namesPreview = users.map((u) => u.name).join(", ");
+                return (
+                  <div
+                    key={addon.id}
+                    className="rounded-lg border px-3 py-2.5"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">{addon.label}</p>
+                        <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                          +{addon.pricePerUserFormatted} / usuário
+                          {seats > 0 ? ` · ${addon.monthlyFormatted}/mês` : ""}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-sm font-medium tabular-nums">
+                        {seats} usuário{seats === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    {seats > 0 && users.length > 0 ? (
+                      <p
+                        className="mt-2 text-xs text-[color:var(--muted-foreground)]"
+                        title={namesPreview}
+                      >
+                        {namesPreview}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-xs text-[color:var(--muted-foreground)]">
+                        Nenhum usuário com este addon.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section

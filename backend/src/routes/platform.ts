@@ -12,6 +12,7 @@ import {
 } from "../lib/platformPlans.js";
 import {
   findPlatformPlanById,
+  listAddonAssigneesFromUsers,
   listPlatformPlans,
   subscriptionPayloadForTenant,
   TENANT_SUBSCRIPTION_SELECT,
@@ -576,7 +577,18 @@ platformRouter.get("/tenants/:id", requirePlatformAdmin, async (req, res) => {
     }
 
     const usage = await getTenantUsageSnapshot(tenant.id);
-    const subscription = subscriptionPayloadForTenant(tenant, usage.billableUsersActive);
+    const addonAssignees = await listAddonAssigneesFromUsers(tenant.id);
+    const addonSeats = {
+      sharepoint: addonAssignees.sharepoint.length,
+      comercial: addonAssignees.comercial.length,
+      rh: addonAssignees.rh.length,
+    };
+    const subscription = subscriptionPayloadForTenant(
+      tenant,
+      usage.billableUsersActive,
+      addonSeats,
+      addonAssignees,
+    );
 
     const primaryAdmin = await prisma.user.findFirst({
       where: { tenantId: tenant.id, isPrimaryAdmin: true },
