@@ -473,6 +473,11 @@ model User {
   notificationsReceived UserNotification[] @relation("NotificationRecipient")
   notificationsActed    UserNotification[] @relation("NotificationActor")
   @@index([tenantId, name])
+  @@index([tenantId, ativo, role], map: "users_tenant_ativo_role_idx")
+  @@index([tenantId, updatedAt], map: "users_tenant_updated_idx")
+  @@index([tenantId, addonSharepoint], map: "users_tenant_addon_sharepoint_idx")
+  @@index([tenantId, addonComercial], map: "users_tenant_addon_comercial_idx")
+  @@index([tenantId, addonRh], map: "users_tenant_addon_rh_idx")
   @@index([skillProfileId], map: "users_skill_profile_idx")
   @@map("users")
 }
@@ -2083,6 +2088,7 @@ model Payable {
 
   @@index([tenantId, status, createdAt], map: "payables_tenant_status_created_idx")
   @@index([tenantId, kind, status], map: "payables_tenant_kind_status_idx")
+  @@index([tenantId, competenceDate], map: "payables_tenant_competence_idx")
   @@index([financialAccountId], map: "payables_financial_account_idx")
   @@index([billingGroupId], map: "payables_billing_group_idx")
   @@map("payables")

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import {
@@ -9,7 +10,6 @@ import {
   ListTodo,
   Target,
 } from "lucide-react";
-import { EditTaskModalFull } from "./EditTaskModalFull";
 import type { PackageTicket } from "./PackageCard";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { TasksListFilterBar } from "./TasksListFilterBar";
@@ -19,6 +19,10 @@ import {
   extractClientsFromRows,
 } from "@/lib/tasksClientFilters";
 
+const EditTaskModalFull = dynamic(
+  () => import("./EditTaskModalFull").then((m) => ({ default: m.EditTaskModalFull })),
+  { ssr: false },
+);
 export type HomeDashboardBasePath = "/consultor" | "/admin" | "/gestor";
 
 type TicketForHome = {

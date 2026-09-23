@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, hashPassword } from "../lib/auth.js";
 import { isPlatformAdmin } from "../lib/platformAdmin.js";
-import { formatStorageBytes, getTenantUsageSnapshot } from "../lib/platformTenantUsage.js";
+import { formatStorageBytes, getTenantUsageSnapshot, getTenantUsageSnapshotsForList } from "../lib/platformTenantUsage.js";
 import {
   computeNextSubscriptionPaymentAt,
   isSubscriptionPaymentMethodId,
@@ -17,6 +17,7 @@ import {
   subscriptionPayloadForTenant,
   TENANT_SUBSCRIPTION_SELECT,
 } from "../lib/subscriptionHelpers.js";
+import { invalidateTenantModulesCache } from "../lib/tenantModuleGate.js";
 import { ensureFinanceDefaults } from "../lib/financeConfigHelpers.js";
 import { ensureTenantUserProfiles } from "../lib/tenantUserProfiles.js";
 import { errorSummary } from "../lib/devLog.js";
@@ -497,24 +498,32 @@ platformRouter.get("/tenants", requirePlatformAdmin, async (_req, res) => {
       },
     });
 
-    const items = await Promise.all(
-      tenants.map(async (t) => {
-        const usage = await getTenantUsageSnapshot(t.id);
-        const subscription = subscriptionPayloadForTenant(t, usage.billableUsersActive);
-        return {
-          id: t.id,
-          name: t.name,
-          slug: t.slug,
-          createdAt: t.createdAt.toISOString(),
-          updatedAt: t.updatedAt.toISOString(),
-          usage: {
-            ...usage,
-            storageFormatted: formatStorageBytes(usage.storageBytes),
-          },
-          subscription,
-        };
-      }),
-    );
+    const usageByTenant = await getTenantUsageSnapshotsForList(tenants.map((t) => t.id));
+
+    const items = tenants.map((t) => {
+      const usage = usageByTenant.get(t.id) ?? {
+        usersTotal: 0,
+        usersActive: 0,
+        billableUsersActive: 0,
+        projects: 0,
+        storageBytes: 0,
+        lastActivityAt: null,
+      };
+      const subscription = subscriptionPayloadForTenant(t, usage.billableUsersActive);
+      return {
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        createdAt: t.createdAt.toISOString(),
+        updatedAt: t.updatedAt.toISOString(),
+        usage: {
+          ...usage,
+          // Storage/lastActivity só no detalhe (evita ~6 aggregates × N na listagem).
+          storageFormatted: "—",
+        },
+        subscription,
+      };
+    });
 
     const totals = items.reduce(
       (acc, row) => {
@@ -523,7 +532,6 @@ platformRouter.get("/tenants", requirePlatformAdmin, async (_req, res) => {
         acc.usersActive += row.usage.usersActive;
         acc.billableUsersActive += row.usage.billableUsersActive;
         acc.monthlyBillingCents += row.subscription.monthlyAmountCents;
-        acc.storageBytes += row.usage.storageBytes;
         return acc;
       },
       {
@@ -806,6 +814,8 @@ platformRouter.patch("/tenants/:id", requirePlatformAdmin, async (req, res) => {
       }
     });
 
+    invalidateTenantModulesCache(id);
+
     const updatedTenant = await prisma.tenant.findUnique({
       where: { id },
       select: {
@@ -968,6 +978,8 @@ platformRouter.patch("/tenants/:id/subscription", requirePlatformAdmin, async (r
       },
       select: TENANT_SUBSCRIPTION_SELECT,
     });
+
+    invalidateTenantModulesCache(updated.id);
 
     const usage = await getTenantUsageSnapshot(updated.id);
     const subscription = subscriptionPayloadForTenant(updated, usage.billableUsersActive);

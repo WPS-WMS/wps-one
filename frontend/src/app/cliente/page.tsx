@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 import {
@@ -11,10 +12,14 @@ import {
   ListTodo,
   Target,
 } from "lucide-react";
-import { EditTaskModalFull } from "@/components/EditTaskModalFull";
 import type { PackageTicket } from "@/components/PackageCard";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 
+const EditTaskModalFull = dynamic(
+  () =>
+    import("@/components/EditTaskModalFull").then((m) => ({ default: m.EditTaskModalFull })),
+  { ssr: false },
+);
 type TicketForClient = {
   id: string;
   code: string;

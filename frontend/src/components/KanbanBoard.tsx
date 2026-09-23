@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { Archive, Trash2, Plus, LayoutGrid, FileText, Clock, Calendar, User, Check, GripVertical, Pencil } from "lucide-react";
 import { PackageTicket } from "./PackageCard";
-import { CreateTaskModalFull } from "./CreateTaskModalFull";
 import { CreateColumnModal } from "./CreateColumnModal";
 import { ConfirmModal } from "./ConfirmModal";
-import { EditTaskModalFull } from "./EditTaskModalFull";
 import { FinalizeTaskModal } from "./FinalizeTaskModal";
 import { apiFetch } from "@/lib/api";
 import { loadMergedKanbanColumnOrder } from "@/lib/kanbanMergedStorage";
@@ -28,6 +27,14 @@ import {
   insertTicketIntoColumnOrder,
 } from "@/lib/kanbanCardOrderStorage";
 
+const CreateTaskModalFull = dynamic(
+  () => import("./CreateTaskModalFull").then((m) => ({ default: m.CreateTaskModalFull })),
+  { ssr: false },
+);
+const EditTaskModalFull = dynamic(
+  () => import("./EditTaskModalFull").then((m) => ({ default: m.EditTaskModalFull })),
+  { ssr: false },
+);
 const DEFAULT_COLUMNS = [
   { id: "BACKLOG", label: "Backlog", color: "bg-slate-500" },
   { id: "EM_EXECUCAO", label: "Em execução", color: "bg-blue-500" },

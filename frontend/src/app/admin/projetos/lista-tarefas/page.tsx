@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft, Search, ChevronDown, X, Bookmark } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-import { EditTaskModalFull } from "@/components/EditTaskModalFull";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { getTicketStatusDisplay } from "@/lib/ticketStatusDisplay";
 import { loadAllMergedKanbanCustomColumns } from "@/lib/kanbanMergedStorage";
@@ -16,6 +16,12 @@ import {
   loadListaTarefasSavedFilters,
   saveListaTarefasSavedFilters,
 } from "@/lib/tasksListSavedFilters";
+
+const EditTaskModalFull = dynamic(
+  () =>
+    import("@/components/EditTaskModalFull").then((m) => ({ default: m.EditTaskModalFull })),
+  { ssr: false },
+);
 
 type UserOption = { id: string; name: string; role?: string };
 type ClientOption = { id: string; name: string };

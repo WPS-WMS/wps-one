@@ -10,6 +10,8 @@ export type TenantUsageSnapshot = {
   lastActivityAt: string | null;
 };
 
+const NON_BILLABLE_ROLES = ["PLATFORM_ADMIN", "CLIENTE"] as const;
+
 async function sumAttachmentBytes(tenantId: string): Promise<number> {
   const [reimbursement, payable, receivable, supplier, ticket, contract] = await Promise.all([
     prisma.reimbursementAttachment.aggregate({
@@ -85,7 +87,7 @@ export async function getTenantUsageSnapshot(tenantId: string): Promise<TenantUs
         where: {
           tenantId,
           ativo: true,
-          role: { notIn: ["PLATFORM_ADMIN", "CLIENTE"] },
+          role: { notIn: [...NON_BILLABLE_ROLES] },
         },
       }),
       prisma.project.count({ where: { client: { tenantId } } }),
@@ -101,6 +103,59 @@ export async function getTenantUsageSnapshot(tenantId: string): Promise<TenantUs
     storageBytes,
     lastActivityAt,
   };
+}
+
+/**
+ * Snapshot em lote para listagens da plataforma.
+ * Uma leitura de users + projects (sem storage/lastActivity — esses ficam no detalhe).
+ */
+export async function getTenantUsageSnapshotsForList(
+  tenantIds: string[],
+): Promise<Map<string, TenantUsageSnapshot>> {
+  const map = new Map<string, TenantUsageSnapshot>();
+  for (const id of tenantIds) {
+    map.set(id, {
+      usersTotal: 0,
+      usersActive: 0,
+      billableUsersActive: 0,
+      projects: 0,
+      storageBytes: 0,
+      lastActivityAt: null,
+    });
+  }
+  if (tenantIds.length === 0) return map;
+
+  const [users, projects] = await Promise.all([
+    prisma.user.findMany({
+      where: { tenantId: { in: tenantIds } },
+      select: { tenantId: true, ativo: true, role: true },
+    }),
+    prisma.project.findMany({
+      where: { client: { tenantId: { in: tenantIds } } },
+      select: { client: { select: { tenantId: true } } },
+    }),
+  ]);
+
+  for (const u of users) {
+    const row = map.get(u.tenantId);
+    if (!row) continue;
+    row.usersTotal += 1;
+    if (u.ativo) {
+      row.usersActive += 1;
+      if (!(NON_BILLABLE_ROLES as readonly string[]).includes(u.role)) {
+        row.billableUsersActive += 1;
+      }
+    }
+  }
+
+  for (const p of projects) {
+    const tenantId = p.client?.tenantId;
+    if (!tenantId) continue;
+    const row = map.get(tenantId);
+    if (row) row.projects += 1;
+  }
+
+  return map;
 }
 
 export function formatStorageBytes(bytes: number): string {

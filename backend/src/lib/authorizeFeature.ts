@@ -53,6 +53,7 @@ export function requireFeature(featureId: FeatureId) {
       tenantId: user.tenantId,
       role: user.role,
       featureId,
+      modules,
     });
     if (!allowed) {
       res.status(403).json({ error: "Sem permissão para acessar esta funcionalidade." });
@@ -89,6 +90,7 @@ export function requireAnyFeature(featureIds: FeatureId[]) {
       tenantId: user.tenantId,
       role: user.role,
       featureIds,
+      modules,
     });
     if (!allowed) {
       res.status(403).json({ error: "Sem permissão para acessar esta funcionalidade." });

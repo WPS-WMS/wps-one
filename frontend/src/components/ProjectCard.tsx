@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Plus, LayoutGrid, MoreVertical, Eye, Pencil, Archive, Trash2, RotateCcw, List, Clock, AlertTriangle, Upload } from "lucide-react";
 import { apiFetch } from "@/lib/api";
@@ -12,12 +13,18 @@ import { TaskListView } from "./TaskListView";
 import { CreateSubprojectModal } from "./CreateSubprojectModal";
 import { ImportProjectCsvModal } from "./ImportProjectCsvModal";
 import { EditSubprojectModal } from "./EditSubprojectModal";
-import { CreateTaskModalFull } from "./CreateTaskModalFull";
-import { EditTaskModalFull } from "./EditTaskModalFull";
 import { ConfirmModal } from "./ConfirmModal";
 import { NewProjectModal } from "./NewProjectModal";
 import { useAuth } from "@/contexts/AuthContext";
 
+const CreateTaskModalFull = dynamic(
+  () => import("./CreateTaskModalFull").then((m) => ({ default: m.CreateTaskModalFull })),
+  { ssr: false },
+);
+const EditTaskModalFull = dynamic(
+  () => import("./EditTaskModalFull").then((m) => ({ default: m.EditTaskModalFull })),
+  { ssr: false },
+);
 export type ProjectForCard = {
   id: string;
   name: string;

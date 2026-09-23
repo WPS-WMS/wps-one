@@ -1,12 +1,17 @@
 "use client";
 
 import { use, useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { EditTaskModalFull } from "@/components/EditTaskModalFull";
 import type { PackageTicket } from "@/components/PackageCard";
 
+const EditTaskModalFull = dynamic(
+  () =>
+    import("@/components/EditTaskModalFull").then((m) => ({ default: m.EditTaskModalFull })),
+  { ssr: false },
+);
 type PageProps = {
   params: Promise<{ projectId: string; ticketId: string }>;
 };

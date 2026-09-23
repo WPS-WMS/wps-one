@@ -20,6 +20,7 @@ import {
   TENANT_SUBSCRIPTION_SELECT,
 } from "../lib/subscriptionHelpers.js";
 import { getTenantUsageSnapshot } from "../lib/platformTenantUsage.js";
+import { invalidateTenantModulesCache } from "../lib/tenantModuleGate.js";
 
 export const tenantsRouter = Router();
 
@@ -323,6 +324,8 @@ tenantsRouter.patch("/me/subscription", authMiddleware, async (req, res) => {
       select: TENANT_SUBSCRIPTION_SELECT,
     });
 
+    invalidateTenantModulesCache(updated.id);
+
     const usageAfter = await getTenantUsageSnapshot(updated.id);
     const assigneesAfter = nextPlanId
       ? await listAddonAssigneesFromUsers(updated.id)
@@ -410,6 +413,8 @@ tenantsRouter.post("/me/subscription/cancel", authMiddleware, async (req, res) =
       },
       select: TENANT_SUBSCRIPTION_SELECT,
     });
+
+    invalidateTenantModulesCache(updated.id);
 
     const usage = await getTenantUsageSnapshot(updated.id);
     res.json({

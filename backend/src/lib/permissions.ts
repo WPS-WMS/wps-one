@@ -478,6 +478,8 @@ export async function isFeatureAllowed(params: {
   tenantId: string;
   role: string;
   featureId: FeatureId;
+  /** Evita 2ª chamada a getTenantModules no mesmo request (ex.: requireFeature). */
+  modules?: Awaited<ReturnType<typeof getTenantModules>> | null;
 }): Promise<boolean> {
   const { tenantId, role, featureId } = params;
 
@@ -489,7 +491,7 @@ export async function isFeatureAllowed(params: {
   if (!isSystemKnown && !profile) return false;
   if (profile && !profile.isActive) return false;
 
-  const modules = await getTenantModules(tenantId);
+  const modules = params.modules ?? (await getTenantModules(tenantId));
   if (!isFeatureAllowedByTenantModules(modules, featureId)) return false;
 
   if (role === "SUPER_ADMIN") {
@@ -540,6 +542,7 @@ export async function isAnyFeatureAllowed(params: {
   tenantId: string;
   role: string;
   featureIds: FeatureId[];
+  modules?: Awaited<ReturnType<typeof getTenantModules>> | null;
 }): Promise<boolean> {
   const { tenantId, role, featureIds } = params;
   if (!featureIds.length) return false;
@@ -552,7 +555,7 @@ export async function isAnyFeatureAllowed(params: {
     if (!profile?.isActive) return false;
   }
 
-  const modules = await getTenantModules(tenantId);
+  const modules = params.modules ?? (await getTenantModules(tenantId));
   const gated = filterFeaturesByTenantModules(modules, featureIds);
   if (!gated.length) return false;
 

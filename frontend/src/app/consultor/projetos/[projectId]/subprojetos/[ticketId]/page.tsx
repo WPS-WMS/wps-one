@@ -1,14 +1,19 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LayoutGrid, List, Plus } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { TaskListView } from "@/components/TaskListView";
-import { CreateTaskModalFull } from "@/components/CreateTaskModalFull";
 import { type PackageTicket } from "@/components/PackageCard";
 
+const CreateTaskModalFull = dynamic(
+  () =>
+    import("@/components/CreateTaskModalFull").then((m) => ({ default: m.CreateTaskModalFull })),
+  { ssr: false },
+);
 type PageProps = {
   params: Promise<{ projectId: string; ticketId: string }>;
 };

@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { canViewAllUsersInGestaoHorasReport } from "@/lib/featureNav";
-import { EditTaskModalFull } from "@/components/EditTaskModalFull";
 import {
   PayableCreateModal,
   type PayableCreatePrefill,
@@ -24,6 +24,12 @@ import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { TruncatedHoverText } from "@/components/ui/TruncatedHoverText";
 import { formatarMoeda } from "@/lib/brFormatters";
 import { Download, FileText, ChevronDown, Wallet, Filter } from "lucide-react";
+
+const EditTaskModalFull = dynamic(
+  () =>
+    import("@/components/EditTaskModalFull").then((m) => ({ default: m.EditTaskModalFull })),
+  { ssr: false },
+);
 
 type UserOption = {
   id: string;

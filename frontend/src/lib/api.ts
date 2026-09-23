@@ -180,6 +180,7 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
     }
     return lastRes as Response;
   } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") throw err;
     // Segurança: em produção, evita expor a URL/stack detalhada em mensagens visíveis ao utilizador.
     // Mantemos detalhe apenas em dev para facilitar troubleshooting.
     const msg = err instanceof Error ? err.message : "Erro de rede";
@@ -214,6 +215,7 @@ export async function apiFetchBlob(path: string, options: RequestInit = {}) {
     }
     return lastRes as Response;
   } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") throw err;
     const msg = err instanceof Error ? err.message : "Erro de rede";
     const isProd = process.env.NODE_ENV === "production";
     const userMessage = "Falha ao conectar com a API. Tente novamente em instantes.";

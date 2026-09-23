@@ -399,15 +399,16 @@ export default function UsuariosPage() {
     return profileByCode.get(role)?.name ?? roleLabel(role);
   }
 
-  function loadUsers() {
+  function loadUsers(signal?: AbortSignal) {
     setLoadError(null);
     const params = new URLSearchParams();
     if (search.trim()) params.set("q", search.trim());
     if (statusFilter !== "todos") params.set("status", statusFilter);
     if (roleFilter) params.set("role", roleFilter);
     const qs = params.toString();
-    apiFetch(`/api/users${qs ? `?${qs}` : ""}`)
+    apiFetch(`/api/users${qs ? `?${qs}` : ""}`, signal ? { signal } : undefined)
       .then(async (r) => {
+        if (signal?.aborted) return null;
         const data = await r.json().catch(() => null);
         if (!r.ok) {
           throw new Error(data?.error || "Erro ao carregar usuários.");
@@ -416,19 +417,30 @@ export default function UsuariosPage() {
         return data as UserRow[];
       })
       .then((data) => {
+        if (data == null || signal?.aborted) return;
         setUsers(data);
         const first = data.find((u) => u.availableAddons || u.planLabel);
         if (first?.availableAddons) setAvailableAddons(first.availableAddons);
         if (first?.planLabel) setPlanLabel(first.planLabel);
       })
       .catch((err) => {
+        if (signal?.aborted || err?.name === "AbortError") return;
         setUsers([]);
         setLoadError(String(err?.message || "Erro ao carregar usuários."));
       });
   }
 
   useEffect(() => {
-    loadUsers();
+    const ac = new AbortController();
+    const delayMs = search.trim() ? 350 : 0;
+    const timer = window.setTimeout(() => {
+      loadUsers(ac.signal);
+    }, delayMs);
+    return () => {
+      window.clearTimeout(timer);
+      ac.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadUsers fecha sobre search/filters
   }, [search, statusFilter, roleFilter]);
 
   useEffect(() => {

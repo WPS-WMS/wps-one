@@ -82,12 +82,28 @@ function endOfUtcDay(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
 }
 
-/**
- * Resolve módulos do plano do tenant e aplica lockout após cancelamento.
- * Portal/SharePoint também exigem chave de ativação no tenant (painel da plataforma).
- * Lazy: se canceling e já passou accessUntil, marca locked no banco.
- */
-export async function getTenantModules(tenantId: string): Promise<TenantModules> {
+const TENANT_MODULES_TTL_MS = 45_000;
+
+type ModulesCacheEntry = {
+  expiresAt: number;
+  value: TenantModules;
+};
+
+const tenantModulesCache = new Map<string, ModulesCacheEntry>();
+const tenantModulesInflight = new Map<string, Promise<TenantModules>>();
+
+/** Invalida cache após mudança de plano/status/chaves de módulo. */
+export function invalidateTenantModulesCache(tenantId?: string): void {
+  if (tenantId) {
+    tenantModulesCache.delete(tenantId);
+    tenantModulesInflight.delete(tenantId);
+    return;
+  }
+  tenantModulesCache.clear();
+  tenantModulesInflight.clear();
+}
+
+async function loadTenantModulesUncached(tenantId: string): Promise<TenantModules> {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: {
@@ -127,6 +143,7 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
         data: { subscriptionStatus: "locked" },
       });
       status = "locked";
+      invalidateTenantModulesCache(tenantId);
     }
   }
 
@@ -198,6 +215,36 @@ export async function getTenantModules(tenantId: string): Promise<TenantModules>
     accessUntil: accessUntil ? accessUntil.toISOString() : null,
     plan,
   };
+}
+
+/**
+ * Resolve módulos do plano do tenant e aplica lockout após cancelamento.
+ * Portal/SharePoint também exigem chave de ativação no tenant (painel da plataforma).
+ * Lazy: se canceling e já passou accessUntil, marca locked no banco.
+ * Cache TTL curto + coalescing de inflight (evita 2× query no mesmo request).
+ */
+export async function getTenantModules(tenantId: string): Promise<TenantModules> {
+  const now = Date.now();
+  const cached = tenantModulesCache.get(tenantId);
+  if (cached && cached.expiresAt > now) return cached.value;
+
+  const inflight = tenantModulesInflight.get(tenantId);
+  if (inflight) return inflight;
+
+  const promise = loadTenantModulesUncached(tenantId)
+    .then((value) => {
+      tenantModulesCache.set(tenantId, {
+        expiresAt: Date.now() + TENANT_MODULES_TTL_MS,
+        value,
+      });
+      return value;
+    })
+    .finally(() => {
+      tenantModulesInflight.delete(tenantId);
+    });
+
+  tenantModulesInflight.set(tenantId, promise);
+  return promise;
 }
 
 export function tenantHasModule(modules: TenantModules, moduleId: PlanModuleId): boolean {
