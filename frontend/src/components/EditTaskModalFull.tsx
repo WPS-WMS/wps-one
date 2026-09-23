@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { X, Maximize2, Send, Pencil, Trash2, Check, X as XIcon, Plus, Users, Upload, Download, File as FileIcon, Image as ImageIcon, FileText, Loader2 } from "lucide-react";
-import { API_BASE_URL, ASSET_PUBLIC_BASE_URL, apiFetch, apiFetchBlob, getToken, publicFileUrl } from "@/lib/api";
+import { API_BASE_URL, ASSET_PUBLIC_BASE_URL, apiFetch, apiFetchBlob, publicFileUrl } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { RichTextEditor } from "./RichTextEditor";
 import { TimeEntryPermissionModal, type TimeEntryPermissionPayload } from "./TimeEntryPermissionModal";

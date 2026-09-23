@@ -281,12 +281,11 @@ app.use("/api/webhooks/focus-nfe", focusNfeWebhooksRouter);
 app.use("/api/payables", payablesRouter);
 app.use("/api/receivables", receivablesRouter);
 
-// Uploads: em produção, restringir exposição pública.
-// - Mantém avatares públicos por compatibilidade (/uploads/users/**)
-// - Portal: permite apenas imagens em /uploads/portal/** (PDFs devem passar por rotas autenticadas)
-// - Tickets: apenas imagens em /uploads/tickets/** (comentários HTML usam `<img src=...>` sem JWT)
-// - Projects: bloqueado (usar rotas autenticadas)
-if (process.env.NODE_ENV === "production") {
+// Uploads públicos: raster apenas (sem SVG — XSS se aberto na URL).
+// Avatar default legado (`default-avatar.svg`) só em /uploads/users.
+// Portal/tickets: imagens embutidas em HTML sem JWT; PDFs via rotas autenticadas.
+// Projects: bloqueado em produção.
+{
   const imgExt = new Set([
     ".png",
     ".jpg",
@@ -294,36 +293,46 @@ if (process.env.NODE_ENV === "production") {
     ".jfif",
     ".webp",
     ".gif",
-    ".svg",
     ".avif",
     ".bmp",
   ]);
 
-  app.use("/uploads/users", express.static(join(getUploadsRoot(), "users")));
-
-  const uploadsImageOnlyGuard: express.RequestHandler = (req, res, next) => {
-    const p = String(req.path || "").toLowerCase();
-    const dot = p.lastIndexOf(".");
-    const ext = dot >= 0 ? p.slice(dot) : "";
-    if (!ext || !imgExt.has(ext)) return res.status(404).end();
-    return next();
+  const uploadsImageOnlyGuard = (allowDefaultSvg: boolean): express.RequestHandler => {
+    return (req, res, next) => {
+      const p = String(req.path || "").toLowerCase();
+      const base = p.split("/").pop() || "";
+      if (allowDefaultSvg && base === "default-avatar.svg") {
+        res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'");
+        return next();
+      }
+      const dot = p.lastIndexOf(".");
+      const ext = dot >= 0 ? p.slice(dot) : "";
+      if (!ext || !imgExt.has(ext)) return res.status(404).end();
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      return next();
+    };
   };
 
-  app.use("/uploads/portal", uploadsImageOnlyGuard);
-  app.use("/uploads/portal", express.static(join(getUploadsRoot(), "portal")));
+  if (process.env.NODE_ENV === "production") {
+    app.use("/uploads/users", uploadsImageOnlyGuard(true));
+    app.use("/uploads/users", express.static(join(getUploadsRoot(), "users")));
 
-  // Imagens embutidas em comentários usam `fileUrl` em `/uploads/tickets/...` (não enviam JWT).
-  // PDFs e outros anexos continuam acessíveis só via `/api/ticket-attachments/:id/file`.
-  app.use("/uploads/tickets", uploadsImageOnlyGuard);
-  app.use("/uploads/tickets", express.static(join(getUploadsRoot(), "tickets")));
+    app.use("/uploads/portal", uploadsImageOnlyGuard(false));
+    app.use("/uploads/portal", express.static(join(getUploadsRoot(), "portal")));
 
-  app.use("/uploads/projects", (_req, res) => res.status(404).end());
+    // Imagens embutidas em comentários usam `fileUrl` em `/uploads/tickets/...` (não enviam JWT).
+    // PDFs e outros anexos continuam acessíveis só via `/api/ticket-attachments/:id/file`.
+    app.use("/uploads/tickets", uploadsImageOnlyGuard(false));
+    app.use("/uploads/tickets", express.static(join(getUploadsRoot(), "tickets")));
 
-  // Qualquer outro prefixo de uploads não deve ser público
-  app.use("/uploads", (_req, res) => res.status(404).end());
-} else {
-  // Em dev/QA, manter compatibilidade para facilitar debug.
-  app.use("/uploads", express.static(getUploadsRoot()));
+    app.use("/uploads/projects", (_req, res) => res.status(404).end());
+    app.use("/uploads", (_req, res) => res.status(404).end());
+  } else {
+    // Dev: mesma política de extensão (sem SVG em portal/tickets), resto do tree aberto para debug.
+    app.use("/uploads/portal", uploadsImageOnlyGuard(false));
+    app.use("/uploads/tickets", uploadsImageOnlyGuard(false));
+    app.use("/uploads", express.static(getUploadsRoot()));
+  }
 }
 
 // Erro não tratado em rota async (Express 4 não captura) não deve derrubar o processo.

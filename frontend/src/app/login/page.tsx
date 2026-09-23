@@ -38,6 +38,10 @@ function LoginPageInner() {
       setError("Não autorizado. Entre em contato com o administrador.");
       return;
     }
+    if (searchParams.get("locked") === "1") {
+      setLockedModalOpen(true);
+      return;
+    }
     if (searchParams.get("sessao") === "expirada") {
       setError(`Sua sessão expirou por inatividade (${IDLE_SESSION_MINUTES} minutos). Faça login novamente.`);
     }
@@ -114,8 +118,8 @@ function LoginPageInner() {
         );
         return;
       }
-      // Preferir cookie HttpOnly (defesa contra XSS). Mantém compatibilidade se backend ainda devolver token.
-      if (data?.token) setToken(data.token);
+      // Sessão via cookie HttpOnly. setToken só limpa JWT legado e marca hint local.
+      setToken();
       touchSessionActivity();
       setUser(data.user);
       if (data.user.mustChangePassword) {

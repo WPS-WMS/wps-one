@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma.js";
 import { errorSummary } from "./devLog.js";
+import { getTenantModules } from "./tenantModuleGate.js";
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
@@ -110,6 +111,19 @@ export async function authMiddleware(
         error: "Não autorizado. Entre em contato com o administrador.",
       });
       return;
+    }
+    // Assinatura encerrada: bloqueia toda API autenticada (não só requireFeature).
+    // PLATFORM_ADMIN continua operando o painel da plataforma.
+    if (String(user.role || "").toUpperCase() !== "PLATFORM_ADMIN") {
+      const modules = await getTenantModules(user.tenantId);
+      if (modules.locked) {
+        res.status(403).json({
+          error:
+            "Período de teste ou assinatura encerrado. O acesso foi bloqueado. Fale com o suporte WPS One para reativar.",
+          code: "SUBSCRIPTION_LOCKED",
+        });
+        return;
+      }
     }
     req.user = user;
     next();

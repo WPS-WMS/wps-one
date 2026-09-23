@@ -174,7 +174,7 @@ authRouter.post("/login", async (req, res) => {
       role,
       tenantId: user.tenantId,
     });
-    // Cookie HttpOnly (reduz impacto de XSS). Mantemos resposta com token por compatibilidade.
+    // Cookie HttpOnly — sessão não fica acessível ao JavaScript (defesa contra XSS).
     res.cookie(TOKEN_COOKIE_NAME, token, {
       httpOnly: true,
       secure: String(process.env.NODE_ENV || "").trim().toLowerCase() === "production",
@@ -184,7 +184,7 @@ authRouter.post("/login", async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     res.json({
-      token,
+      ok: true,
       user: {
         id: user.id,
         email: user.email,

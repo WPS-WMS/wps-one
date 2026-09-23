@@ -56,6 +56,7 @@ function safeBase64FromDataUrl(input: string): { base64: string; mime: string } 
   const mime = String(m[1] || "").trim().toLowerCase();
   const base64 = String(m[2] || "").trim();
   if (!mime.startsWith("image/")) return null;
+  if (mime.includes("svg")) return null;
   if (!base64) return null;
   return { base64, mime };
 }

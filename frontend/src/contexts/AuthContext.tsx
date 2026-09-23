@@ -93,8 +93,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!cancelled) loadUser(true);
         } else if (r.status === 403) {
           const body = await r.json().catch(() => ({}));
+          const code = String((body as { code?: string })?.code ?? "");
           const msg = String((body as { error?: string })?.error ?? "");
-          if (msg.includes("administrador")) {
+          if (code === "SUBSCRIPTION_LOCKED") {
+            clearToken();
+            clearSessionActivity();
+            if (typeof window !== "undefined") {
+              window.location.replace(
+                `${window.location.origin}/login?locked=1`,
+              );
+            }
+          } else if (msg.includes("administrador")) {
             clearToken();
             clearSessionActivity();
             if (typeof window !== "undefined") {
