@@ -119,8 +119,13 @@ function LoginPageInner() {
         return;
       }
       // Cookie HttpOnly (se o browser aceitar) + Bearer no localStorage (cross-origin FE→API).
-      if (data?.token) setToken(data.token);
-      else setToken();
+      if (!data?.token || typeof data.token !== "string") {
+        setError(
+          "Login incompleto: o servidor não devolveu o token. Verifique se o backend de produção está atualizado.",
+        );
+        return;
+      }
+      setToken(data.token);
       touchSessionActivity();
       setUser(data.user);
       if (data.user.mustChangePassword) {

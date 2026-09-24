@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch, getToken, clearToken, hasAuthSession } from "@/lib/api";
+import { apiFetch, getToken, clearToken, clearOrphanSessionHint } from "@/lib/api";
 import { clearSessionActivity, IDLE_LOGIN_QUERY, isSessionIdle } from "@/lib/idleSession";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import {
@@ -60,9 +60,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let skipFirstFinally = false;
     async function loadUser(retry = false) {
       if (retry) skipFirstFinally = false;
+      clearOrphanSessionHint();
       const token = getToken();
-      if (!token && !hasAuthSession()) {
-        // Página pública / sessão inexistente: não chama `/auth/me` para evitar 401 no console.
+      if (!token) {
+        // Sem JWT não chama /auth/me (cookie cross-site sozinho não autentica em produção).
         if (!cancelled) {
           setUser(null);
           setLoading(false);
@@ -129,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshSession = useCallback(async () => {
-    if (!getToken() && !hasAuthSession()) return;
+    if (!getToken()) return;
     try {
       const r = await apiFetch("/api/auth/me");
       if (r.ok) {

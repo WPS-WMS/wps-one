@@ -86,7 +86,6 @@ export function getToken(): string | null {
 
 function hasSessionHint(): boolean {
   if (typeof window === "undefined") return false;
-  if (getToken()) return true;
   try {
     return (
       localStorage.getItem(SESSION_HINT_KEY) === "1" ||
@@ -105,6 +104,20 @@ function clearSessionHint() {
   } catch {
     /* ignore */
   }
+}
+
+/**
+ * Remove “sessão fantasma” do deploy cookie-only (hint sem JWT).
+ * Sem isso o layout chama /auth/me sem Bearer → 401 na tela de login.
+ */
+export function clearOrphanSessionHint(): void {
+  if (typeof window === "undefined") return;
+  if (!getToken() && hasSessionHint()) clearSessionHint();
+}
+
+/** True só com JWT real (cross-origin precisa de Bearer). */
+export function hasAuthSession(): boolean {
+  return Boolean(getToken());
 }
 
 function handleSubscriptionLockedResponse(res: Response) {
@@ -207,14 +220,13 @@ export async function apiFetchBlob(path: string, options: RequestInit = {}) {
   }
 }
 
-/** Após login: grava JWT para Bearer (obrigatório cross-origin) e marca hint. */
+/** Após login: grava JWT para Bearer (obrigatório cross-origin). */
 export function setToken(token?: string) {
   if (typeof window === "undefined") return;
+  if (!isJwtLike(token)) return;
   try {
-    if (isJwtLike(token)) {
-      localStorage.setItem("wps_token", token);
-      localStorage.setItem("token", token);
-    }
+    localStorage.setItem("wps_token", token);
+    localStorage.setItem("token", token);
     localStorage.setItem(SESSION_HINT_KEY, "1");
     sessionStorage.setItem(SESSION_HINT_KEY, "1");
   } catch {
@@ -231,9 +243,4 @@ export function clearToken() {
     /* ignore */
   }
   clearSessionHint();
-}
-
-/** True se há JWT ou hint de sessão (para decidir chamar /auth/me). */
-export function hasAuthSession(): boolean {
-  return Boolean(getToken()) || hasSessionHint();
 }
