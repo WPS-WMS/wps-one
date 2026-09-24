@@ -67,43 +67,26 @@ export function publicFileUrl(path: string): string {
 
 const SESSION_HINT_KEY = "wps_has_session";
 
-/** Remove JWT legado do localStorage (não deve mais existir no browser). */
-function purgeLegacyTokenStorage() {
-  if (typeof window === "undefined") return;
+function isJwtLike(value: string | null | undefined): value is string {
+  const t = String(value || "").trim();
+  // Hint legado "1" não é JWT — não enviar como Bearer.
+  return t.length > 20 && t !== "1";
+}
+
+/** JWT da sessão (Bearer). Cookie HttpOnly é complementar quando o browser aceita cross-site. */
+export function getToken(): string | null {
+  if (typeof window === "undefined") return null;
   try {
-    localStorage.removeItem("wps_token");
-    localStorage.removeItem("token");
+    const raw = localStorage.getItem("wps_token") || localStorage.getItem("token");
+    return isJwtLike(raw) ? raw : null;
   } catch {
-    /* ignore */
+    return null;
   }
 }
 
-/**
- * Se ainda houver JWT antigo no storage, marca hint e apaga o token.
- * O cookie HttpOnly (se existir) passa a autenticar nas próximas chamadas.
- */
-function migrateLegacySessionHint() {
-  if (typeof window === "undefined") return;
-  try {
-    const hadLegacy =
-      Boolean(localStorage.getItem("wps_token")) || Boolean(localStorage.getItem("token"));
-    if (hadLegacy) {
-      localStorage.setItem(SESSION_HINT_KEY, "1");
-      sessionStorage.setItem(SESSION_HINT_KEY, "1");
-    }
-  } catch {
-    /* ignore */
-  }
-  purgeLegacyTokenStorage();
-}
-
-/**
- * Indica se o FE deve tentar `/auth/me` (cookie HttpOnly pode existir).
- * Não contém o JWT — só um marcador não secreto.
- */
-export function hasSessionHint(): boolean {
+function hasSessionHint(): boolean {
   if (typeof window === "undefined") return false;
-  migrateLegacySessionHint();
+  if (getToken()) return true;
   try {
     return (
       localStorage.getItem(SESSION_HINT_KEY) === "1" ||
@@ -114,12 +97,14 @@ export function hasSessionHint(): boolean {
   }
 }
 
-/**
- * @deprecated Nome legado: não devolve JWT. Use para saber se há sessão possível (cookie).
- * Retorna `"1"` se houver hint, senão `null` — nunca o token.
- */
-export function getToken(): string | null {
-  return hasSessionHint() ? "1" : null;
+function clearSessionHint() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(SESSION_HINT_KEY);
+    sessionStorage.removeItem(SESSION_HINT_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 function handleSubscriptionLockedResponse(res: Response) {
@@ -137,13 +122,7 @@ function handleSubscriptionLockedResponse(res: Response) {
       } catch {
         /* ignore */
       }
-      purgeLegacyTokenStorage();
-      try {
-        localStorage.removeItem(SESSION_HINT_KEY);
-        sessionStorage.removeItem(SESSION_HINT_KEY);
-      } catch {
-        /* ignore */
-      }
+      clearToken();
       if (!window.location.pathname.startsWith("/login")) {
         window.location.replace(`${window.location.origin}/login?locked=1`);
       }
@@ -154,12 +133,14 @@ function handleSubscriptionLockedResponse(res: Response) {
 }
 
 export async function apiFetch(path: string, options: RequestInit = {}) {
+  const token = getToken();
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers: HeadersInit = {
     ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...options.headers,
   };
-  // Sessão só via cookie HttpOnly (`credentials: "include"`). Não anexar Bearer do storage.
+  // Bearer para FE/API em domínios diferentes; cookie quando disponível (credentials).
+  if (token) (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
   const url = `${API_BASE_URL}${path.startsWith("/") ? path : "/" + path}`;
   try {
     const method = String(options.method || "GET").toUpperCase();
@@ -191,11 +172,13 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
   }
 }
 
-/** GET binário (ficheiro) com cookie de sessão; não define `Content-Type: application/json`. */
+/** GET binário (ficheiro) com JWT/cookie; não define `Content-Type: application/json`. */
 export async function apiFetchBlob(path: string, options: RequestInit = {}) {
+  const token = getToken();
   const baseHeaders: Record<string, string> = {
     ...(options.headers as Record<string, string> | undefined),
   };
+  if (token) baseHeaders.Authorization = `Bearer ${token}`;
   const url = `${API_BASE_URL}${path.startsWith("/") ? path : "/" + path}`;
   try {
     const method = String(options.method || "GET").toUpperCase();
@@ -224,11 +207,14 @@ export async function apiFetchBlob(path: string, options: RequestInit = {}) {
   }
 }
 
-/** Após login bem-sucedido: limpa JWT legado e marca que o cookie de sessão deve existir. */
-export function setToken(_token?: string) {
+/** Após login: grava JWT para Bearer (obrigatório cross-origin) e marca hint. */
+export function setToken(token?: string) {
   if (typeof window === "undefined") return;
-  purgeLegacyTokenStorage();
   try {
+    if (isJwtLike(token)) {
+      localStorage.setItem("wps_token", token);
+      localStorage.setItem("token", token);
+    }
     localStorage.setItem(SESSION_HINT_KEY, "1");
     sessionStorage.setItem(SESSION_HINT_KEY, "1");
   } catch {
@@ -238,11 +224,16 @@ export function setToken(_token?: string) {
 
 export function clearToken() {
   if (typeof window === "undefined") return;
-  purgeLegacyTokenStorage();
   try {
-    localStorage.removeItem(SESSION_HINT_KEY);
-    sessionStorage.removeItem(SESSION_HINT_KEY);
+    localStorage.removeItem("wps_token");
+    localStorage.removeItem("token");
   } catch {
     /* ignore */
   }
+  clearSessionHint();
+}
+
+/** True se há JWT ou hint de sessão (para decidir chamar /auth/me). */
+export function hasAuthSession(): boolean {
+  return Boolean(getToken()) || hasSessionHint();
 }

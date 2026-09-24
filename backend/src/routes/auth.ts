@@ -174,7 +174,8 @@ authRouter.post("/login", async (req, res) => {
       role,
       tenantId: user.tenantId,
     });
-    // Cookie HttpOnly — sessão não fica acessível ao JavaScript (defesa contra XSS).
+    // Cookie HttpOnly (quando o browser aceitar cross-site) + token no JSON para Bearer
+    // (necessário com FE e API em domínios diferentes, ex.: wpsone.com.br → onrender.com).
     res.cookie(TOKEN_COOKIE_NAME, token, {
       httpOnly: true,
       secure: String(process.env.NODE_ENV || "").trim().toLowerCase() === "production",
@@ -185,6 +186,7 @@ authRouter.post("/login", async (req, res) => {
     });
     res.json({
       ok: true,
+      token,
       user: {
         id: user.id,
         email: user.email,

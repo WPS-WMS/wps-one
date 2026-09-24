@@ -118,8 +118,9 @@ function LoginPageInner() {
         );
         return;
       }
-      // Sessão via cookie HttpOnly. setToken só limpa JWT legado e marca hint local.
-      setToken();
+      // Cookie HttpOnly (se o browser aceitar) + Bearer no localStorage (cross-origin FE→API).
+      if (data?.token) setToken(data.token);
+      else setToken();
       touchSessionActivity();
       setUser(data.user);
       if (data.user.mustChangePassword) {

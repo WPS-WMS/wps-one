@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch, getToken, clearToken } from "@/lib/api";
+import { apiFetch, getToken, clearToken, hasAuthSession } from "@/lib/api";
 import { clearSessionActivity, IDLE_LOGIN_QUERY, isSessionIdle } from "@/lib/idleSession";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import {
@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function loadUser(retry = false) {
       if (retry) skipFirstFinally = false;
       const token = getToken();
-      if (!token) {
+      if (!token && !hasAuthSession()) {
         // Página pública / sessão inexistente: não chama `/auth/me` para evitar 401 no console.
         if (!cancelled) {
           setUser(null);
@@ -112,6 +112,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           setUser(null);
         } else {
+          if (r.status === 401) {
+            clearToken();
+            clearSessionActivity();
+          }
           setUser(null);
         }
       } catch {
@@ -125,8 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshSession = useCallback(async () => {
-    const token = getToken();
-    if (!token) return;
+    if (!getToken() && !hasAuthSession()) return;
     try {
       const r = await apiFetch("/api/auth/me");
       if (r.ok) {
