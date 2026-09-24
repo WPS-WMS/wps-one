@@ -100,7 +100,7 @@ export function FinanceProjectDetailPageContent({ projectId }: FinanceProjectDet
       </button>
       <FinancePageHeader
         variant="bar"
-        eyebrow="Financeiro · Projetos"
+        eyebrow="Financeiro · Receita de projetos"
         title={projectName ?? "Projeto"}
         subtitle="Composição de custos e parcelas de faturamento do projeto."
       />

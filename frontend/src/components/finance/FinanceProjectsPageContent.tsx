@@ -242,7 +242,7 @@ export function FinanceProjectsPageContent() {
   return (
     <div className="mx-auto max-w-[1400px] space-y-6 p-4 md:p-6">
       <FinancePageHeader
-        title="Projetos"
+        title="Receita de projetos"
         subtitle="Visão financeira por projeto: receitas vinculadas, custos, parcelas e margem."
         actions={
           canCreateRevenue ? (

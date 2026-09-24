@@ -204,7 +204,7 @@ export function buildFinanceiroNavChildren(
   if (!isFinanceiroModuleEnabled()) return [];
   const items: { href: string; label: string }[] = [];
   if (canFinanceFeature(can, "financeiro.projetos.receitas")) {
-    items.push({ href: `${basePath}/financeiro/projetos`, label: "Projetos" });
+    items.push({ href: `${basePath}/financeiro/projetos`, label: "Receita de projetos" });
     items.push({ href: `${basePath}/financeiro/dashboard-projetos`, label: "Resultado de projeto" });
   }
   if (canFinanceFeature(can, "financeiro.taxasPorProjeto")) {

@@ -392,7 +392,7 @@ export function FinanceProjectViewPageContent({ projectId }: FinanceProjectViewP
 
       <FinancePageHeader
         variant="bar"
-        eyebrow="Financeiro · Projetos"
+        eyebrow="Financeiro · Receita de projetos"
         title={projectName}
         subtitle={`Cliente: ${clientName} · Contrato e receitas do projeto`}
         below={
