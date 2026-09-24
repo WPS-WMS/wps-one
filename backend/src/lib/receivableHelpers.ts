@@ -261,12 +261,14 @@ export function computeEffectiveInstallmentStatus(
   inst: Pick<ReceivableInstallment, "status" | "dueDate">,
   today = new Date(),
 ): InstallmentStatus {
-  if (inst.status === "RECEBIDO" || inst.status === "CANCELADO" || inst.status === "FATURADO") {
+  if (inst.status === "RECEBIDO" || inst.status === "CANCELADO") {
     return inst.status as InstallmentStatus;
   }
   const due = inst.dueDate instanceof Date ? inst.dueDate : new Date(inst.dueDate);
+  if (Number.isNaN(due.getTime())) return inst.status as InstallmentStatus;
   const todayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-  if (due < todayStart && inst.status !== "RECEBIDO") return "ATRASADO";
+  // Prev. pagamento já passou (não pago / não cancelado) → Vencido, inclusive se estava Faturado.
+  if (due < todayStart) return "ATRASADO";
   return inst.status as InstallmentStatus;
 }
 

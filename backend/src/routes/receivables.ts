@@ -365,7 +365,7 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     }
     if (status === "FATURADO") return { status: "FATURADO" };
     if (status === "PREVISTO") {
-      return { status: { notIn: ["CANCELADO", "FATURADO", "RECEBIDO"] }, invoice: null };
+      return { status: { notIn: ["CANCELADO", "FATURADO", "RECEBIDO", "ATRASADO"] }, invoice: null };
     }
     // Lista é por parcela: inclui contas com qualquer parcela recebida (mesmo se o header
     // ainda estiver FATURADO / parcial), alinhado ao status exibido na tela.
@@ -376,6 +376,19 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
           { installments: { some: { status: "RECEBIDO" } } },
           { installments: { some: { receivedAt: { not: null } } } },
         ],
+      };
+    }
+    if (status === "ATRASADO" || status === "VENCIDO") {
+      const now = new Date();
+      const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      return {
+        status: { notIn: ["CANCELADO", "RECEBIDO"] },
+        installments: {
+          some: {
+            status: { notIn: ["RECEBIDO", "CANCELADO"] },
+            dueDate: { lt: todayStart },
+          },
+        },
       };
     }
     if (status) return { status };
@@ -587,22 +600,18 @@ receivablesRouter.get("/", requireFeature(FEATURE), async (req, res) => {
     ).filter((row) => row.status !== "CANCELADO" || status === "CANCELADO"),
   );
 
-  if (status === "CANCELADO") {
-    list = list.filter((row) => row.status === "CANCELADO");
-  } else if (status && status !== "FATURADO" && status !== "PREVISTO" && status !== "RECEBIDO") {
-    list = list.filter((row) => row.status === status);
-  } else if (status === "FATURADO") {
-    list = list.filter((row) => row.status === "FATURADO");
-  } else if (status === "RECEBIDO") {
-    list = list.filter((row) => row.status === "RECEBIDO" || row.paid);
-  } else if (status === "PREVISTO") {
-    list = list.filter(
-      (row) =>
-        row.status !== "CANCELADO" &&
-        row.status !== "FATURADO" &&
-        row.status !== "RECEBIDO" &&
-        !row.nfNumber &&
-        !row.paid,
+  if (statusList.length > 0) {
+    list = list.filter((row) =>
+      statusList.some((s) => {
+        if (s === "CANCELADO") return row.status === "CANCELADO";
+        if (s === "RECEBIDO") return row.status === "RECEBIDO" || row.paid;
+        if (s === "FATURADO") return row.status === "FATURADO";
+        if (s === "ATRASADO" || s === "VENCIDO") return row.status === "ATRASADO";
+        if (s === "PREVISTO") {
+          return row.status === "PREVISTO" && !row.nfNumber && !row.paid;
+        }
+        return row.status === s;
+      }),
     );
   }
 

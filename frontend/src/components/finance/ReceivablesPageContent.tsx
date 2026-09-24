@@ -186,7 +186,7 @@ const STATUS_LABELS: Record<string, string> = {
   PREVISTO: "Previsto",
   FATURADO: "Faturado",
   RECEBIDO: "Recebido",
-  ATRASADO: "Previsto",
+  ATRASADO: "Vencido",
   CANCELADO: "Cancelado",
 };
 
@@ -195,13 +195,26 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
   CANCELADO: "bg-red-100 text-red-800 border-red-200",
   PREVISTO: "bg-slate-100 text-slate-700 border-slate-200",
   RECEBIDO: "bg-sky-100 text-sky-800 border-sky-200",
-  ATRASADO: "bg-slate-100 text-slate-700 border-slate-200",
+  ATRASADO: "bg-amber-100 text-amber-900 border-amber-200",
 };
 
-function displayReceivableStatus(status: string, opts?: { nfNumber?: string | null; paid?: boolean }): string {
+function isDueDateOverdue(nextDueDate?: string | null, today = new Date()): boolean {
+  const raw = String(nextDueDate || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}/.test(raw)) return false;
+  const due = new Date(`${raw.slice(0, 10)}T00:00:00.000Z`);
+  if (Number.isNaN(due.getTime())) return false;
+  const todayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  return due < todayStart;
+}
+
+function displayReceivableStatus(
+  status: string,
+  opts?: { nfNumber?: string | null; paid?: boolean; nextDueDate?: string | null },
+): string {
   if (status === "CANCELADO") return "CANCELADO";
   if (status === "RECEBIDO" || opts?.paid) return "RECEBIDO";
-  // NF emitida (ou status Faturado) prevalece sobre ATRASADO efetivo na lista.
+  // Prev. pagamento atrasada → Vencido (mesmo se API ainda trouxer PREVISTO/FATURADO).
+  if (status === "ATRASADO" || isDueDateOverdue(opts?.nextDueDate)) return "ATRASADO";
   if (status === "FATURADO" || opts?.nfNumber) return "FATURADO";
   return "PREVISTO";
 }
@@ -210,12 +223,14 @@ function StatusBadge({
   status,
   nfNumber,
   paid,
+  nextDueDate,
 }: {
   status: string;
   nfNumber?: string | null;
   paid?: boolean;
+  nextDueDate?: string | null;
 }) {
-  const display = displayReceivableStatus(status, { nfNumber, paid });
+  const display = displayReceivableStatus(status, { nfNumber, paid, nextDueDate });
   const label = STATUS_LABELS[display] ?? display;
   const cls = STATUS_BADGE_CLASS[display] ?? "bg-slate-100 text-slate-700 border-slate-200";
   return (
@@ -252,6 +267,7 @@ const DOCUMENT_TYPE_OPTIONS = [
 const STATUS_FILTER_OPTIONS = [
   { value: "PREVISTO", label: "Previsto" },
   { value: "FATURADO", label: "Faturado" },
+  { value: "ATRASADO", label: "Vencido" },
   { value: "RECEBIDO", label: "Recebido" },
   { value: "CANCELADO", label: "Cancelado" },
 ] as const;
@@ -610,7 +626,11 @@ export function ReceivablesPageContent() {
   ];
 
   function mapReceivableExportRow(row: ReceivableRow): Record<string, string> {
-    const statusKey = displayReceivableStatus(row.status, { nfNumber: row.nfNumber, paid: row.paid });
+    const statusKey = displayReceivableStatus(row.status, {
+      nfNumber: row.nfNumber,
+      paid: row.paid,
+      nextDueDate: row.nextDueDate,
+    });
     return {
       cliente: row.clientName?.trim() || "—",
       projeto: row.projectName?.trim() || "—",
@@ -2150,20 +2170,20 @@ export function ReceivablesPageContent() {
             </div>
           </div>
         <div className={financeListTableWrapClass} style={{ borderColor: "var(--border)" }}>
-          <table className="w-full table-fixed border-collapse text-[11px] leading-tight sm:text-xs">
+          <table className="w-full min-w-[1200px] table-fixed border-collapse text-[11px] leading-tight sm:text-xs">
             <colgroup>
               <col className="w-[2.25rem]" />
-              <col className="w-[12%]" />
-              <col className="w-[14%]" />
-              <col className="w-[16%]" />
-              <col className="w-[9%]" />
-              <col className="w-[6.5rem]" />
-              <col className="w-[7rem]" />
-              <col className="w-[6.5rem]" />
+              <col className="w-[11%]" />
+              <col className="w-[13%]" />
+              <col className="w-[15%]" />
+              <col className="w-[8%]" />
+              <col className="w-[6.75rem]" />
+              <col className="w-[6.75rem]" />
+              <col className="w-[6.75rem]" />
               <col className="w-[5.5rem]" />
+              <col className="w-[7.75rem]" />
+              <col className="w-[3.25rem]" />
               <col className="w-[6.5rem]" />
-              <col className="w-[3rem]" />
-              <col className="w-[6rem]" />
               <col className="w-[4.5rem]" />
             </colgroup>
             <thead className={financeListTheadClass} style={financeListTheadStyle}>
@@ -2177,15 +2197,15 @@ export function ReceivablesPageContent() {
                     aria-label="Selecionar todas as linhas filtradas"
                   />
                 </th>
-                <th className="px-2 py-2.5 text-left whitespace-nowrap">Cliente</th>
-                <th className="px-2 py-2.5 text-left whitespace-nowrap">Projeto</th>
-                <th className="px-2 py-2.5 text-left whitespace-nowrap">Atividade/Descrição</th>
-                <th className="px-2 py-2.5 text-center whitespace-nowrap">Contrato</th>
+                <th className="px-2 py-2.5 text-left">Cliente</th>
+                <th className="px-2 py-2.5 text-left">Projeto</th>
+                <th className="px-2 py-2.5 text-left">Atividade/Descrição</th>
+                <th className="px-2 py-2.5 text-center">Contrato</th>
                 <th className="px-2 py-2.5 text-center whitespace-nowrap">Data</th>
                 <th className="px-2 py-2.5 text-right whitespace-nowrap">Valor</th>
-                <th className="px-2 py-2.5 text-center whitespace-nowrap">Dt Emissão NF</th>
+                <th className="px-2 py-2.5 text-center whitespace-nowrap">Dt emissão NF</th>
                 <th className="px-2 py-2.5 text-center whitespace-nowrap">Nro NF</th>
-                <th className="px-2 py-2.5 text-center whitespace-nowrap">Prev pagamento</th>
+                <th className="px-2 py-2.5 text-center whitespace-nowrap">Prev. pagamento</th>
                 <th className="px-2 py-2.5 text-center whitespace-nowrap">Pago?</th>
                 <th className="px-2 py-2.5 text-left whitespace-nowrap">Status</th>
                 <th className="px-2 py-2.5 text-center whitespace-nowrap">Ações</th>
@@ -2335,7 +2355,12 @@ export function ReceivablesPageContent() {
                     </td>
                     <td className="overflow-hidden px-2 py-2">
                       <div className="min-w-0 overflow-hidden">
-                        <StatusBadge status={row.status} nfNumber={row.nfNumber} paid={isPaid} />
+                        <StatusBadge
+                          status={row.status}
+                          nfNumber={row.nfNumber}
+                          paid={isPaid}
+                          nextDueDate={row.nextDueDate}
+                        />
                       </div>
                     </td>
                     <td
@@ -3338,6 +3363,7 @@ export function ReceivablesPageContent() {
                       status={detail.status}
                       nfNumber={detail.nfNumber ?? detail.invoice?.nfNumber}
                       paid={detail.paid || detail.status === "RECEBIDO"}
+                      nextDueDate={detail.nextDueDate}
                     />
                   </p>
                 </div>
