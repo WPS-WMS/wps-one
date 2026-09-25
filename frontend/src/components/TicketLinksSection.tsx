@@ -50,6 +50,35 @@ function statusHint(t: TicketLinkTicket): string {
   return st.replace(/_/g, " ") || "Aberta";
 }
 
+function ticketOpenHref(ticketId: string): string {
+  return `/abrir-tarefa/${encodeURIComponent(ticketId)}`;
+}
+
+function LinkedTicketLabel({ ticket }: { ticket: TicketLinkTicket }) {
+  const code = String(ticket.code ?? "").trim();
+  const title = String(ticket.title ?? "").trim();
+  const label = ticketLabel(ticket);
+  return (
+    <a
+      href={ticketOpenHref(ticket.id)}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="block truncate text-sm font-medium text-[color:var(--primary)] hover:underline"
+      title={`Abrir ${label} em nova aba`}
+    >
+      {code && title ? (
+        <>
+          <span className="font-semibold">{code}</span>
+          <span className="text-[color:var(--foreground)]"> — {title}</span>
+        </>
+      ) : (
+        label
+      )}
+    </a>
+  );
+}
+
 export function TicketLinksSection({
   ticketId,
   readOnly = false,
@@ -228,16 +257,14 @@ export function TicketLinksSection({
         <>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <div className="min-w-0">
-              <label className={labelClass}>Predecessora</label>
+              <label className={labelClass}>Depende de</label>
               <p className="mb-1.5 text-[11px] text-[color:var(--muted-foreground)]">
-                Só sai do backlog quando a predecessora estiver concluída.
+                Só sai do backlog quando essa tarefa estiver concluída.
               </p>
               {predecessor ? (
                 <div className="flex items-start gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-3 py-2">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-[color:var(--foreground)]">
-                      {ticketLabel(predecessor.ticket)}
-                    </p>
+                    <LinkedTicketLabel ticket={predecessor.ticket} />
                     <p className="text-[11px] text-[color:var(--muted-foreground)]">
                       {statusHint(predecessor.ticket)}
                       {!isTicketClosedStatus(predecessor.ticket.status) ? " · aguardando conclusão" : ""}
@@ -249,8 +276,8 @@ export function TicketLinksSection({
                       onClick={() => void removeLink(predecessor.linkId)}
                       disabled={busy}
                       className="rounded-md p-1 text-[color:var(--muted-foreground)] hover:bg-black/5 hover:text-[color:var(--foreground)] disabled:opacity-50"
-                      title="Remover predecessora"
-                      aria-label="Remover predecessora"
+                      title="Remover dependência"
+                      aria-label="Remover dependência"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
@@ -308,7 +335,7 @@ export function TicketLinksSection({
             </div>
 
             <div className="min-w-0">
-              <label className={labelClass}>Referências</label>
+              <label className={labelClass}>Relacionada a</label>
               <p className="mb-1.5 text-[11px] text-[color:var(--muted-foreground)]">
                 Liga a outra tarefa sem bloquear (ex.: continuidade após finalizar).
               </p>
@@ -320,9 +347,7 @@ export function TicketLinksSection({
                       className="flex items-start gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-3 py-2"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-[color:var(--foreground)]">
-                          {ticketLabel(r.ticket)}
-                        </p>
+                        <LinkedTicketLabel ticket={r.ticket} />
                         <p className="text-[11px] text-[color:var(--muted-foreground)]">{statusHint(r.ticket)}</p>
                       </div>
                       {!readOnly && (
@@ -331,8 +356,8 @@ export function TicketLinksSection({
                           onClick={() => void removeLink(r.linkId)}
                           disabled={busy}
                           className="rounded-md p-1 text-[color:var(--muted-foreground)] hover:bg-black/5 hover:text-[color:var(--foreground)] disabled:opacity-50"
-                          title="Remover referência"
-                          aria-label="Remover referência"
+                          title="Remover relação"
+                          aria-label="Remover relação"
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
@@ -403,7 +428,7 @@ export function TicketLinksSection({
                     key={b.linkId}
                     className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-3 py-2 text-sm"
                   >
-                    <span className="font-medium text-[color:var(--foreground)]">{ticketLabel(b.ticket)}</span>
+                    <LinkedTicketLabel ticket={b.ticket} />
                     <span className="mt-0.5 block text-[11px] text-[color:var(--muted-foreground)]">
                       {statusHint(b.ticket)}
                     </span>

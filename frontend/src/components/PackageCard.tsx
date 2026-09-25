@@ -50,9 +50,9 @@ export type PackageTicket = {
   sharePointSyncStatus?: string | null;
   _count?: { timeEntries: number };
   totalHorasApontadas?: number;
-  /** Predecessora (FINISH_START) — listagens. */
+  /** Depende de (FINISH_START) — listagens. */
   predecessor?: { id: string; code: string; title: string } | null;
-  /** Referências (RELATES_TO) — listagens. */
+  /** Relacionada a (RELATES_TO) — listagens. */
   references?: Array<{ id: string; code: string; title: string }>;
 };
 

@@ -125,7 +125,7 @@ export function TaskCardHorizontal({
                     className="min-w-0 max-w-full truncate"
                     title={`${ticket.predecessor.code} — ${ticket.predecessor.title}`}
                   >
-                    <span className="font-medium text-[color:var(--foreground)]/80">Predecessora:</span>{" "}
+                    <span className="font-medium text-[color:var(--foreground)]/80">Depende de:</span>{" "}
                     {ticket.predecessor.code}
                   </span>
                 )}
@@ -134,7 +134,7 @@ export function TaskCardHorizontal({
                     className="min-w-0 max-w-full truncate"
                     title={ticket.references.map((r) => `${r.code} — ${r.title}`).join(", ")}
                   >
-                    <span className="font-medium text-[color:var(--foreground)]/80">Referências:</span>{" "}
+                    <span className="font-medium text-[color:var(--foreground)]/80">Relacionada a:</span>{" "}
                     {ticket.references.map((r) => r.code).join(", ")}
                   </span>
                 )}

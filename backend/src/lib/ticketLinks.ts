@@ -130,7 +130,7 @@ export async function assertCanAdvanceStatusWithPredecessors(
   const more = blockers.length > 3 ? ` (+${blockers.length - 3})` : "";
   return {
     ok: false,
-    error: `Esta tarefa está bloqueada pela predecessora até ela ser concluída: ${labels}${more}.`,
+    error: `Esta tarefa depende de outra até ela ser concluída: ${labels}${more}.`,
     blockers,
   };
 }
