@@ -1002,75 +1002,77 @@ export default function ListaTarefasPage() {
             }}
           >
             <div className="p-4 md:p-5">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div className="flex flex-wrap items-end gap-3 flex-1">
-                  <div className="w-full sm:flex-[2] sm:min-w-[360px] lg:min-w-[420px]">
+              <div className="space-y-3">
+                <div className="w-full">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                    Buscar
+                  </label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[color:var(--muted-foreground)]" />
+                    <input
+                      value={q}
+                      onChange={(e) => setQ(e.target.value)}
+                      placeholder="Código, título, projeto, cliente, membro..."
+                      className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 pl-9 pr-3 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                    />
+                  </div>
+                </div>
+
+                {/* Grade fixa: Status e Arquivamento sempre lado a lado; layout não muda ao filtrar */}
+                <div
+                  className={`grid gap-3 items-end ${
+                    isCliente ? "grid-cols-2 md:grid-cols-3" : "grid-cols-2 md:grid-cols-4"
+                  }`}
+                >
+                  <div className="min-w-0">
                     <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-                      Buscar
+                      Status
                     </label>
                     <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[color:var(--muted-foreground)]" />
-                      <input
-                        value={q}
-                        onChange={(e) => setQ(e.target.value)}
-                        placeholder="Código, título, projeto, cliente, membro..."
-                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 pl-9 pr-3 text-sm text-[color:var(--foreground)] placeholder:text-[color:var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
-                      />
+                      <button
+                        type="button"
+                        ref={statusAnchorRef}
+                        onClick={() => {
+                          setMemberOpen(false);
+                          setClientOpen(false);
+                          setArquivadoOpen(false);
+                          setStatusOpen((v) => !v);
+                        }}
+                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                        aria-expanded={statusOpen}
+                      >
+                        <span className="truncate">{selectedStatusLabels}</span>
+                        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${statusOpen ? "rotate-180" : ""}`} />
+                      </button>
                     </div>
                   </div>
 
-                  {/* Status + Arquivamento juntos para não quebrar de linha entre eles */}
-                  <div className="flex flex-nowrap items-end gap-3 w-full sm:w-auto min-w-0">
-                    <div className="min-w-[150px] flex-1 sm:flex-none sm:w-[190px]">
-                      <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-                        Status
-                      </label>
-                      <div className="relative">
-                        <button
-                          type="button"
-                          ref={statusAnchorRef}
-                          onClick={() => {
-                            setMemberOpen(false);
-                            setClientOpen(false);
-                            setArquivadoOpen(false);
-                            setStatusOpen((v) => !v);
-                          }}
-                          className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
-                          aria-expanded={statusOpen}
-                        >
-                          <span className="truncate">{selectedStatusLabels}</span>
-                          <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${statusOpen ? "rotate-180" : ""}`} />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="min-w-[150px] flex-1 sm:flex-none sm:w-[190px]">
-                      <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-                        Arquivamento
-                      </label>
-                      <div className="relative">
-                        <button
-                          type="button"
-                          ref={arquivadoAnchorRef}
-                          onClick={() => {
-                            setStatusOpen(false);
-                            setMemberOpen(false);
-                            setClientOpen(false);
-                            setArquivadoOpen((v) => !v);
-                          }}
-                          className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
-                          aria-expanded={arquivadoOpen}
-                          aria-label="Filtrar por arquivamento"
-                        >
-                          <span className="truncate">{selectedArquivadoLabel}</span>
-                          <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${arquivadoOpen ? "rotate-180" : ""}`} />
-                        </button>
-                      </div>
+                  <div className="min-w-0">
+                    <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                      Arquivamento
+                    </label>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        ref={arquivadoAnchorRef}
+                        onClick={() => {
+                          setStatusOpen(false);
+                          setMemberOpen(false);
+                          setClientOpen(false);
+                          setArquivadoOpen((v) => !v);
+                        }}
+                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                        aria-expanded={arquivadoOpen}
+                        aria-label="Filtrar por arquivamento"
+                      >
+                        <span className="truncate">{selectedArquivadoLabel}</span>
+                        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${arquivadoOpen ? "rotate-180" : ""}`} />
+                      </button>
                     </div>
                   </div>
 
-                  {!isCliente && (
-                    <div className="w-full sm:flex-1 sm:min-w-[220px] lg:w-auto">
+                  {!isCliente ? (
+                    <div className="min-w-0">
                       <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
                         Cliente
                       </label>
@@ -1090,13 +1092,13 @@ export default function ListaTarefasPage() {
                           aria-expanded={clientOpen}
                         >
                           <span className="truncate">{selectedClientLabel}</span>
-                          <ChevronDown className={`h-4 w-4 transition-transform ${clientOpen ? "rotate-180" : ""}`} />
+                          <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${clientOpen ? "rotate-180" : ""}`} />
                         </button>
                       </div>
                     </div>
-                  )}
+                  ) : null}
 
-                  <div className="w-full sm:flex-1 sm:min-w-[220px] lg:w-auto">
+                  <div className="min-w-0">
                     <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
                       Membro
                     </label>
@@ -1116,13 +1118,13 @@ export default function ListaTarefasPage() {
                         aria-expanded={memberOpen}
                       >
                         <span className="truncate">{isCliente ? "—" : selectedMemberLabel}</span>
-                        <ChevronDown className={`h-4 w-4 transition-transform ${memberOpen ? "rotate-180" : ""}`} />
+                        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${memberOpen ? "rotate-180" : ""}`} />
                       </button>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 justify-end w-full lg:w-auto">
+                <div className="flex flex-wrap items-center gap-2 justify-end min-h-[42px]">
                   <button
                     type="button"
                     onClick={saveCurrentFilters}
@@ -1133,7 +1135,7 @@ export default function ListaTarefasPage() {
                     <Bookmark className="h-4 w-4" />
                     Salvar filtros
                   </button>
-                  {hasSavedFilters && (
+                  {hasSavedFilters ? (
                     <button
                       type="button"
                       onClick={forgetSavedFilters}
@@ -1143,7 +1145,7 @@ export default function ListaTarefasPage() {
                     >
                       Esquecer salvos
                     </button>
-                  )}
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => setShowAdvanced((v) => !v)}
@@ -1157,27 +1159,28 @@ export default function ListaTarefasPage() {
                   >
                     <ChevronDown className={`h-4 w-4 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
                     Filtros avançados
-                    {hasAdvancedFilters && (
-                      <span className="ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
-                        style={{ background: "rgba(92,0,225,0.12)", color: "var(--primary)" }}
-                      >
-                        ativo
-                      </span>
-                    )}
+                    <span
+                      className={`ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        hasAdvancedFilters ? "" : "invisible"
+                      }`}
+                      style={{ background: "rgba(92,0,225,0.12)", color: "var(--primary)" }}
+                      aria-hidden={!hasAdvancedFilters}
+                    >
+                      ativo
+                    </span>
                   </button>
 
-                  {hasAnyFilters && (
-                    <button
-                      type="button"
-                      onClick={clearFilters}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-90"
-                      style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
-                      title="Limpar filtros"
-                    >
-                      <X className="h-4 w-4" />
-                      Limpar
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    disabled={!hasAnyFilters}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--foreground)" }}
+                    title="Limpar filtros"
+                  >
+                    <X className="h-4 w-4" />
+                    Limpar
+                  </button>
 
                   {(() => {
                     const role = String(user?.role ?? "").toUpperCase();
