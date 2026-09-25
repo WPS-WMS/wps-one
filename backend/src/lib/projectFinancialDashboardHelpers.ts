@@ -149,23 +149,44 @@ type RevenueTaxInput = {
   billingLines: Array<{
     dueDate: Date;
     amount: number;
-    /** Competência da medição (T&M/AMS); se ausente, o mensal cai no dueDate. */
+    milestone?: string | null;
+    /** Competência da medição (T&M/AMS); se ausente, tenta o título e por fim dueDate. */
     competenceDate?: Date | null;
   }>;
   taxType: { id: string; name: string; ratePercent: number | null } | null;
 };
 
 /**
+ * Extrai mês/ano do título da medição (ex.: "T&M - 07/2026" → jul/2026).
+ * Evita usar a Data da parcela (muitas vezes já no mês do pagamento).
+ */
+function parseCompetenceFromMilestone(milestone: string | null | undefined): Date | null {
+  const raw = String(milestone ?? "").trim();
+  if (!raw) return null;
+  const match = raw.match(/(?:^|[^0-9])(\d{1,2})\/(\d{4})(?:\s|$)/);
+  if (!match) return null;
+  const month = Number(match[1]);
+  const year = Number(match[2]);
+  if (!Number.isFinite(month) || !Number.isFinite(year) || month < 1 || month > 12) return null;
+  return new Date(Date.UTC(year, month - 1, 1));
+}
+
+/**
  * Data do “movimento” da parcela no Mensal:
- * - medição T&M/AMS → mês da medição (competenceDate);
- * - sem medição → Data da parcela (dueDate).
- * Não usa previsão/pagamento: filtro setembro = movimento de agosto.
+ * 1) mês no título da medição (ex. "T&M - 07/2026") — fonte mais estável no T&M;
+ * 2) competenceDate da medição;
+ * 3) Data da parcela (contratos fixos sem medição).
+ * Assim a Data/vencimento (muitas vezes já no mês do pagamento) não “puxa” medição antiga.
  */
 function billingLineActivityDate(line: {
   dueDate: Date;
   competenceDate?: Date | null;
+  milestone?: string | null;
 }): Date {
-  return line.competenceDate ?? line.dueDate;
+  const fromTitle = parseCompetenceFromMilestone(line.milestone);
+  if (fromTitle) return fromTitle;
+  if (line.competenceDate) return line.competenceDate;
+  return line.dueDate;
 }
 
 function dateInPeriod(date: Date, monthStart: Date, monthEndExclusive: Date): boolean {
@@ -173,7 +194,7 @@ function dateInPeriod(date: Date, monthStart: Date, monthEndExclusive: Date): bo
 }
 
 function billingLineInMonth(
-  line: { dueDate: Date; competenceDate?: Date | null },
+  line: { dueDate: Date; competenceDate?: Date | null; milestone?: string | null },
   monthStart: Date,
   monthEndExclusive: Date,
 ): boolean {
@@ -985,6 +1006,7 @@ export async function computeProjectFinancialDashboard(
       billingLines: revenue.billingLines.map((line) => ({
         dueDate: line.dueDate,
         amount: line.amount,
+        milestone: line.milestone,
         competenceDate: line.variableEntry?.competenceDate ?? null,
       })),
       taxType: revenue.taxType,
