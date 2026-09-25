@@ -903,6 +903,8 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
       dataFimPrevista: true,
       createdAt: true,
       arquivado: true,
+      // Tópico (pai) para Lista de Tarefas / Gantt
+      parentTicket: { select: { id: true, code: true, title: true, type: true } },
     } as any,
     orderBy,
     ...pagination,

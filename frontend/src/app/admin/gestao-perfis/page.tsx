@@ -28,7 +28,7 @@ const FEATURES: Feature[] = [
   { id: "projeto.arquivar", label: "Projetos \u003e Arquivar Projetos", section: "Projetos" },
   { id: "projeto.excluir", label: "Projetos \u003e Excluir Projetos", section: "Projetos" },
   { id: "projeto.dashboardDaily", label: "Projetos \u003e Dashboard Daily", section: "Projetos" },
-  { id: "projeto.listaTarefas", label: "Projetos \u003e Lista de Tarefas", section: "Projetos" },
+  { id: "projeto.listaTarefas", label: "Projetos \u003e Lista de Tarefas / Gantt", section: "Projetos" },
   {
     id: "tarefa.verTodos",
     label: "Lista de Tarefas \u003e Ver de todos os usuários",

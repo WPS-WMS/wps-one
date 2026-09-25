@@ -36,7 +36,10 @@ export default function ConsultorLayout({ children }: { children: React.ReactNod
             ? [{ href: "/consultor/projetos/dashboard-daily", label: "Dashboard Daily" }]
             : []),
           ...(can("projeto.listaTarefas")
-            ? [{ href: "/consultor/projetos/lista-tarefas", label: "Lista de Tarefas" }]
+            ? [
+                { href: "/consultor/projetos/lista-tarefas", label: "Lista de Tarefas" },
+                { href: "/consultor/projetos/gantt", label: "Gantt" },
+              ]
             : []),
           ...(can("projeto.gestaoTm") ? [{ href: "/consultor/projetos/gestao-tm", label: "Gestão T&M" }] : []),
           ...(can("configuracoes.permissoes")

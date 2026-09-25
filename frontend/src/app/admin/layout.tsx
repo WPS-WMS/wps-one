@@ -38,7 +38,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             ? [{ href: "/admin/projetos/dashboard-daily", label: "Dashboard Daily" }]
             : []),
           ...(can("projeto.listaTarefas")
-            ? [{ href: "/admin/projetos/lista-tarefas", label: "Lista de Tarefas" }]
+            ? [
+                { href: "/admin/projetos/lista-tarefas", label: "Lista de Tarefas" },
+                { href: "/admin/projetos/gantt", label: "Gantt" },
+              ]
             : []),
           ...(can("projeto.gestaoTm") ? [{ href: "/admin/projetos/gestao-tm", label: "Gestão T&M" }] : []),
           ...(can("configuracoes.permissoes")

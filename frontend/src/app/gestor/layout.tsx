@@ -35,7 +35,10 @@ export default function GestorLayout({ children }: { children: React.ReactNode }
             ? [{ href: "/gestor/projetos/dashboard-daily", label: "Dashboard Daily" }]
             : []),
           ...(can("projeto.listaTarefas")
-            ? [{ href: "/gestor/projetos/lista-tarefas", label: "Lista de Tarefas" }]
+            ? [
+                { href: "/gestor/projetos/lista-tarefas", label: "Lista de Tarefas" },
+                { href: "/gestor/projetos/gantt", label: "Gantt" },
+              ]
             : []),
           ...(can("projeto.gestaoTm") ? [{ href: "/gestor/projetos/gestao-tm", label: "Gestão T&M" }] : []),
           ...(can("configuracoes.permissoes")
