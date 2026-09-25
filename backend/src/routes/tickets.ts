@@ -679,7 +679,7 @@ ticketsRouter.get("/", async (req, res) => {
       tenantId: user.tenantId,
       tickets: list as any,
     }),
-    attachTicketLinkSummariesForList(user.tenantId, list as Array<{ id: string }>),
+    attachTicketLinkSummariesForList(user.tenantId, list as any),
   ]);
   res.json(
     (list as any[]).map((t, idx) => ({
@@ -914,7 +914,7 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
       tenantId: user.tenantId,
       tickets: list as any,
     }),
-    attachTicketLinkSummariesForList(user.tenantId, list as Array<{ id: string }>),
+    attachTicketLinkSummariesForList(user.tenantId, list as any),
   ]);
 
   const enriched = (list as any[]).map((t, idx) => ({
