@@ -110,17 +110,38 @@ export function TaskCardHorizontal({
             <div className="mt-1">
               <p className="text-[color:var(--foreground)] font-medium text-sm truncate">{statusDisplay.label}</p>
             </div>
-            {(topicTitle || tipoLabel) && (
-              <div className="mt-1.5 space-y-0.5 text-xs text-[color:var(--muted-foreground)]">
+            {(topicTitle ||
+              tipoLabel ||
+              ticket.predecessor ||
+              (ticket.references && ticket.references.length > 0)) && (
+              <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs text-[color:var(--muted-foreground)]">
                 {topicTitle && (
-                  <p className="truncate" title={topicTitle}>
+                  <span className="min-w-0 max-w-full truncate" title={topicTitle}>
                     <span className="font-medium text-[color:var(--foreground)]/80">Tópico:</span> {topicTitle}
-                  </p>
+                  </span>
+                )}
+                {ticket.predecessor && (
+                  <span
+                    className="min-w-0 max-w-full truncate"
+                    title={`${ticket.predecessor.code} — ${ticket.predecessor.title}`}
+                  >
+                    <span className="font-medium text-[color:var(--foreground)]/80">Predecessora:</span>{" "}
+                    {ticket.predecessor.code}
+                  </span>
+                )}
+                {ticket.references && ticket.references.length > 0 && (
+                  <span
+                    className="min-w-0 max-w-full truncate"
+                    title={ticket.references.map((r) => `${r.code} — ${r.title}`).join(", ")}
+                  >
+                    <span className="font-medium text-[color:var(--foreground)]/80">Referências:</span>{" "}
+                    {ticket.references.map((r) => r.code).join(", ")}
+                  </span>
                 )}
                 {tipoLabel && (
-                  <p className="truncate" title={tipoLabel}>
+                  <span className="min-w-0 max-w-full truncate" title={tipoLabel}>
                     <span className="font-medium text-[color:var(--foreground)]/80">Tipo:</span> {tipoLabel}
-                  </p>
+                  </span>
                 )}
               </div>
             )}

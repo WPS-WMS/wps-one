@@ -208,7 +208,7 @@ export function TicketLinksSection({
   const blocked = Boolean(data?.blocked);
 
   return (
-    <div className="space-y-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--background)]/30 px-3.5 py-3.5">
+    <div className="space-y-4 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-5 py-5 shadow-sm">
       <div className="flex items-center gap-2">
         <Link2 className="h-4 w-4 text-[color:var(--muted-foreground)]" aria-hidden />
         <h3 className="text-sm font-semibold text-[color:var(--foreground)]">Vínculos</h3>
@@ -226,94 +226,182 @@ export function TicketLinksSection({
         </div>
       ) : (
         <>
-          <div>
-            <label className={labelClass}>Predecessora</label>
-            <p className="mb-1.5 text-[11px] text-[color:var(--muted-foreground)]">
-              Esta tarefa só pode sair do backlog quando a predecessora estiver concluída.
-            </p>
-            {predecessor ? (
-              <div className="flex items-start gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-[color:var(--foreground)]">
-                    {ticketLabel(predecessor.ticket)}
-                  </p>
-                  <p className="text-[11px] text-[color:var(--muted-foreground)]">
-                    {statusHint(predecessor.ticket)}
-                    {!isTicketClosedStatus(predecessor.ticket.status) ? " · aguardando conclusão" : ""}
-                  </p>
-                </div>
-                {!readOnly && (
-                  <button
-                    type="button"
-                    onClick={() => void removeLink(predecessor.linkId)}
-                    disabled={busy}
-                    className="rounded-md p-1 text-[color:var(--muted-foreground)] hover:bg-black/5 hover:text-[color:var(--foreground)] disabled:opacity-50"
-                    title="Remover predecessora"
-                    aria-label="Remover predecessora"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            ) : !readOnly ? (
-              <div className="relative" ref={predBoxRef}>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--muted-foreground)]" />
-                  <input
-                    type="search"
-                    value={predQuery}
-                    onChange={(e) => schedulePredSearch(e.target.value)}
-                    onFocus={() => {
-                      setPredOpen(true);
-                      if (predCandidates.length === 0) schedulePredSearch(predQuery);
-                    }}
-                    placeholder="Buscar tarefa (código ou título)…"
-                    className={`${inputClass} pl-9`}
-                    disabled={busy}
-                    autoComplete="off"
-                  />
-                </div>
-                {predOpen && (
-                  <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-48 overflow-y-auto rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-xl">
-                    {searchingPred ? (
-                      <p className="px-3 py-2 text-xs text-[color:var(--muted-foreground)]">Buscando…</p>
-                    ) : predCandidates.length === 0 ? (
-                      <p className="px-3 py-2 text-xs text-[color:var(--muted-foreground)]">
-                        Nenhuma tarefa encontrada.
-                      </p>
-                    ) : (
-                      predCandidates.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => void addLink("FINISH_START", c.id)}
-                          className="flex w-full flex-col gap-0.5 px-3 py-2 text-left text-sm hover:bg-black/5"
-                        >
-                          <span className="truncate font-medium text-[color:var(--foreground)]">
-                            {ticketLabel(c)}
-                          </span>
-                          <span className="text-[11px] text-[color:var(--muted-foreground)]">
-                            {statusHint(c)}
-                          </span>
-                        </button>
-                      ))
-                    )}
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <div className="min-w-0">
+              <label className={labelClass}>Predecessora</label>
+              <p className="mb-1.5 text-[11px] text-[color:var(--muted-foreground)]">
+                Só sai do backlog quando a predecessora estiver concluída.
+              </p>
+              {predecessor ? (
+                <div className="flex items-start gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-[color:var(--foreground)]">
+                      {ticketLabel(predecessor.ticket)}
+                    </p>
+                    <p className="text-[11px] text-[color:var(--muted-foreground)]">
+                      {statusHint(predecessor.ticket)}
+                      {!isTicketClosedStatus(predecessor.ticket.status) ? " · aguardando conclusão" : ""}
+                    </p>
                   </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-[color:var(--muted-foreground)]">Nenhuma</p>
-            )}
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => void removeLink(predecessor.linkId)}
+                      disabled={busy}
+                      className="rounded-md p-1 text-[color:var(--muted-foreground)] hover:bg-black/5 hover:text-[color:var(--foreground)] disabled:opacity-50"
+                      title="Remover predecessora"
+                      aria-label="Remover predecessora"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ) : !readOnly ? (
+                <div className="relative" ref={predBoxRef}>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--muted-foreground)]" />
+                    <input
+                      type="search"
+                      value={predQuery}
+                      onChange={(e) => schedulePredSearch(e.target.value)}
+                      onFocus={() => {
+                        setPredOpen(true);
+                        if (predCandidates.length === 0) schedulePredSearch(predQuery);
+                      }}
+                      placeholder="Buscar tarefa (código ou título)…"
+                      className={`${inputClass} pl-9`}
+                      disabled={busy}
+                      autoComplete="off"
+                    />
+                  </div>
+                  {predOpen && (
+                    <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-48 overflow-y-auto rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-xl">
+                      {searchingPred ? (
+                        <p className="px-3 py-2 text-xs text-[color:var(--muted-foreground)]">Buscando…</p>
+                      ) : predCandidates.length === 0 ? (
+                        <p className="px-3 py-2 text-xs text-[color:var(--muted-foreground)]">
+                          Nenhuma tarefa encontrada.
+                        </p>
+                      ) : (
+                        predCandidates.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => void addLink("FINISH_START", c.id)}
+                            className="flex w-full flex-col gap-0.5 px-3 py-2 text-left text-sm hover:bg-black/5"
+                          >
+                            <span className="truncate font-medium text-[color:var(--foreground)]">
+                              {ticketLabel(c)}
+                            </span>
+                            <span className="text-[11px] text-[color:var(--muted-foreground)]">
+                              {statusHint(c)}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-[color:var(--muted-foreground)]">Nenhuma</p>
+              )}
+            </div>
+
+            <div className="min-w-0">
+              <label className={labelClass}>Referências</label>
+              <p className="mb-1.5 text-[11px] text-[color:var(--muted-foreground)]">
+                Liga a outra tarefa sem bloquear (ex.: continuidade após finalizar).
+              </p>
+              {data && data.relatesTo.length > 0 && (
+                <ul className="mb-2 space-y-1.5">
+                  {data.relatesTo.map((r) => (
+                    <li
+                      key={r.linkId}
+                      className="flex items-start gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-3 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-[color:var(--foreground)]">
+                          {ticketLabel(r.ticket)}
+                        </p>
+                        <p className="text-[11px] text-[color:var(--muted-foreground)]">{statusHint(r.ticket)}</p>
+                      </div>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={() => void removeLink(r.linkId)}
+                          disabled={busy}
+                          className="rounded-md p-1 text-[color:var(--muted-foreground)] hover:bg-black/5 hover:text-[color:var(--foreground)] disabled:opacity-50"
+                          title="Remover referência"
+                          aria-label="Remover referência"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {!readOnly && (
+                <div className="relative" ref={refBoxRef}>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--muted-foreground)]" />
+                    <input
+                      type="search"
+                      value={refQuery}
+                      onChange={(e) => scheduleRefSearch(e.target.value)}
+                      onFocus={() => {
+                        setRefOpen(true);
+                        if (refCandidates.length === 0) scheduleRefSearch(refQuery);
+                      }}
+                      placeholder="Buscar tarefa (inclui finalizadas)…"
+                      className={`${inputClass} pl-9`}
+                      disabled={busy}
+                      autoComplete="off"
+                    />
+                  </div>
+                  {refOpen && (
+                    <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-48 overflow-y-auto rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-xl">
+                      {searchingRef ? (
+                        <p className="px-3 py-2 text-xs text-[color:var(--muted-foreground)]">Buscando…</p>
+                      ) : refCandidates.length === 0 ? (
+                        <p className="px-3 py-2 text-xs text-[color:var(--muted-foreground)]">
+                          Nenhuma tarefa encontrada.
+                        </p>
+                      ) : (
+                        refCandidates.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => void addLink("RELATES_TO", c.id)}
+                            className="flex w-full flex-col gap-0.5 px-3 py-2 text-left text-sm hover:bg-black/5"
+                          >
+                            <span className="truncate font-medium text-[color:var(--foreground)]">
+                              {ticketLabel(c)}
+                            </span>
+                            <span className="text-[11px] text-[color:var(--muted-foreground)]">
+                              {statusHint(c)}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              {readOnly && (!data || data.relatesTo.length === 0) && (
+                <p className="text-sm text-[color:var(--muted-foreground)]">Nenhuma</p>
+              )}
+            </div>
           </div>
 
           {data && data.blocks.length > 0 && (
             <div>
               <label className={labelClass}>Bloqueia</label>
-              <ul className="space-y-1.5">
+              <ul className="mt-1 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                 {data.blocks.map((b) => (
                   <li
                     key={b.linkId}
-                    className="rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-sm"
+                    className="rounded-lg border border-[color:var(--border)] bg-[color:var(--background)]/40 px-3 py-2 text-sm"
                   >
                     <span className="font-medium text-[color:var(--foreground)]">{ticketLabel(b.ticket)}</span>
                     <span className="mt-0.5 block text-[11px] text-[color:var(--muted-foreground)]">
@@ -324,89 +412,6 @@ export function TicketLinksSection({
               </ul>
             </div>
           )}
-
-          <div>
-            <label className={labelClass}>Referências</label>
-            <p className="mb-1.5 text-[11px] text-[color:var(--muted-foreground)]">
-              Liga a outra tarefa sem bloquear (ex.: continuidade após finalizar).
-            </p>
-            {data && data.relatesTo.length > 0 && (
-              <ul className="mb-2 space-y-1.5">
-                {data.relatesTo.map((r) => (
-                  <li
-                    key={r.linkId}
-                    className="flex items-start gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-[color:var(--foreground)]">
-                        {ticketLabel(r.ticket)}
-                      </p>
-                      <p className="text-[11px] text-[color:var(--muted-foreground)]">{statusHint(r.ticket)}</p>
-                    </div>
-                    {!readOnly && (
-                      <button
-                        type="button"
-                        onClick={() => void removeLink(r.linkId)}
-                        disabled={busy}
-                        className="rounded-md p-1 text-[color:var(--muted-foreground)] hover:bg-black/5 hover:text-[color:var(--foreground)] disabled:opacity-50"
-                        title="Remover referência"
-                        aria-label="Remover referência"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {!readOnly && (
-              <div className="relative" ref={refBoxRef}>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--muted-foreground)]" />
-                  <input
-                    type="search"
-                    value={refQuery}
-                    onChange={(e) => scheduleRefSearch(e.target.value)}
-                    onFocus={() => {
-                      setRefOpen(true);
-                      if (refCandidates.length === 0) scheduleRefSearch(refQuery);
-                    }}
-                    placeholder="Buscar tarefa (inclui finalizadas)…"
-                    className={`${inputClass} pl-9`}
-                    disabled={busy}
-                    autoComplete="off"
-                  />
-                </div>
-                {refOpen && (
-                  <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-48 overflow-y-auto rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-xl">
-                    {searchingRef ? (
-                      <p className="px-3 py-2 text-xs text-[color:var(--muted-foreground)]">Buscando…</p>
-                    ) : refCandidates.length === 0 ? (
-                      <p className="px-3 py-2 text-xs text-[color:var(--muted-foreground)]">
-                        Nenhuma tarefa encontrada.
-                      </p>
-                    ) : (
-                      refCandidates.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => void addLink("RELATES_TO", c.id)}
-                          className="flex w-full flex-col gap-0.5 px-3 py-2 text-left text-sm hover:bg-black/5"
-                        >
-                          <span className="truncate font-medium text-[color:var(--foreground)]">
-                            {ticketLabel(c)}
-                          </span>
-                          <span className="text-[11px] text-[color:var(--muted-foreground)]">
-                            {statusHint(c)}
-                          </span>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
         </>
       )}
 

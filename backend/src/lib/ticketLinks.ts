@@ -215,3 +215,69 @@ export async function loadTicketLinksPayload(
     unfinishedPredecessors,
   };
 }
+
+export type TicketLinkListChip = { id: string; code: string; title: string };
+
+export type TicketLinksListSummary = {
+  predecessor: TicketLinkListChip | null;
+  references: TicketLinkListChip[];
+};
+
+/** Resumo leve de vínculos para cards/listagens (1 query por lote). */
+export async function attachTicketLinkSummariesForList(
+  tenantId: string,
+  tickets: Array<{ id: string }>,
+  db: PrismaClient = prisma,
+): Promise<TicketLinksListSummary[]> {
+  if (tickets.length === 0) return [];
+  const ids = tickets.map((t) => t.id);
+  const idSet = new Set(ids);
+
+  const empty = (): TicketLinksListSummary => ({ predecessor: null, references: [] });
+  const byId = new Map<string, TicketLinksListSummary>(ids.map((id) => [id, empty()]));
+
+  const links = await db.ticketLink.findMany({
+    where: {
+      tenantId,
+      OR: [
+        { toTicketId: { in: ids }, type: TICKET_LINK_FINISH_START },
+        { fromTicketId: { in: ids }, type: TICKET_LINK_RELATES_TO },
+        { toTicketId: { in: ids }, type: TICKET_LINK_RELATES_TO },
+      ],
+    },
+    select: {
+      type: true,
+      fromTicketId: true,
+      toTicketId: true,
+      fromTicket: { select: { id: true, code: true, title: true } },
+      toTicket: { select: { id: true, code: true, title: true } },
+    },
+  });
+
+  const toChip = (t: { id: string; code: string; title: string }): TicketLinkListChip => ({
+    id: t.id,
+    code: t.code,
+    title: t.title,
+  });
+
+  for (const link of links) {
+    if (link.type === TICKET_LINK_FINISH_START && idSet.has(link.toTicketId)) {
+      byId.get(link.toTicketId)!.predecessor = toChip(link.fromTicket);
+      continue;
+    }
+    if (link.type === TICKET_LINK_RELATES_TO) {
+      if (idSet.has(link.fromTicketId)) {
+        const row = byId.get(link.fromTicketId)!;
+        const chip = toChip(link.toTicket);
+        if (!row.references.some((r) => r.id === chip.id)) row.references.push(chip);
+      }
+      if (idSet.has(link.toTicketId)) {
+        const row = byId.get(link.toTicketId)!;
+        const chip = toChip(link.fromTicket);
+        if (!row.references.some((r) => r.id === chip.id)) row.references.push(chip);
+      }
+    }
+  }
+
+  return tickets.map((t) => byId.get(t.id) ?? empty());
+}

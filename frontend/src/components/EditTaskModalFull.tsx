@@ -2285,15 +2285,6 @@ export function EditTaskModalFull({
                         )}
                       </div>
                     </div>
-
-                    {!isTopicTicket(ticket.type) && (
-                      <TicketLinksSection
-                        ticketId={ticket.id}
-                        readOnly={isReadOnly}
-                        labelClass={labelClass}
-                        inputClass={inputClass}
-                      />
-                    )}
                   </div>
 
                   {/* Coluna Direita */}
@@ -2556,6 +2547,15 @@ export function EditTaskModalFull({
                     </div>
                   </div>
                 </div>
+
+                {!isTopicTicket(ticket.type) && (
+                  <TicketLinksSection
+                    ticketId={ticket.id}
+                    readOnly={isReadOnly}
+                    labelClass={labelClass}
+                    inputClass={inputClass}
+                  />
+                )}
 
                 {/* Campo Descrição - Largura completa */}
                 <div className="bg-[color:var(--surface)] rounded-2xl border border-[color:var(--border)] px-5 py-5 shadow-sm hover:shadow-md transition-shadow duration-200">

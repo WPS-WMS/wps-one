@@ -43,6 +43,7 @@ import {
   TICKET_LINK_FINISH_START,
   TICKET_LINK_RELATES_TO,
   assertCanAdvanceStatusWithPredecessors,
+  attachTicketLinkSummariesForList,
   loadTicketLinksPayload,
   normalizeTicketLinkType,
   wouldCreateFinishStartCycle,
@@ -669,15 +670,25 @@ ticketsRouter.get("/", async (req, res) => {
       return;
     }
   }
-  if (skipUi) {
+  if (skipUi || topicSelect) {
     res.json(list);
     return;
   }
-  const ui = await attachCustomKanbanStatusUi({
-    tenantId: user.tenantId,
-    tickets: list as any,
-  });
-  res.json((list as any[]).map((t, idx) => ({ ...t, ...ui[idx] })));
+  const [ui, linkSummaries] = await Promise.all([
+    attachCustomKanbanStatusUi({
+      tenantId: user.tenantId,
+      tickets: list as any,
+    }),
+    attachTicketLinkSummariesForList(user.tenantId, list as Array<{ id: string }>),
+  ]);
+  res.json(
+    (list as any[]).map((t, idx) => ({
+      ...t,
+      ...ui[idx],
+      predecessor: linkSummaries[idx]?.predecessor ?? null,
+      references: linkSummaries[idx]?.references ?? [],
+    })),
+  );
 });
 
 function parseDateRangeInclusive(input: {
@@ -898,12 +909,20 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   });
 
   const list = rows;
-  const ui = await attachCustomKanbanStatusUi({
-    tenantId: user.tenantId,
-    tickets: list as any,
-  });
+  const [ui, linkSummaries] = await Promise.all([
+    attachCustomKanbanStatusUi({
+      tenantId: user.tenantId,
+      tickets: list as any,
+    }),
+    attachTicketLinkSummariesForList(user.tenantId, list as Array<{ id: string }>),
+  ]);
 
-  const enriched = (list as any[]).map((t, idx) => ({ ...t, ...ui[idx] }));
+  const enriched = (list as any[]).map((t, idx) => ({
+    ...t,
+    ...ui[idx],
+    predecessor: linkSummaries[idx]?.predecessor ?? null,
+    references: linkSummaries[idx]?.references ?? [],
+  }));
 
   res.json(sortTasksListRows(enriched));
 });
