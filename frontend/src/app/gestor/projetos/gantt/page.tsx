@@ -2,4 +2,6 @@
 
 import Page from "@/app/admin/projetos/gantt/page";
 
-export default Page;
+export default function GestorProjetosGanttPage() {
+  return <Page />;
+}

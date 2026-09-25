@@ -22,36 +22,41 @@ export type GanttRow = {
 
 const LANE_META: Record<
   Exclude<GanttLaneKind, "nodates">,
-  { label: string; bar: string; text: string }
+  { label: string; bar: string }
 > = {
   future: {
     label: "Futuro",
     bar: "bg-violet-400/90 dark:bg-violet-500/80",
-    text: "text-violet-800 dark:text-violet-200",
   },
   active: {
     label: "Em andamento",
     bar: "bg-[color:var(--primary)]",
-    text: "text-[color:var(--primary)]",
   },
   overdue: {
     label: "Atrasada",
     bar: "bg-rose-500",
-    text: "text-rose-800 dark:text-rose-200",
   },
   done: {
     label: "Concluída",
     bar: "bg-slate-400 dark:bg-slate-500",
-    text: "text-slate-600 dark:text-slate-300",
   },
 };
+
+/** Evita crash no DOM se existir data absurda no banco (ex.: ano 0001 / 9999). */
+const MAX_TIMELINE_DAYS = 420;
+const RANGE_PAD_BEFORE = 14;
+const RANGE_PAD_AFTER = 28;
+const DATE_HORIZON_DAYS = 730; // ±2 anos em torno de hoje
 
 function parseYmd(raw: string | null | undefined): Date | null {
   if (!raw) return null;
   const ymd = String(raw).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
   const [y, m, d] = ymd.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d));
+  if (!y || y < 1990 || y > 2100) return null;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt;
 }
 
 function formatYmdBr(raw: string | null | undefined): string {
@@ -78,6 +83,10 @@ function startOfWeekUtc(d: Date): Date {
   return addDaysUtc(d, mondayOffset);
 }
 
+function todayUtc(): Date {
+  return new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()));
+}
+
 export function classifyGanttLane(params: {
   start: string | null;
   end: string | null;
@@ -89,9 +98,7 @@ export function classifyGanttLane(params: {
   const start = parseYmd(params.start);
   const end = parseYmd(params.end);
   if (!start && !end) return "nodates";
-  const today = params.todayYmd
-    ? parseYmd(params.todayYmd)!
-    : new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()));
+  const today = params.todayYmd ? parseYmd(params.todayYmd) ?? todayUtc() : todayUtc();
   if (end && end < today) return "overdue";
   if (st === "EXECUCAO" || st === "TESTE" || st === "EM_EXECUCAO") return "active";
   if (start && start > today) return "future";
@@ -110,27 +117,45 @@ export function ProjectGanttChart({ rows, onOpenTask }: ProjectGanttChartProps) 
   const headerScrollRef = useRef<HTMLDivElement>(null);
   const bodyScrollRef = useRef<HTMLDivElement>(null);
   const leftBodyRef = useRef<HTMLDivElement>(null);
+  const syncingScroll = useRef(false);
 
   const dayWidth = scale === "week" ? 36 : 14;
 
   const { rangeStart, days, todayOffset } = useMemo(() => {
-    const today = new Date(
-      Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()),
-    );
+    const today = todayUtc();
+    const horizonMin = addDaysUtc(today, -DATE_HORIZON_DAYS);
+    const horizonMax = addDaysUtc(today, DATE_HORIZON_DAYS);
+
     let min = today;
     let max = addDaysUtc(today, 28);
     for (const row of rows) {
       const s = parseYmd(row.start);
       const e = parseYmd(row.end);
-      if (s && s < min) min = s;
-      if (e && e > max) max = e;
-      if (s && !e && s > max) max = addDaysUtc(s, 7);
-      if (e && !s && e < min) min = addDaysUtc(e, -7);
+      if (s && s >= horizonMin && s <= horizonMax) {
+        if (s < min) min = s;
+        if (s > max) max = s;
+      }
+      if (e && e >= horizonMin && e <= horizonMax) {
+        if (e < min) min = e;
+        if (e > max) max = e;
+      }
     }
-    // padding
-    min = addDaysUtc(startOfWeekUtc(min), -7);
-    max = addDaysUtc(max, 14);
-    const total = Math.max(14, daysBetweenUtc(min, max) + 1);
+
+    min = addDaysUtc(startOfWeekUtc(min), -RANGE_PAD_BEFORE);
+    max = addDaysUtc(max, RANGE_PAD_AFTER);
+
+    let total = Math.max(21, daysBetweenUtc(min, max) + 1);
+    if (!Number.isFinite(total) || total < 1) {
+      min = addDaysUtc(startOfWeekUtc(today), -RANGE_PAD_BEFORE);
+      total = 56;
+    }
+    if (total > MAX_TIMELINE_DAYS) {
+      // Centraliza em torno de hoje quando o range explode.
+      min = addDaysUtc(today, -Math.floor(MAX_TIMELINE_DAYS / 3));
+      min = startOfWeekUtc(min);
+      total = MAX_TIMELINE_DAYS;
+    }
+
     const list: Date[] = [];
     for (let i = 0; i < total; i++) list.push(addDaysUtc(min, i));
     return {
@@ -141,17 +166,23 @@ export function ProjectGanttChart({ rows, onOpenTask }: ProjectGanttChartProps) 
   }, [rows]);
 
   function syncScroll(source: "header" | "body" | "left") {
+    if (syncingScroll.current) return;
     const header = headerScrollRef.current;
     const body = bodyScrollRef.current;
     const left = leftBodyRef.current;
     if (!header || !body || !left) return;
-    if (source === "body") {
-      header.scrollLeft = body.scrollLeft;
-      left.scrollTop = body.scrollTop;
-    } else if (source === "header") {
-      body.scrollLeft = header.scrollLeft;
-    } else {
-      body.scrollTop = left.scrollTop;
+    syncingScroll.current = true;
+    try {
+      if (source === "body") {
+        header.scrollLeft = body.scrollLeft;
+        left.scrollTop = body.scrollTop;
+      } else if (source === "header") {
+        body.scrollLeft = header.scrollLeft;
+      } else {
+        body.scrollTop = left.scrollTop;
+      }
+    } finally {
+      syncingScroll.current = false;
     }
   }
 
@@ -184,10 +215,12 @@ export function ProjectGanttChart({ rows, onOpenTask }: ProjectGanttChartProps) 
   useEffect(() => {
     const body = bodyScrollRef.current;
     const header = headerScrollRef.current;
-    if (!body || todayOffset < 0) return;
+    if (!body || todayOffset < 0 || todayOffset >= days.length) return;
     const target = Math.max(0, todayOffset * dayWidth - body.clientWidth * 0.25);
+    syncingScroll.current = true;
     body.scrollLeft = target;
     if (header) header.scrollLeft = target;
+    syncingScroll.current = false;
   }, [todayOffset, dayWidth, days.length]);
 
   return (
@@ -299,7 +332,7 @@ export function ProjectGanttChart({ rows, onOpenTask }: ProjectGanttChartProps) 
           >
             {rows.length === 0 ? (
               <div className="px-4 py-10 text-center text-sm text-[color:var(--muted-foreground)]">
-                Nenhuma tarefa com período para exibir.
+                Nenhuma tarefa para exibir.
               </div>
             ) : (
               rows.map((row) => (
@@ -344,8 +377,7 @@ export function ProjectGanttChart({ rows, onOpenTask }: ProjectGanttChartProps) 
             className="min-w-0 flex-1 overflow-auto"
             onScroll={() => syncScroll("body")}
           >
-            <div className="relative" style={{ width: timelineWidth, minHeight: Math.max(44, rows.length * 44) }}>
-              {/* weekend / grid */}
+            <div className="relative" style={{ width: timelineWidth, minHeight: Math.max(44, rows.length * 44 || 44) }}>
               <div className="pointer-events-none absolute inset-0 flex">
                 {days.map((d) => {
                   const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6;
@@ -361,7 +393,6 @@ export function ProjectGanttChart({ rows, onOpenTask }: ProjectGanttChartProps) 
                 })}
               </div>
 
-              {/* today line */}
               {todayOffset >= 0 && todayOffset < days.length && (
                 <div
                   className="pointer-events-none absolute bottom-0 top-0 z-20 w-px bg-amber-500/90"

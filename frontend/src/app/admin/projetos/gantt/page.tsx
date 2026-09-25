@@ -6,16 +6,25 @@ import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft, Search } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  ProjectGanttChart,
-  classifyGanttLane,
-  type GanttRow,
-} from "@/components/gantt/ProjectGanttChart";
+import { classifyGanttLane, type GanttRow } from "@/components/gantt/ProjectGanttChart";
 
 const EditTaskModalFull = dynamic(
   () =>
     import("@/components/EditTaskModalFull").then((m) => ({ default: m.EditTaskModalFull })),
   { ssr: false },
+);
+
+const ProjectGanttChart = dynamic(
+  () =>
+    import("@/components/gantt/ProjectGanttChart").then((m) => ({ default: m.ProjectGanttChart })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-16 text-center text-sm text-[color:var(--muted-foreground)]">
+        Carregando cronograma…
+      </div>
+    ),
+  },
 );
 
 type TicketApiRow = {
@@ -125,53 +134,64 @@ export default function GanttPage() {
   }, [tickets]);
 
   const ganttRows: GanttRow[] = useMemo(() => {
-    const qNorm = q.trim().toLowerCase();
-    const filtered = tickets.filter((t) => {
-      if (projectId && (t.project?.id ?? t.projectId) !== projectId) return false;
-      if (!qNorm) return true;
-      const hay = [
-        t.code,
-        t.title,
-        t.project?.name,
-        t.parentTicket?.title,
-        t.parentTicket?.code,
-        t.predecessor?.code,
-        collectResource(t),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(qNorm);
-    });
+    try {
+      const qNorm = q.trim().toLowerCase();
+      const filtered = tickets.filter((t) => {
+        if (!t?.id) return false;
+        if (projectId && (t.project?.id ?? t.projectId) !== projectId) return false;
+        if (!qNorm) return true;
+        const hay = [
+          t.code,
+          t.title,
+          t.project?.name,
+          t.parentTicket?.title,
+          t.parentTicket?.code,
+          t.predecessor?.code,
+          collectResource(t),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(qNorm);
+      });
 
-    const mapped = filtered.map((t): GanttRow => {
-      const start = toYmd(t.dataInicio ?? null);
-      const end = toYmd(t.dataFimPrevista ?? null);
-      const kind = classifyGanttLane({ start, end, status: t.status });
-      return {
-        id: t.id,
-        projectName: t.project?.name ?? "—",
-        topicName: t.parentTicket?.title ?? "—",
-        code: t.code ?? "",
-        title: t.title ?? "",
-        resource: collectResource(t),
-        predecessor: t.predecessor?.code ?? "—",
-        start,
-        end,
-        status: t.status,
-        statusLabel: t.statusLabel,
-        kind,
-        progress: typeof t.progresso === "number" ? t.progresso : 0,
-      };
-    });
+      const mapped = filtered.map((t): GanttRow => {
+        const start = toYmd(t.dataInicio ?? null);
+        const end = toYmd(t.dataFimPrevista ?? null);
+        const kind = classifyGanttLane({ start, end, status: t.status });
+        const progressoNum =
+          typeof t.progresso === "number"
+            ? t.progresso
+            : typeof t.progresso === "string"
+              ? Number(t.progresso)
+              : 0;
+        return {
+          id: t.id,
+          projectName: t.project?.name ?? "—",
+          topicName: t.parentTicket?.title ?? "—",
+          code: t.code ?? "",
+          title: t.title ?? "",
+          resource: collectResource(t),
+          predecessor: t.predecessor?.code ?? "—",
+          start,
+          end,
+          status: t.status ?? "",
+          statusLabel: t.statusLabel,
+          kind,
+          progress: Number.isFinite(progressoNum) ? progressoNum : 0,
+        };
+      });
 
-    mapped.sort((a, b) => {
-      const as = a.start ?? a.end ?? "9999";
-      const bs = b.start ?? b.end ?? "9999";
-      if (as !== bs) return as.localeCompare(bs);
-      return a.code.localeCompare(b.code, "pt-BR");
-    });
-    return mapped;
+      mapped.sort((a, b) => {
+        const as = a.start ?? a.end ?? "9999";
+        const bs = b.start ?? b.end ?? "9999";
+        if (as !== bs) return as.localeCompare(bs);
+        return String(a.code).localeCompare(String(b.code), "pt-BR");
+      });
+      return mapped;
+    } catch {
+      return [];
+    }
   }, [tickets, q, projectId]);
 
   async function openTask(ticketId: string) {
