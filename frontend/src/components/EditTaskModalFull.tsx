@@ -55,6 +55,7 @@ import {
   timeEntryIntervalForApi,
 } from "@/lib/timeEntrySameDay";
 import { formatHorasInput, completeHorasInputOnBlur } from "@/lib/timeHorasInput";
+import { TicketLinksSection } from "@/components/TicketLinksSection";
 
 type UserOption = { id: string; name: string; email?: string; avatarUrl?: string | null; updatedAt?: string };
 type LightTicket = { id: string; code: string; title: string; type: string };
@@ -2284,6 +2285,15 @@ export function EditTaskModalFull({
                         )}
                       </div>
                     </div>
+
+                    {!isTopicTicket(ticket.type) && (
+                      <TicketLinksSection
+                        ticketId={ticket.id}
+                        readOnly={isReadOnly}
+                        labelClass={labelClass}
+                        inputClass={inputClass}
+                      />
+                    )}
                   </div>
 
                   {/* Coluna Direita */}

@@ -115,6 +115,7 @@ model Tenant {
   skillProfiles SkillProfile[]
   userProfiles TenantUserProfile[]
   userNotifications UserNotification[]
+  ticketLinks       TicketLink[]
   /// Chave de ativação (plataforma): libera a tela/módulo Portal Colaborativo neste tenant.
   portalModuleEnabled          Boolean  @default(true)
   /// Chave de ativação (plataforma): libera a tela Integrações SharePoint neste tenant.
@@ -472,6 +473,7 @@ model User {
   changesMade   UserHistory[] @relation("UserHistoryAuthor")
   notificationsReceived UserNotification[] @relation("NotificationRecipient")
   notificationsActed    UserNotification[] @relation("NotificationActor")
+  ticketLinksCreated    TicketLink[] @relation("TicketLinkCreatedBy")
   @@index([tenantId, name])
   @@index([tenantId, ativo, role], map: "users_tenant_ativo_role_idx")
   @@index([tenantId, updatedAt], map: "users_tenant_updated_idx")
@@ -856,6 +858,8 @@ model Ticket {
   attachments     TicketAttachment[]
   budget          TicketBudget?
   mentionNotifications UserNotification[]
+  linksFrom       TicketLink[] @relation("TicketLinkFrom")
+  linksTo         TicketLink[] @relation("TicketLinkTo")
 
   sharePointFolderId     String?
   sharePointFolderUrl    String?
@@ -869,6 +873,32 @@ model Ticket {
   @@index([assignedToId])
   @@index([createdById])
   @@index([parentTicketId])
+}
+
+/**
+ * Vínculo entre tarefas do mesmo projeto.
+ * - FINISH_START: from = predecessora, to = sucessora (bloqueia avanço até concluir)
+ * - RELATES_TO: referência informativa (sem bloqueio)
+ */
+model TicketLink {
+  id           String   @id @default(cuid())
+  tenantId     String
+  fromTicketId String
+  toTicketId   String
+  /// FINISH_START | RELATES_TO
+  type         String
+  createdById  String?
+  createdAt    DateTime @default(now())
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  fromTicket Ticket @relation("TicketLinkFrom", fields: [fromTicketId], references: [id], onDelete: Cascade)
+  toTicket   Ticket @relation("TicketLinkTo", fields: [toTicketId], references: [id], onDelete: Cascade)
+  createdBy  User?  @relation("TicketLinkCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([fromTicketId, toTicketId, type], map: "ticket_links_from_to_type_uq")
+  @@index([tenantId, toTicketId, type], map: "ticket_links_tenant_to_type_idx")
+  @@index([tenantId, fromTicketId, type], map: "ticket_links_tenant_from_type_idx")
+  @@map("ticket_links")
 }
 
 model TicketBudget {

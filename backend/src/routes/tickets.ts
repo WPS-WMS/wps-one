@@ -39,6 +39,14 @@ import {
 } from "../lib/projectTaskAssignees.js";
 import { createTaskMemberAddedNotifications } from "../lib/taskMemberNotifications.js";
 import { normalizeProjectTypeForEmail } from "../lib/emailNotificationRules.js";
+import {
+  TICKET_LINK_FINISH_START,
+  TICKET_LINK_RELATES_TO,
+  assertCanAdvanceStatusWithPredecessors,
+  loadTicketLinksPayload,
+  normalizeTicketLinkType,
+  wouldCreateFinishStartCycle,
+} from "../lib/ticketLinks.js";
 
 export const ticketsRouter = Router();
 ticketsRouter.use(authMiddleware);
@@ -1821,6 +1829,229 @@ ticketsRouter.post("/:id/budget/reject", async (req, res) => {
   res.json({ ok: true, budget: budgetFull ?? updatedBudget });
 });
 
+/** Vínculos da tarefa: predecessoras, o que bloqueia e referências. */
+ticketsRouter.get("/:id/links", async (req, res) => {
+  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+  const ticketId = req.params.id;
+  const ticket = await prisma.ticket.findFirst({
+    where: await ticketDetailWhere(ticketId, user),
+    select: { id: true },
+  });
+  if (!ticket) {
+    res.status(404).json({ error: "Tópico/tarefa não encontrado" });
+    return;
+  }
+  const payload = await loadTicketLinksPayload(user.tenantId, ticketId);
+  res.json(payload);
+});
+
+/**
+ * Candidatos para vincular (mesmo projeto).
+ * q opcional; includeArchived=true inclui arquivadas (útil em referências).
+ */
+ticketsRouter.get("/:id/links/candidates", async (req, res) => {
+  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+  const ticketId = req.params.id;
+  const q = String(req.query.q ?? "").trim();
+  const includeArchived =
+    String(req.query.includeArchived ?? "") === "true" ||
+    String(req.query.includeArchived ?? "") === "1";
+  const rawLimit = parseInt(String(req.query.limit ?? "40"), 10);
+  const take = Number.isNaN(rawLimit) ? 40 : Math.min(80, Math.max(1, rawLimit));
+
+  const ticket = await prisma.ticket.findFirst({
+    where: await ticketDetailWhere(ticketId, user),
+    select: { id: true, projectId: true },
+  });
+  if (!ticket) {
+    res.status(404).json({ error: "Tópico/tarefa não encontrado" });
+    return;
+  }
+
+  const rows = await prisma.ticket.findMany({
+    where: {
+      projectId: ticket.projectId,
+      id: { not: ticketId },
+      type: { not: "SUBPROJETO" },
+      ...(includeArchived ? {} : { arquivado: false }),
+      ...(q
+        ? {
+            OR: [
+              { code: { contains: q, mode: "insensitive" } },
+              { title: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    },
+    select: {
+      id: true,
+      code: true,
+      title: true,
+      status: true,
+      type: true,
+      arquivado: true,
+      projectId: true,
+    },
+    orderBy: [{ code: "asc" }, { createdAt: "desc" }],
+    take,
+  });
+  res.json({ items: rows });
+});
+
+/**
+ * Cria vínculo.
+ * body: { type: 'FINISH_START' | 'RELATES_TO', otherTicketId: string }
+ * - FINISH_START: otherTicketId = predecessora; a tarefa atual é a sucessora (1 predecessora).
+ * - RELATES_TO: referência bidirecional informativa.
+ */
+ticketsRouter.post("/:id/links", requireFeature("tarefa.editar"), async (req, res) => {
+  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+  if (String(user.role ?? "").toUpperCase() === "CLIENTE") {
+    res.status(403).json({ error: "Cliente não pode editar vínculos de tarefas." });
+    return;
+  }
+  const ticketId = req.params.id;
+  const linkType = normalizeTicketLinkType(req.body?.type);
+  const otherTicketId = String(req.body?.otherTicketId ?? "").trim();
+  if (!linkType) {
+    res.status(400).json({ error: "Tipo de vínculo inválido. Use FINISH_START ou RELATES_TO." });
+    return;
+  }
+  if (!otherTicketId) {
+    res.status(400).json({ error: "Informe a tarefa vinculada (otherTicketId)." });
+    return;
+  }
+  if (otherTicketId === ticketId) {
+    res.status(400).json({ error: "Não é possível vincular a tarefa a ela mesma." });
+    return;
+  }
+
+  const ticket = await prisma.ticket.findFirst({
+    where: await ticketDetailWhere(ticketId, user),
+    select: { id: true, projectId: true, type: true },
+  });
+  if (!ticket) {
+    res.status(404).json({ error: "Tópico/tarefa não encontrado" });
+    return;
+  }
+  if (String(ticket.type).toUpperCase() === "SUBPROJETO") {
+    res.status(400).json({ error: "Vínculos se aplicam a tarefas, não a tópicos." });
+    return;
+  }
+
+  const other = await prisma.ticket.findFirst({
+    where: {
+      id: otherTicketId,
+      projectId: ticket.projectId,
+      project: { client: { tenantId: user.tenantId } },
+    },
+    select: { id: true, type: true, code: true, title: true },
+  });
+  if (!other) {
+    res.status(404).json({ error: "Tarefa vinculada não encontrada neste projeto." });
+    return;
+  }
+  if (String(other.type).toUpperCase() === "SUBPROJETO") {
+    res.status(400).json({ error: "Não é possível vincular a um tópico/subprojeto." });
+    return;
+  }
+
+  if (linkType === TICKET_LINK_FINISH_START) {
+    const cycle = await wouldCreateFinishStartCycle(user.tenantId, otherTicketId, ticketId);
+    if (cycle) {
+      res.status(400).json({ error: "Esse vínculo criaria um ciclo de dependências." });
+      return;
+    }
+    // v1: no máximo 1 predecessora — substitui a existente
+    await prisma.ticketLink.deleteMany({
+      where: {
+        tenantId: user.tenantId,
+        type: TICKET_LINK_FINISH_START,
+        toTicketId: ticketId,
+      },
+    });
+    try {
+      await prisma.ticketLink.create({
+        data: {
+          tenantId: user.tenantId,
+          fromTicketId: otherTicketId,
+          toTicketId: ticketId,
+          type: TICKET_LINK_FINISH_START,
+          createdById: user.id,
+        },
+      });
+    } catch (err) {
+      console.error("[tickets][links] create FINISH_START failed", errorSummary(err));
+      res.status(500).json({ error: "Falha ao criar dependência." });
+      return;
+    }
+  } else {
+    const existing = await prisma.ticketLink.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        type: TICKET_LINK_RELATES_TO,
+        OR: [
+          { fromTicketId: ticketId, toTicketId: otherTicketId },
+          { fromTicketId: otherTicketId, toTicketId: ticketId },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!existing) {
+      try {
+        await prisma.ticketLink.create({
+          data: {
+            tenantId: user.tenantId,
+            fromTicketId: ticketId,
+            toTicketId: otherTicketId,
+            type: TICKET_LINK_RELATES_TO,
+            createdById: user.id,
+          },
+        });
+      } catch (err) {
+        console.error("[tickets][links] create RELATES_TO failed", errorSummary(err));
+        res.status(500).json({ error: "Falha ao criar referência." });
+        return;
+      }
+    }
+  }
+
+  const payload = await loadTicketLinksPayload(user.tenantId, ticketId);
+  res.status(201).json(payload);
+});
+
+ticketsRouter.delete("/:id/links/:linkId", requireFeature("tarefa.editar"), async (req, res) => {
+  const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
+  if (String(user.role ?? "").toUpperCase() === "CLIENTE") {
+    res.status(403).json({ error: "Cliente não pode editar vínculos de tarefas." });
+    return;
+  }
+  const ticketId = req.params.id;
+  const linkId = req.params.linkId;
+  const ticket = await prisma.ticket.findFirst({
+    where: await ticketDetailWhere(ticketId, user),
+    select: { id: true },
+  });
+  if (!ticket) {
+    res.status(404).json({ error: "Tópico/tarefa não encontrado" });
+    return;
+  }
+  const link = await prisma.ticketLink.findFirst({
+    where: {
+      id: linkId,
+      tenantId: user.tenantId,
+      OR: [{ fromTicketId: ticketId }, { toTicketId: ticketId }],
+    },
+  });
+  if (!link) {
+    res.status(404).json({ error: "Vínculo não encontrado" });
+    return;
+  }
+  await prisma.ticketLink.delete({ where: { id: link.id } });
+  const payload = await loadTicketLinksPayload(user.tenantId, ticketId);
+  res.json(payload);
+});
+
 ticketsRouter.get("/:id", async (req, res) => {
   const user = (req as Request & { user: { id: string; role: string; tenantId: string } }).user;
   const ticketId = req.params.id;
@@ -1974,6 +2205,19 @@ ticketsRouter.patch("/:id", requireFeature("tarefa.editar"), async (req, res) =>
 
   const updateData: any = {};
   if (status !== undefined && status !== ticket.status) {
+    const predGate = await assertCanAdvanceStatusWithPredecessors(
+      user.tenantId,
+      ticketId,
+      status,
+    );
+    if (predGate.ok === false) {
+      res.status(409).json({
+        error: predGate.error,
+        code: "PREDECESSOR_BLOCKED",
+        blockers: predGate.blockers,
+      });
+      return;
+    }
     updateData.status = String(status);
     const statusLabelSafe =
       typeof statusLabel === "string" && statusLabel.trim()

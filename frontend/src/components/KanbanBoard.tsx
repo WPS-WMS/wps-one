@@ -801,7 +801,11 @@ export function KanbanBoard({
         }),
       });
       if (!res.ok) {
-        throw new Error("Falha ao atualizar status do ticket");
+        const data = await res.json().catch(() => null);
+        const msg =
+          (data as { error?: string } | null)?.error ||
+          "Falha ao atualizar status do ticket";
+        throw new Error(msg);
       }
       persistKanbanOrderAfterCrossColumnMove(ticket.id, newStatus, columnId, insertBefore, {
         [ticket.id]: newStatus,
@@ -814,7 +818,11 @@ export function KanbanBoard({
         delete next[ticket.id];
         return next;
       });
-      alert("Não foi possível mover a tarefa. Tente novamente.");
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível mover a tarefa. Tente novamente.";
+      alert(message);
     } finally {
       setDraggingTicketId(null);
     }
@@ -1284,7 +1292,12 @@ export function KanbanBoard({
                 finalizacaoMotivo: motivo,
               }),
             });
-            if (!res.ok) throw new Error("Falha ao finalizar a tarefa");
+            if (!res.ok) {
+              const data = await res.json().catch(() => null);
+              throw new Error(
+                (data as { error?: string } | null)?.error || "Falha ao finalizar a tarefa",
+              );
+            }
             persistKanbanOrderAfterCrossColumnMove(
               target.ticketId,
               target.newStatus,
@@ -1300,7 +1313,11 @@ export function KanbanBoard({
               delete next[target.ticketId];
               return next;
             });
-            alert("Não foi possível finalizar a tarefa. Tente novamente.");
+            alert(
+              err instanceof Error && err.message
+                ? err.message
+                : "Não foi possível finalizar a tarefa. Tente novamente.",
+            );
           }
         }}
       />
