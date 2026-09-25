@@ -89,6 +89,12 @@ function monthBounds(year: number, month: number): { start: Date; endExclusive: 
   };
 }
 
+/** Mês anterior ao filtro (ex.: filtro ago → competência jul). */
+function previousMonthBounds(year: number, month: number): { start: Date; endExclusive: Date } {
+  if (month <= 1) return monthBounds(year - 1, 12);
+  return monthBounds(year, month - 1);
+}
+
 function formatPeriodLabel(year: number, month: number): string {
   const date = new Date(Date.UTC(year, month - 1, 1));
   const label = date.toLocaleDateString("pt-BR", { month: "short", year: "numeric", timeZone: "UTC" });
@@ -306,10 +312,19 @@ export async function computeProjectFinancialDashboard(
 
   const notas: string[] = [];
   const isMonthly = view === "mensal";
-  const { start: monthStart, endExclusive: monthEndExclusive } = monthBounds(year, month);
+  /**
+   * Mês de competência/atividade: no Mensal é M−1 (gasto e receita de julho
+   * aparecem no filtro agosto = mês de pagamento). Completo não recorta.
+   */
+  const activityPeriod = isMonthly ? previousMonthBounds(year, month) : monthBounds(year, month);
+  const activityYear = activityPeriod.start.getUTCFullYear();
+  const activityMonth = activityPeriod.start.getUTCMonth() + 1;
   if (isMonthly) {
     notas.push(
-      "Modo mensal: faturamento (Valor total) e impostos usam a competência da medição (T&M/AMS). Parcelas sem medição vinculada usam a data de vencimento.",
+      `Modo mensal: o filtro é o mês de pagamento/faturamento. Receitas, operação, reembolsos e despesas usam o mês anterior (${formatPeriodLabel(
+        activityYear,
+        activityMonth,
+      )}).`,
     );
   }
 
@@ -317,15 +332,15 @@ export async function computeProjectFinancialDashboard(
     tenantId,
     projectId: { in: projectIds },
     status: { not: "REJECTED" },
-    ...(isMonthly ? reimbursementDateFilter(year, month) : {}),
+    ...(isMonthly ? reimbursementDateFilter(activityYear, activityMonth) : {}),
   };
   const timeEntryWhere = activeTimeEntryWhere({
     projectId: { in: projectIds },
     ...(isMonthly
       ? {
           date: {
-            gte: monthStart,
-            lt: monthEndExclusive,
+            gte: activityPeriod.start,
+            lt: activityPeriod.endExclusive,
           },
         }
       : {}),
@@ -391,8 +406,8 @@ export async function computeProjectFinancialDashboard(
           ...(isMonthly
             ? {
                 entryDate: {
-                  gte: monthStart,
-                  lt: monthEndExclusive,
+                  gte: activityPeriod.start,
+                  lt: activityPeriod.endExclusive,
                 },
               }
             : {}),
@@ -473,13 +488,21 @@ export async function computeProjectFinancialDashboard(
               ? [
                   {
                     OR: [
-                      { competenceDate: { gte: monthStart, lt: monthEndExclusive } },
+                      {
+                        competenceDate: {
+                          gte: activityPeriod.start,
+                          lt: activityPeriod.endExclusive,
+                        },
+                      },
                       {
                         competenceDate: null,
                         installments: {
                           some: {
                             status: { not: "CANCELADO" },
-                            dueDate: { gte: monthStart, lt: monthEndExclusive },
+                            dueDate: {
+                              gte: activityPeriod.start,
+                              lt: activityPeriod.endExclusive,
+                            },
                           },
                         },
                       },
@@ -552,10 +575,12 @@ export async function computeProjectFinancialDashboard(
       competenceDate: line.variableEntry?.competenceDate ?? null,
     })),
   );
-  // Mensal: receita por competência da medição (T&M/AMS). Sem competência → dueDate.
+  // Mensal: filtro M → competência/atividade de M−1 (pago/faturado em M).
   // Completo: todas as parcelas (inalterado).
   const billingLinesInPeriod = isMonthly
-    ? allBillingLines.filter((line) => billingLineInMonth(line, monthStart, monthEndExclusive))
+    ? allBillingLines.filter((line) =>
+        billingLineInMonth(line, activityPeriod.start, activityPeriod.endExclusive),
+      )
     : allBillingLines;
 
   const costTotalFromLines = sumCostLines(allCostLines);
@@ -844,7 +869,8 @@ export async function computeProjectFinancialDashboard(
     for (const installment of payable.installments) {
       if (
         isMonthly &&
-        (installment.dueDate < monthStart || installment.dueDate >= monthEndExclusive)
+        (installment.dueDate < activityPeriod.start ||
+          installment.dueDate >= activityPeriod.endExclusive)
       ) {
         continue;
       }
@@ -897,8 +923,8 @@ export async function computeProjectFinancialDashboard(
       taxType: revenue.taxType,
     })),
     isMonthly,
-    monthStart,
-    monthEndExclusive,
+    activityPeriod.start,
+    activityPeriod.endExclusive,
   );
 
   let impostoChildren = taxFromRevenues.children;

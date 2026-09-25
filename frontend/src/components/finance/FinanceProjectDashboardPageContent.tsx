@@ -436,7 +436,7 @@ export function FinanceProjectDashboardPageContent({
       {!embedded && (
         <FinancePageHeader
           title={data?.projectName ?? "Resultado de projeto"}
-          subtitle="Resultado por projeto — receita, despesa, impostos e margem (inclui change requests vinculados). No modo Mensal, o faturamento usa a competência da medição."
+          subtitle="Resultado por projeto — receita, despesa, impostos e margem. No Mensal, o filtro é o mês de pagamento: entra o que foi gasto/recebido no mês anterior."
           chip="Projetos"
         />
       )}
