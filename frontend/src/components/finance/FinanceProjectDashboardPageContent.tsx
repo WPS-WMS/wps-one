@@ -436,7 +436,7 @@ export function FinanceProjectDashboardPageContent({
       {!embedded && (
         <FinancePageHeader
           title={data?.projectName ?? "Resultado de projeto"}
-          subtitle="Resultado por projeto — receita, despesa, impostos e margem (inclui change requests vinculados)."
+          subtitle="Resultado por projeto — receita, despesa, impostos e margem (inclui change requests vinculados). No modo Mensal, o faturamento usa a competência da medição."
           chip="Projetos"
         />
       )}
@@ -473,28 +473,34 @@ export function FinanceProjectDashboardPageContent({
               </div>
 
               {view === "mensal" && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <PopoverSelect
-                    id="project-dashboard-month"
-                    value={String(month)}
-                    onChange={(v) => setMonth(Number(v))}
-                    options={Array.from({ length: 12 }, (_, index) => ({
-                      value: String(index + 1),
-                      label: new Date(2024, index, 1).toLocaleDateString("pt-BR", { month: "long" }),
-                    }))}
-                  />
-                  <PopoverSelect
-                    id="project-dashboard-year"
-                    value={String(year)}
-                    onChange={(v) => setYear(Number(v))}
-                    options={Array.from({ length: 6 }, (_, index) => {
-                      const y = now.getFullYear() - 2 + index;
-                      return { value: String(y), label: String(y) };
-                    })}
-                  />
-                  {data?.periodLabel && (
-                    <span className="text-xs text-[color:var(--muted-foreground)]">{data.periodLabel}</span>
-                  )}
+                <div className="flex flex-nowrap items-center gap-2">
+                  <div className="w-[148px] shrink-0">
+                    <PopoverSelect
+                      id="project-dashboard-month"
+                      value={String(month)}
+                      onChange={(v) => setMonth(Number(v))}
+                      options={Array.from({ length: 12 }, (_, index) => ({
+                        value: String(index + 1),
+                        label: new Date(2024, index, 1).toLocaleDateString("pt-BR", { month: "long" }),
+                      }))}
+                    />
+                  </div>
+                  <div className="w-[96px] shrink-0">
+                    <PopoverSelect
+                      id="project-dashboard-year"
+                      value={String(year)}
+                      onChange={(v) => setYear(Number(v))}
+                      options={Array.from({ length: 6 }, (_, index) => {
+                        const y = now.getFullYear() - 2 + index;
+                        return { value: String(y), label: String(y) };
+                      })}
+                    />
+                  </div>
+                  {data?.periodLabel ? (
+                    <span className="text-xs text-[color:var(--muted-foreground)] whitespace-nowrap">
+                      {data.periodLabel}
+                    </span>
+                  ) : null}
                 </div>
               )}
             </div>

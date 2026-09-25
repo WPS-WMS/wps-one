@@ -140,9 +140,31 @@ function sameLabelText(a: string, b: string): boolean {
 
 type RevenueTaxInput = {
   costLines: Array<{ hourlyRate: number; hours: number; isDiscount?: boolean }>;
-  billingLines: Array<{ dueDate: Date; amount: number }>;
+  billingLines: Array<{
+    dueDate: Date;
+    amount: number;
+    /** Competência da medição (T&M/AMS); se ausente, o mensal cai no dueDate. */
+    competenceDate?: Date | null;
+  }>;
   taxType: { id: string; name: string; ratePercent: number | null } | null;
 };
+
+/** Data de competência da parcela para o modo mensal (medição → competência; senão vencimento). */
+function billingLineCompetenceDate(line: {
+  dueDate: Date;
+  competenceDate?: Date | null;
+}): Date {
+  return line.competenceDate ?? line.dueDate;
+}
+
+function billingLineInMonth(
+  line: { dueDate: Date; competenceDate?: Date | null },
+  monthStart: Date,
+  monthEndExclusive: Date,
+): boolean {
+  const d = billingLineCompetenceDate(line);
+  return d >= monthStart && d < monthEndExclusive;
+}
 
 /** Base tributável: faturamento bruto (parcelas), sem custos nem reembolsos. */
 function revenueTaxBase(
@@ -152,9 +174,7 @@ function revenueTaxBase(
   monthEndExclusive: Date,
 ): number {
   const lines = isMonthly
-    ? revenue.billingLines.filter(
-        (line) => line.dueDate >= monthStart && line.dueDate < monthEndExclusive,
-      )
+    ? revenue.billingLines.filter((line) => billingLineInMonth(line, monthStart, monthEndExclusive))
     : revenue.billingLines;
   if (lines.length === 0) return 0;
   return roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
@@ -287,6 +307,11 @@ export async function computeProjectFinancialDashboard(
   const notas: string[] = [];
   const isMonthly = view === "mensal";
   const { start: monthStart, endExclusive: monthEndExclusive } = monthBounds(year, month);
+  if (isMonthly) {
+    notas.push(
+      "Modo mensal: faturamento (Valor total) e impostos usam a competência da medição (T&M/AMS). Parcelas sem medição vinculada usam a data de vencimento.",
+    );
+  }
 
   const projectReimbursementWhere = {
     tenantId,
@@ -321,7 +346,12 @@ export async function computeProjectFinancialDashboard(
               reimbursementType: { select: { id: true, name: true } },
             },
           },
-          billingLines: { orderBy: { sortOrder: "asc" } },
+          billingLines: {
+            orderBy: { sortOrder: "asc" },
+            include: {
+              variableEntry: { select: { competenceDate: true } },
+            },
+          },
           taxType: { select: { id: true, name: true, ratePercent: true } },
           receivable: {
             select: {
@@ -519,12 +549,13 @@ export async function computeProjectFinancialDashboard(
     revenue.billingLines.map((line) => ({
       ...line,
       revenueTitle: revenue.title,
+      competenceDate: line.variableEntry?.competenceDate ?? null,
     })),
   );
+  // Mensal: receita por competência da medição (T&M/AMS). Sem competência → dueDate.
+  // Completo: todas as parcelas (inalterado).
   const billingLinesInPeriod = isMonthly
-    ? allBillingLines.filter(
-        (line) => line.dueDate >= monthStart && line.dueDate < monthEndExclusive,
-      )
+    ? allBillingLines.filter((line) => billingLineInMonth(line, monthStart, monthEndExclusive))
     : allBillingLines;
 
   const costTotalFromLines = sumCostLines(allCostLines);
@@ -858,7 +889,11 @@ export async function computeProjectFinancialDashboard(
   const taxFromRevenues = computeTaxesFromRevenues(
     faturamentoRevenues.map((revenue) => ({
       costLines: revenue.costLines,
-      billingLines: revenue.billingLines,
+      billingLines: revenue.billingLines.map((line) => ({
+        dueDate: line.dueDate,
+        amount: line.amount,
+        competenceDate: line.variableEntry?.competenceDate ?? null,
+      })),
       taxType: revenue.taxType,
     })),
     isMonthly,
