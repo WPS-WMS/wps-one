@@ -60,6 +60,22 @@ function ticketArquivadoWhere(showArchived: boolean) {
   return { arquivado: showArchived };
 }
 
+/** Lista de Tarefas: nao (padrão) | sim | todos */
+type TasksListArquivadoMode = "active" | "archived" | "all";
+
+function parseTasksListArquivadoMode(req: Request): TasksListArquivadoMode {
+  const raw = String(req.query.arquivado ?? "").trim().toLowerCase();
+  if (raw === "true" || raw === "1" || raw === "sim" || raw === "arquivadas") return "archived";
+  if (raw === "todos" || raw === "all" || raw === "any") return "all";
+  return "active";
+}
+
+function tasksListArquivadoWhere(mode: TasksListArquivadoMode): { arquivado?: boolean } {
+  if (mode === "all") return {};
+  if (mode === "archived") return { arquivado: true };
+  return { arquivado: false };
+}
+
 function supportNotifyProjectTypeLabel(tipoProjeto: string | null | undefined): string {
   const normalized = normalizeProjectTypeForEmail(tipoProjeto);
   if (normalized === "TIME_MATERIAL") return "Time & Material";
@@ -686,6 +702,7 @@ function parseDateRangeInclusive(input: {
  * - memberId (assignedTo OU responsáveis da tarefa; não inclui criador nem responsável do projeto)
  * - clientId (projeto do cliente)
  * - status (status exato)
+ * - arquivado: false/nao (padrão) | true/sim | todos
  * - limit/offset (paginação)
  */
 ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (req, res) => {
@@ -693,6 +710,7 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
 
   const createdRange = parseDateRangeInclusive({ from: req.query.createdFrom, to: req.query.createdTo });
   const dueRange = parseDateRangeInclusive({ from: req.query.dueFrom, to: req.query.dueTo });
+  const arquivadoMode = parseTasksListArquivadoMode(req);
 
   const memberIdRaw = String(req.query.memberId ?? "").trim();
   const memberIds = memberIdRaw
@@ -745,7 +763,7 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
   const ticketListScope = await getTasksListWhere(user);
   const where: any = {
     ...ticketListScope,
-    arquivado: false,
+    ...tasksListArquivadoWhere(arquivadoMode),
     type: { notIn: ["SUBPROJETO", "SUBTAREFA"] },
     ...(createdRange ? { createdAt: createdRange } : {}),
     ...(dueRange ? { dataFimPrevista: dueRange } : {}),
@@ -865,6 +883,7 @@ ticketsRouter.get("/tasks-list", requireFeature("projeto.listaTarefas"), async (
       // garantimos os campos usados na tela
       dataFimPrevista: true,
       createdAt: true,
+      arquivado: true,
     } as any,
     orderBy,
     ...pagination,

@@ -1,5 +1,7 @@
 /** Filtros da Lista de Tarefas lembrados no navegador (por usuário). */
 
+export type ListaTarefasArquivadoFilter = "nao" | "sim" | "todos";
+
 export type ListaTarefasSavedFilters = {
   q: string;
   statusIds: string[];
@@ -9,8 +11,15 @@ export type ListaTarefasSavedFilters = {
   createdTo: string;
   dueFrom: string;
   dueTo: string;
+  /** Padrão: não arquivadas. */
+  arquivadoFilter?: ListaTarefasArquivadoFilter;
   showAdvanced?: boolean;
 };
+
+function parseArquivadoFilter(value: unknown): ListaTarefasArquivadoFilter {
+  if (value === "sim" || value === "todos" || value === "nao") return value;
+  return "nao";
+}
 
 const STORAGE_PREFIX = "wps:lista-tarefas:filters:v1:";
 
@@ -38,6 +47,7 @@ export function loadListaTarefasSavedFilters(userId: string): ListaTarefasSavedF
       createdTo: typeof parsed.createdTo === "string" ? parsed.createdTo : "",
       dueFrom: typeof parsed.dueFrom === "string" ? parsed.dueFrom : "",
       dueTo: typeof parsed.dueTo === "string" ? parsed.dueTo : "",
+      arquivadoFilter: parseArquivadoFilter(parsed.arquivadoFilter),
       showAdvanced: Boolean(parsed.showAdvanced),
     };
   } catch {

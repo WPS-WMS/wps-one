@@ -15,6 +15,7 @@ import {
   clearListaTarefasSavedFilters,
   loadListaTarefasSavedFilters,
   saveListaTarefasSavedFilters,
+  type ListaTarefasArquivadoFilter,
 } from "@/lib/tasksListSavedFilters";
 
 const EditTaskModalFull = dynamic(
@@ -37,6 +38,7 @@ type TicketRow = {
   createdAt: string;
   dataFimPrevista?: string | null;
   queuePriority?: number | null;
+  arquivado?: boolean;
   projectId: string;
   project?: { id: string; name: string; client?: { id?: string; name: string } };
   assignedTo?: { id: string; name: string } | null;
@@ -101,6 +103,7 @@ export default function ListaTarefasPage() {
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [clientIds, setClientIds] = useState<string[]>([]);
   const [statusIds, setStatusIds] = useState<string[]>([]);
+  const [arquivadoFilter, setArquivadoFilter] = useState<ListaTarefasArquivadoFilter>("nao");
   const [q, setQ] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
@@ -315,6 +318,7 @@ export default function ListaTarefasPage() {
     clientIds?: string[];
     memberIds?: string[];
     statusIds?: string[];
+    arquivadoFilter?: ListaTarefasArquivadoFilter;
   }) {
     setFetching(true);
     setError(null);
@@ -325,6 +329,7 @@ export default function ListaTarefasPage() {
     const nextClientIds = override?.clientIds ?? clientIds;
     const nextMemberIds = override?.memberIds ?? memberIds;
     const nextStatusIds = override?.statusIds ?? statusIds;
+    const nextArquivadoFilter = override?.arquivadoFilter ?? arquivadoFilter;
     try {
       const params = new URLSearchParams({ limit: "300" });
       if (nextCreatedFrom) params.set("createdFrom", nextCreatedFrom);
@@ -346,6 +351,9 @@ export default function ListaTarefasPage() {
       if (nextStatusIds.length > 0) {
         params.set("status", nextStatusIds.map((s) => encodeURIComponent(s)).join(","));
       }
+      if (nextArquivadoFilter === "sim") params.set("arquivado", "true");
+      else if (nextArquivadoFilter === "todos") params.set("arquivado", "todos");
+      else params.set("arquivado", "false");
       const res = await apiFetch(`/api/tickets/tasks-list?${params.toString()}`);
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -384,6 +392,7 @@ export default function ListaTarefasPage() {
         const nextClientIds = isCliente ? [] : saved.clientIds;
         setQ(saved.q);
         setStatusIds(saved.statusIds);
+        setArquivadoFilter(saved.arquivadoFilter ?? "nao");
         setMemberIds(nextMemberIds);
         setClientIds(nextClientIds);
         setCreatedFrom(saved.createdFrom);
@@ -408,6 +417,7 @@ export default function ListaTarefasPage() {
           clientIds: nextClientIds,
           memberIds: nextMemberIds,
           statusIds: saved.statusIds,
+          arquivadoFilter: saved.arquivadoFilter ?? "nao",
         });
         return;
       }
@@ -436,6 +446,7 @@ export default function ListaTarefasPage() {
     statusIds,
     clientIds,
     memberIds,
+    arquivadoFilter,
   ]);
 
   const filtered = useMemo(() => {
@@ -463,7 +474,12 @@ export default function ListaTarefasPage() {
 
   const hasAdvancedFilters = Boolean(createdFrom || createdTo || dueFrom || dueTo);
   const hasAnyFilters = Boolean(
-    q.trim() || statusIds.length > 0 || hasAdvancedFilters || (!isCliente && clientIds.length > 0) || (!isCliente && memberIds.length > 0),
+    q.trim() ||
+      statusIds.length > 0 ||
+      hasAdvancedFilters ||
+      arquivadoFilter !== "nao" ||
+      (!isCliente && clientIds.length > 0) ||
+      (!isCliente && memberIds.length > 0),
   );
 
   const statusOptions = useMemo(() => {
@@ -709,6 +725,7 @@ export default function ListaTarefasPage() {
   function clearFilters() {
     setQ("");
     setStatusIds([]);
+    setArquivadoFilter("nao");
     setMemberIds([]);
     setClientIds([]);
     setCreatedFrom("");
@@ -728,6 +745,7 @@ export default function ListaTarefasPage() {
       createdTo,
       dueFrom,
       dueTo,
+      arquivadoFilter,
       showAdvanced:
         showAdvanced || Boolean(createdFrom || createdTo || dueFrom || dueTo),
     });
@@ -940,6 +958,24 @@ export default function ListaTarefasPage() {
                         <ChevronDown className={`h-4 w-4 transition-transform ${statusOpen ? "rotate-180" : ""}`} />
                       </button>
                     </div>
+                  </div>
+
+                  <div className="w-full sm:flex-1 sm:min-w-[170px] lg:w-auto">
+                    <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                      Arquivamento
+                    </label>
+                    <select
+                      value={arquivadoFilter}
+                      onChange={(e) =>
+                        setArquivadoFilter(e.target.value as ListaTarefasArquivadoFilter)
+                      }
+                      className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
+                      aria-label="Filtrar por arquivamento"
+                    >
+                      <option value="nao">Não arquivadas</option>
+                      <option value="sim">Arquivadas</option>
+                      <option value="todos">Todos</option>
+                    </select>
                   </div>
 
                   {!isCliente && (
@@ -1272,7 +1308,14 @@ export default function ListaTarefasPage() {
                             #{t.code}
                           </td>
                           <td className="px-4 py-3 text-[color:var(--foreground)] max-w-[420px]">
-                            <div className="font-medium line-clamp-1" title={t.title}>{t.title}</div>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="font-medium line-clamp-1" title={t.title}>{t.title}</div>
+                              {t.arquivado ? (
+                                <span className="shrink-0 rounded-full border border-[color:var(--border)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)]">
+                                  Arquivada
+                                </span>
+                              ) : null}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-[color:var(--foreground)]">
                             {t.project?.name ?? "—"}
