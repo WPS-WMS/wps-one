@@ -436,7 +436,7 @@ export function FinanceProjectDashboardPageContent({
       {!embedded && (
         <FinancePageHeader
           title={data?.projectName ?? "Resultado de projeto"}
-          subtitle="Resultado por projeto — receita, despesa, impostos e margem. No Mensal, o filtro é o mês de pagamento: entra o que foi gasto/recebido no mês anterior."
+          subtitle="Resultado por projeto — receita, despesa, impostos e margem. No Mensal, usa o mês da Data/competência ou Prev. pagamento (não a data de criação)."
           chip="Projetos"
         />
       )}
@@ -506,8 +506,8 @@ export function FinanceProjectDashboardPageContent({
             </div>
             {view === "mensal" ? (
               <p className="mt-2 text-[11px] text-[color:var(--muted-foreground)]">
-                O mês escolhido é o do pagamento. O resultado mostra receita, reembolso e despesas do mês
-                anterior (ex.: setembro → movimento de agosto).
+                O mês escolhido é o da Data/competência ou Prev. pagamento (Contas a Receber e a
+                Pagar). Não usa a data de criação do lançamento.
               </p>
             ) : null}
           </section>
