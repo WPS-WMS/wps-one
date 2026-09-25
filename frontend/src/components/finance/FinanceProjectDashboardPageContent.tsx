@@ -504,6 +504,12 @@ export function FinanceProjectDashboardPageContent({
                 </div>
               )}
             </div>
+            {view === "mensal" ? (
+              <p className="mt-2 text-[11px] text-[color:var(--muted-foreground)]">
+                O mês escolhido é o do pagamento. O resultado mostra receita, reembolso e despesas do mês
+                anterior (ex.: setembro → movimento de agosto).
+              </p>
+            ) : null}
           </section>
 
           {error && (
