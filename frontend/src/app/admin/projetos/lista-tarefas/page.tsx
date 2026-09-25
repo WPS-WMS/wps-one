@@ -54,6 +54,12 @@ const FIXED_KANBAN_COLUMNS = [
   { id: "FINALIZADAS", label: "Finalizadas" },
 ] as const;
 
+const ARQUIVADO_FILTER_OPTIONS: Array<{ id: ListaTarefasArquivadoFilter; label: string }> = [
+  { id: "nao", label: "Não arquivadas" },
+  { id: "sim", label: "Arquivadas" },
+  { id: "todos", label: "Todos" },
+];
+
 function fmtDateOnly(iso: string | null | undefined): string {
   if (!iso) return "—";
   const ymd = String(iso).slice(0, 10);
@@ -107,6 +113,7 @@ export default function ListaTarefasPage() {
   const [q, setQ] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
+  const [arquivadoOpen, setArquivadoOpen] = useState(false);
   const [memberOpen, setMemberOpen] = useState(false);
   const [clientOpen, setClientOpen] = useState(false);
   const [hasSavedFilters, setHasSavedFilters] = useState(false);
@@ -115,9 +122,11 @@ export default function ListaTarefasPage() {
   const filtersBootstrapped = useRef(false);
   const deepLinkOpenedRef = useRef<string | null>(null);
   const statusAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const arquivadoAnchorRef = useRef<HTMLButtonElement | null>(null);
   const memberAnchorRef = useRef<HTMLButtonElement | null>(null);
   const clientAnchorRef = useRef<HTMLButtonElement | null>(null);
   const [statusMenuRect, setStatusMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
+  const [arquivadoMenuRect, setArquivadoMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
   const [memberMenuRect, setMemberMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
   const [clientMenuRect, setClientMenuRect] = useState<{ left: number; top: number; width: number } | null>(null);
 
@@ -626,6 +635,10 @@ export default function ListaTarefasPage() {
     });
   }
 
+  const selectedArquivadoLabel = useMemo(() => {
+    return ARQUIVADO_FILTER_OPTIONS.find((o) => o.id === arquivadoFilter)?.label ?? "Não arquivadas";
+  }, [arquivadoFilter]);
+
   // Mantém o dropdown fora de qualquer overflow (com position: fixed)
   useEffect(() => {
     if (!statusOpen) return;
@@ -643,6 +656,23 @@ export default function ListaTarefasPage() {
       window.removeEventListener("scroll", update, true);
     };
   }, [statusOpen]);
+
+  useEffect(() => {
+    if (!arquivadoOpen) return;
+    const update = () => {
+      const el = arquivadoAnchorRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setArquivadoMenuRect({ left: r.left, top: r.bottom + 8, width: r.width });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [arquivadoOpen]);
 
   useEffect(() => {
     if (!memberOpen) return;
@@ -679,10 +709,11 @@ export default function ListaTarefasPage() {
   }, [clientOpen]);
 
   useEffect(() => {
-    if (!statusOpen && !memberOpen && !clientOpen) return;
+    if (!statusOpen && !arquivadoOpen && !memberOpen && !clientOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setStatusOpen(false);
+        setArquivadoOpen(false);
         setMemberOpen(false);
         setClientOpen(false);
       }
@@ -690,9 +721,11 @@ export default function ListaTarefasPage() {
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as Node | null;
       const statusAnchor = statusAnchorRef.current;
+      const arquivadoAnchor = arquivadoAnchorRef.current;
       const memberAnchor = memberAnchorRef.current;
       const clientAnchor = clientAnchorRef.current;
       const statusMenu = document.getElementById("status-menu-portal");
+      const arquivadoMenu = document.getElementById("arquivado-menu-portal");
       const memberMenu = document.getElementById("member-menu-portal");
       const clientMenu = document.getElementById("client-menu-portal");
       if (statusOpen) {
@@ -700,6 +733,12 @@ export default function ListaTarefasPage() {
           (statusAnchor && target && statusAnchor.contains(target)) ||
           (statusMenu && target && statusMenu.contains(target));
         if (!inside) setStatusOpen(false);
+      }
+      if (arquivadoOpen) {
+        const inside =
+          (arquivadoAnchor && target && arquivadoAnchor.contains(target)) ||
+          (arquivadoMenu && target && arquivadoMenu.contains(target));
+        if (!inside) setArquivadoOpen(false);
       }
       if (memberOpen) {
         const inside =
@@ -720,7 +759,7 @@ export default function ListaTarefasPage() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [statusOpen, memberOpen, clientOpen]);
+  }, [statusOpen, arquivadoOpen, memberOpen, clientOpen]);
 
   function clearFilters() {
     setQ("");
@@ -824,6 +863,48 @@ export default function ListaTarefasPage() {
                         }`}
                       >
                         <input type="checkbox" checked={checked} readOnly className="h-4 w-4" />
+                        <span className="truncate">{o.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>,
+              document.body,
+            )
+          : null}
+
+        {typeof document !== "undefined" && arquivadoOpen && arquivadoMenuRect
+          ? createPortal(
+              <div
+                id="arquivado-menu-portal"
+                style={{
+                  position: "fixed",
+                  left: arquivadoMenuRect.left,
+                  top: arquivadoMenuRect.top,
+                  width: Math.max(arquivadoMenuRect.width, 180),
+                  zIndex: 10000,
+                }}
+              >
+                <div
+                  className="rounded-xl border border-[color:var(--border)] bg-[color:var(--popover)] shadow-lg p-2"
+                  role="listbox"
+                >
+                  {ARQUIVADO_FILTER_OPTIONS.map((o) => {
+                    const selected = arquivadoFilter === o.id;
+                    return (
+                      <button
+                        key={o.id}
+                        type="button"
+                        onClick={() => {
+                          setArquivadoFilter(o.id);
+                          setArquivadoOpen(false);
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-[color:var(--background)]/60 transition text-left ${
+                          selected ? "font-semibold bg-[color:var(--background)]/50" : ""
+                        }`}
+                        role="option"
+                        aria-selected={selected}
+                      >
                         <span className="truncate">{o.label}</span>
                       </button>
                     );
@@ -938,44 +1019,54 @@ export default function ListaTarefasPage() {
                     </div>
                   </div>
 
-                  <div className="w-full sm:flex-1 sm:min-w-[190px] lg:w-auto">
-                    <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-                      Status
-                    </label>
-                    <div className="relative">
-                      <button
-                        type="button"
-                        ref={statusAnchorRef}
-                        onClick={() => {
-                          setMemberOpen(false);
-                          setClientOpen(false);
-                          setStatusOpen((v) => !v);
-                        }}
-                        className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
-                        aria-expanded={statusOpen}
-                      >
-                        <span className="truncate">{selectedStatusLabels}</span>
-                        <ChevronDown className={`h-4 w-4 transition-transform ${statusOpen ? "rotate-180" : ""}`} />
-                      </button>
+                  {/* Status + Arquivamento juntos para não quebrar de linha entre eles */}
+                  <div className="flex flex-nowrap items-end gap-3 w-full sm:w-auto min-w-0">
+                    <div className="min-w-[150px] flex-1 sm:flex-none sm:w-[190px]">
+                      <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                        Status
+                      </label>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          ref={statusAnchorRef}
+                          onClick={() => {
+                            setMemberOpen(false);
+                            setClientOpen(false);
+                            setArquivadoOpen(false);
+                            setStatusOpen((v) => !v);
+                          }}
+                          className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                          aria-expanded={statusOpen}
+                        >
+                          <span className="truncate">{selectedStatusLabels}</span>
+                          <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${statusOpen ? "rotate-180" : ""}`} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="w-full sm:flex-1 sm:min-w-[170px] lg:w-auto">
-                    <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
-                      Arquivamento
-                    </label>
-                    <select
-                      value={arquivadoFilter}
-                      onChange={(e) =>
-                        setArquivadoFilter(e.target.value as ListaTarefasArquivadoFilter)
-                      }
-                      className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30"
-                      aria-label="Filtrar por arquivamento"
-                    >
-                      <option value="nao">Não arquivadas</option>
-                      <option value="sim">Arquivadas</option>
-                      <option value="todos">Todos</option>
-                    </select>
+                    <div className="min-w-[150px] flex-1 sm:flex-none sm:w-[190px]">
+                      <label className="block text-[11px] font-semibold uppercase tracking-wide text-[color:var(--muted-foreground)] mb-1">
+                        Arquivamento
+                      </label>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          ref={arquivadoAnchorRef}
+                          onClick={() => {
+                            setStatusOpen(false);
+                            setMemberOpen(false);
+                            setClientOpen(false);
+                            setArquivadoOpen((v) => !v);
+                          }}
+                          className="w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] py-2.5 px-3 text-sm text-[color:var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary)]/30 text-left inline-flex items-center justify-between gap-2"
+                          aria-expanded={arquivadoOpen}
+                          aria-label="Filtrar por arquivamento"
+                        >
+                          <span className="truncate">{selectedArquivadoLabel}</span>
+                          <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${arquivadoOpen ? "rotate-180" : ""}`} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {!isCliente && (
@@ -990,6 +1081,7 @@ export default function ListaTarefasPage() {
                           onClick={() => {
                             if (restrictToOwnTasks && clients.length === 0) return;
                             setStatusOpen(false);
+                            setArquivadoOpen(false);
                             setMemberOpen(false);
                             setClientOpen((v) => !v);
                           }}
@@ -1015,6 +1107,7 @@ export default function ListaTarefasPage() {
                         onClick={() => {
                           if (isCliente || restrictToOwnTasks) return;
                           setStatusOpen(false);
+                          setArquivadoOpen(false);
                           setClientOpen(false);
                           setMemberOpen((v) => !v);
                         }}
