@@ -89,6 +89,12 @@ function monthBounds(year: number, month: number): { start: Date; endExclusive: 
   };
 }
 
+/** Mês anterior ao filtro (ex.: filtro set → despesas/apontamentos de ago). */
+function previousMonthBounds(year: number, month: number): { start: Date; endExclusive: Date } {
+  if (month <= 1) return monthBounds(year - 1, 12);
+  return monthBounds(year, month - 1);
+}
+
 function formatPeriodLabel(year: number, month: number): string {
   const date = new Date(Date.UTC(year, month - 1, 1));
   const label = date.toLocaleDateString("pt-BR", { month: "short", year: "numeric", timeZone: "UTC" });
@@ -318,13 +324,21 @@ export async function computeProjectFinancialDashboard(
   const notas: string[] = [];
   const isMonthly = view === "mensal";
   /**
-   * Mensal: o mês do filtro = competência / Prev. pagamento (CR e CP),
-   * no mesmo espírito do Contas a Receber/Pagar — nunca data de criação.
+   * Mensal:
+   * - Receita: Data/competência ou Prev. pagamento no mês do filtro (como CR).
+   * - Despesas (operação, operacionais, projeto): mês anterior ao filtro
+   *   (apontamento / competência-Prev. pagamento / data do reembolso),
+   *   pois o pagamento/faturamento cai no mês filtrado.
    */
   const filterPeriod = monthBounds(year, month);
+  const expensePeriod = isMonthly ? previousMonthBounds(year, month) : monthBounds(year, month);
+  const expenseYear = expensePeriod.start.getUTCFullYear();
+  const expenseMonth = expensePeriod.start.getUTCMonth() + 1;
   if (isMonthly) {
     notas.push(
-      `Mensal (${formatPeriodLabel(year, month)}): receita e despesas pelo mês da Data/competência ou Prev. pagamento — não pela data de criação.`,
+      `Mensal (${formatPeriodLabel(year, month)}): receita pela Data/Prev. pagamento deste mês; ` +
+        `operação, despesas operacionais e de projeto usam ${formatPeriodLabel(expenseYear, expenseMonth)} ` +
+        `(mês anterior — apontamento, competência/Prev. pagamento ou data do reembolso).`,
     );
   }
 
@@ -332,15 +346,15 @@ export async function computeProjectFinancialDashboard(
     tenantId,
     projectId: { in: projectIds },
     status: { not: "REJECTED" },
-    ...(isMonthly ? reimbursementDateFilter(year, month) : {}),
+    ...(isMonthly ? reimbursementDateFilter(expenseYear, expenseMonth) : {}),
   };
   const timeEntryWhere = activeTimeEntryWhere({
     projectId: { in: projectIds },
     ...(isMonthly
       ? {
           date: {
-            gte: filterPeriod.start,
-            lt: filterPeriod.endExclusive,
+            gte: expensePeriod.start,
+            lt: expensePeriod.endExclusive,
           },
         }
       : {}),
@@ -400,15 +414,15 @@ export async function computeProjectFinancialDashboard(
           projectId: { in: projectIds },
           type: "DESPESA",
           status: "LANCADO",
-          // Mensal: Prev. pagamento (vencimento da parcela) ou competência — não criação.
+          // Mensal: competência / Prev. pagamento do mês anterior ao filtro.
           ...(isMonthly
             ? {
                 OR: [
                   {
                     payableInstallment: {
                       dueDate: {
-                        gte: filterPeriod.start,
-                        lt: filterPeriod.endExclusive,
+                        gte: expensePeriod.start,
+                        lt: expensePeriod.endExclusive,
                       },
                     },
                   },
@@ -416,8 +430,8 @@ export async function computeProjectFinancialDashboard(
                     payableInstallment: {
                       payable: {
                         competenceDate: {
-                          gte: filterPeriod.start,
-                          lt: filterPeriod.endExclusive,
+                          gte: expensePeriod.start,
+                          lt: expensePeriod.endExclusive,
                         },
                       },
                     },
@@ -427,8 +441,8 @@ export async function computeProjectFinancialDashboard(
                       { payableInstallmentId: null },
                       {
                         entryDate: {
-                          gte: filterPeriod.start,
-                          lt: filterPeriod.endExclusive,
+                          gte: expensePeriod.start,
+                          lt: expensePeriod.endExclusive,
                         },
                       },
                     ],
@@ -493,15 +507,15 @@ export async function computeProjectFinancialDashboard(
                         OR: [
                           {
                             dueDate: {
-                              gte: filterPeriod.start,
-                              lt: filterPeriod.endExclusive,
+                              gte: expensePeriod.start,
+                              lt: expensePeriod.endExclusive,
                             },
                           },
                           {
                             payable: {
                               competenceDate: {
-                                gte: filterPeriod.start,
-                                lt: filterPeriod.endExclusive,
+                                gte: expensePeriod.start,
+                                lt: expensePeriod.endExclusive,
                               },
                             },
                           },
@@ -935,7 +949,7 @@ export async function computeProjectFinancialDashboard(
       });
       if (
         isMonthly &&
-        (!ledger || !dateInPeriod(ledger, filterPeriod.start, filterPeriod.endExclusive))
+        (!ledger || !dateInPeriod(ledger, expensePeriod.start, expensePeriod.endExclusive))
       ) {
         continue;
       }
@@ -1026,7 +1040,7 @@ export async function computeProjectFinancialDashboard(
     year,
     month,
     periodLabel: isMonthly
-      ? `Competência / Prev. pagamento · ${formatPeriodLabel(year, month)}`
+      ? `Receita ${formatPeriodLabel(year, month)} · despesas ${formatPeriodLabel(expenseYear, expenseMonth)}`
       : "Acumulado",
     receita: {
       valorTotal: {
